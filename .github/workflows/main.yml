@@ -63,6 +63,21 @@ jobs:
           echo "extension=zmatrix.so" | sudo tee /usr/local/php/etc/conf.d/zmatrix.ini
 
       - name: 🧪 Rodar testes
+        continue-on-error: true
         run: |
           export USE_ZEND_ALLOC=${{ matrix.mode == 'leak' && '1' || '0' }}
-          sudo make test
+
+          # Testes padrão (PHPT)
+          sudo make test TEST_PHP_EXECUTABLE="/usr/local/php/bin/php -dextension=zmatrix.so"
+
+          # Testes personalizados .tphp
+          if [ -d tests/.tphp ]; then
+            for test_file in tests/.tphp/*.tphp; do
+              echo "▶️ Executando $test_file..."
+              php "$test_file" || exit 1
+            done
+          fi
+
+      - name: 📄 Exibir resultado do make test
+        if: always()
+        run: cat php_test_results_*.txt || echo "Sem relatório"
