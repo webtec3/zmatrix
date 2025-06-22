@@ -21,6 +21,8 @@
 #include <functional>
 #include <string>
 #include <cstring>
+#include <sstream>
+
 // #include <any>        // Removido se não usado
 
 // --- OpenMP / SIMD Headers ---
@@ -123,6 +125,34 @@ struct ZTensor {
 
     // Construtor Padrão (inalterado)
     ZTensor() = default;
+
+    std::string to_string() const {
+        std::ostringstream oss;
+
+        if (shape.size() == 2) {
+            oss << "[";
+            for (size_t i = 0; i < shape[0]; ++i) {
+                oss << "[";
+                for (size_t j = 0; j < shape[1]; ++j) {
+                    oss << at({i, j});
+                    if (j < shape[1] - 1) oss << ",";
+                }
+                oss << "]";
+                if (i < shape[0] - 1) oss << ",";
+            }
+            oss << "]";
+        } else {
+            oss << "[";
+            for (size_t i = 0; i < data.size(); ++i) {
+                oss << data[i];
+                if (i < data.size() - 1) oss << ",";
+            }
+            oss << "]";
+        }
+
+        return oss.str();
+    }
+
     static size_t compute_total_size(const std::vector<size_t>& shape) {
         size_t total = 1;
         for (size_t dim : shape) {
@@ -3746,7 +3776,26 @@ PHP_METHOD(ZTensor, tile)
         RETURN_THROWS();
     }
 }
+ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor___tostring, 0, 0, 0)
+ZEND_END_ARG_INFO()
 
+PHP_METHOD(ZTensor, __toString)
+{
+    zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
+
+    if (!self_obj->tensor) {
+        RETURN_STRING("[ZTensor: (not initialized)]");
+        return;
+    }
+
+    try {
+        std::string result = self_obj->tensor->to_string();
+        RETURN_STRING(result.c_str());
+    } catch (const std::exception& e) {
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+        RETURN_NULL();
+    }
+}
 
 // TODO: Implementar métodos estáticos rand() e randn() similarmente
 
@@ -3755,8 +3804,9 @@ PHP_METHOD(ZTensor, tile)
 // ==========================================================================
 static const zend_function_entry zmatrix_ztensor_methods[] = {
     PHP_ME(ZTensor, __construct,      arginfo_ztensor_construct,   ZEND_ACC_PUBLIC | ZEND_ACC_CTOR)
-    ZEND_ME(ZTensor, clip,            arginfo_ztensor_static_clip_range, ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)
-    ZEND_ME(ZTensor, sum,             arginfo_ztensor_sum_flex,    ZEND_ACC_PUBLIC)
+    PHP_ME(ZTensor, __toString, arginfo_ztensor___tostring, ZEND_ACC_PUBLIC)
+    PHP_ME(ZTensor, clip,            arginfo_ztensor_static_clip_range, ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)
+    PHP_ME(ZTensor, sum,             arginfo_ztensor_sum_flex,    ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, add,              arginfo_ztensor_op_other,    ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, sub,              arginfo_ztensor_op_other,    ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, mul,              arginfo_ztensor_op_other,    ZEND_ACC_PUBLIC) // Element-wise
