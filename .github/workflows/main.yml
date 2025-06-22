@@ -1,0 +1,39 @@
+name: Build PHP Extension
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: 🔄 Checkout repositório
+      uses: actions/checkout@v3
+
+    - name: 🧰 Instalar dependências do sistema
+      run: |
+        sudo apt update
+        sudo apt install -y php8.4-dev php8.4-cli php8.4-pear \
+                            build-essential autoconf libtool \
+                            libopenblas-dev g++ pkg-config
+
+    - name: 📦 Configurar PHP e phpize
+      run: |
+        export PHP_VERSION=8.4
+        phpize$PHP_VERSION
+
+    - name: ⚙️ Configurar extensão com ./configure
+      run: |
+        ./configure
+
+    - name: 🔨 Compilar extensão
+      run: |
+        make -j$(nproc)
+
+    - name: 🧪 Rodar testes
+      run: |
+        make test
