@@ -4,8 +4,8 @@ Testa soma básica do ZMatrix
 <?php if (!extension_loaded("zmatrix")) die("skip"); ?>
 --FILE--
 <?php
-$a = new ZMatrix([[1, 2], [3, 4]]);
-$b = new ZMatrix([[5, 6], [7, 8]]);
+$a = new ZMatrix\ZTensor([[1, 2], [3, 4]]);
+$b = new ZMatrix\ZTensor([[5, 6], [7, 8]]);
 $c = $a->add($b);
 echo $c;
 ?>
