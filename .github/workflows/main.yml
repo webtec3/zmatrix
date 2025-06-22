@@ -11,12 +11,20 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        php_version: [8.3.0, 8.4.0]
+        php_version: [8.4.0]
         mode: [normal, leak]
     name: PHP ${{ matrix.php_version }} - ${{ matrix.mode }}
+
     steps:
       - name: 🔄 Checkout
         uses: actions/checkout@v3
+
+      - name: 💾 Cache PHP compilado
+        id: cache-php
+        uses: actions/cache@v3
+        with:
+          path: /usr/local/php
+          key: php-${{ matrix.php_version }}-build
 
       - name: 🧰 Instalar dependências mínimas
         run: |
@@ -27,18 +35,22 @@ jobs:
             g++ pkg-config \
             libopenblas-dev libgomp1 wget
 
-      - name: 🐘 Baixar e compilar PHP ${{ matrix.php_version }}
+      - name: 🐘 Compilar PHP (somente se cache não existir)
+        if: steps.cache-php.outputs.cache-hit != 'true'
         run: |
-          sudo mkdir /src
+          sudo mkdir -p /src
           cd /src
           sudo wget -O php.tar.gz https://www.php.net/distributions/php-${{ matrix.php_version }}.tar.gz
           sudo tar -xf php.tar.gz --strip-components=1
-          sudo ./configure --prefix=/usr/local/php \
-                           --with-config-file-path=/usr/local/php/etc \
-                           --enable-debug
+          sudo ./configure \
+            --prefix=/usr/local/php \
+            --with-config-file-path=/usr/local/php/etc \
+            --enable-debug
           sudo make -j$(nproc)
           sudo make install
-          echo "/usr/local/php/bin" >> $GITHUB_PATH
+
+      - name: 🧭 Adicionar PHP ao PATH
+        run: echo "/usr/local/php/bin" >> $GITHUB_PATH
 
       - name: 🔧 Compilar extensão ZMatrix
         run: |
@@ -47,7 +59,6 @@ jobs:
           ./configure
           make -j$(nproc)
           sudo make install
-
           sudo mkdir -p /usr/local/php/etc/conf.d
           echo "extension=zmatrix.so" | sudo tee /usr/local/php/etc/conf.d/zmatrix.ini
 
