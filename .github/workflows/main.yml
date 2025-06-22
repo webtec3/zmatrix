@@ -1,39 +1,57 @@
-name: Build PHP Extension
+name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [ "main" ]
   pull_request:
-    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-
+  build_matrix:
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        php_version: [8.3.0, 8.4.0]
+        mode: [normal, leak]
+    name: PHP ${{ matrix.php_version }} - ${{ matrix.mode }}
     steps:
-    - name: 🔄 Checkout repositório
-      uses: actions/checkout@v3
+      - name: 🔄 Checkout
+        uses: actions/checkout@v3
 
-    - name: 🧰 Instalar dependências do sistema
-      run: |
-        sudo apt update
-        sudo apt install -y php8.4-dev php8.4-cli php8.4-pear \
-                            build-essential autoconf libtool \
-                            libopenblas-dev g++ pkg-config
+      - name: 🧰 Instalar dependências mínimas
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            build-essential autoconf libtool \
+            php-dev php-pear \
+            g++ pkg-config \
+            libopenblas-dev libgomp1 wget
 
-    - name: 📦 Configurar PHP e phpize
-      run: |
-        export PHP_VERSION=8.4
-        phpize$PHP_VERSION
+      - name: 🐘 Baixar e compilar PHP ${{ matrix.php_version }}
+        run: |
+          sudo mkdir /src
+          cd /src
+          sudo wget -O php.tar.gz https://www.php.net/distributions/php-${{ matrix.php_version }}.tar.gz
+          sudo tar -xf php.tar.gz --strip-components=1
+          sudo ./configure --prefix=/usr/local/php \
+                           --with-config-file-path=/usr/local/php/etc \
+                           --enable-debug
+          sudo make -j$(nproc)
+          sudo make install
+          echo "/usr/local/php/bin" >> $GITHUB_PATH
 
-    - name: ⚙️ Configurar extensão com ./configure
-      run: |
-        ./configure
+      - name: 🔧 Compilar extensão ZMatrix
+        run: |
+          cd ${{ github.workspace }}
+          phpize
+          ./configure
+          make -j$(nproc)
+          sudo make install
 
-    - name: 🔨 Compilar extensão
-      run: |
-        make -j$(nproc)
+          sudo mkdir -p /usr/local/php/etc/conf.d
+          echo "extension=zmatrix.so" | sudo tee /usr/local/php/etc/conf.d/zmatrix.ini
 
-    - name: 🧪 Rodar testes
-      run: |
-        make test
+      - name: 🧪 Rodar testes
+        run: |
+          export USE_ZEND_ALLOC=${{ matrix.mode == 'leak' && '1' || '0' }}
+          sudo make test
