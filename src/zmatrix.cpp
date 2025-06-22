@@ -83,45 +83,43 @@ struct ZTensor {
     std::vector<size_t> strides;
     size_t offset = 0;
     bool owns_data = true; // ← importante para views
+
+
     // Construtor Principal (inalterado, exceto 0.0f)
-    ZTensor(const std::vector<size_t>& _shape) : shape(_shape), offset(0), owns_data(true) {
-        size_t total_size = 1;
-        bool has_zero_dim = false;
-
-        for (size_t dim : shape) {
-            if (dim == 0) { has_zero_dim = true; break; }
-            if (dim > 0 && total_size > (std::numeric_limits<size_t>::max() / dim)) {
-                throw std::overflow_error(ZMATRIX_ERR_OVERFLOW);
+    ZTensor(const std::vector<size_t>& _shape) : shape(_shape) {
+            size_t total_size = 1;
+            bool has_zero_dim = false;
+            for (size_t dim : shape) {
+                 if (dim == 0) { has_zero_dim = true; break; }
+                 if (dim > 0 && total_size > (std::numeric_limits<size_t>::max() / dim)) {
+                     throw std::overflow_error(ZMATRIX_ERR_OVERFLOW);
+                 }
+                 total_size *= dim;
             }
-            total_size *= dim;
-        }
+            if (has_zero_dim) { total_size = 0;}
 
-        if (has_zero_dim) total_size = 0;
-
-        if (total_size > 0) {
-            try {
-                data.resize(total_size, 0.0f);
-            } catch (const std::bad_alloc& e) {
-                throw std::runtime_error(ZMATRIX_ERR_ALLOC_FAILED);
-            }
-
-            strides.resize(shape.size());
-            size_t stride = 1;
-            for (int i = shape.size() - 1; i >= 0; --i) {
-                strides[i] = stride;
-                if (shape[i] > 0 && i > 0 &&
-                    stride > (std::numeric_limits<size_t>::max() / shape[i])) {
-                    throw std::overflow_error(ZMATRIX_ERR_OVERFLOW);
+            if (total_size > 0) {
+                try {
+                    data.resize(total_size, 0.0f); // Usa 0.0f
+                } catch (const std::bad_alloc& e) {
+                    throw std::runtime_error(ZMATRIX_ERR_ALLOC_FAILED);
                 }
-                if (shape[i] > 0) {
-                    stride *= shape[i];
+                strides.resize(shape.size());
+                size_t stride = 1;
+                for (int i = shape.size() - 1; i >= 0; --i) {
+                    strides[i] = stride;
+                     if (shape[i] > 0 && i > 0 && stride > (std::numeric_limits<size_t>::max() / shape[i])) {
+                         throw std::overflow_error(ZMATRIX_ERR_OVERFLOW);
+                     }
+                     if (shape[i] > 0) {
+                        stride *= shape[i];
+                     }
                 }
+            } else {
+                data.clear();
+                strides.clear();
             }
-        } else {
-            data.clear();
-            strides.clear();
         }
-    }
 
     // Construtor Padrão (inalterado)
     ZTensor() = default;
@@ -449,6 +447,28 @@ struct ZTensor {
             }
         }
     }
+
+    ZTensor greater_than(const ZTensor& other) const {
+        if (!same_shape(other)) {
+            throw std::runtime_error(ZMATRIX_ERR_SHAPE_MISMATCH);
+        }
+
+        size_t N = size();
+        ZTensor result(shape);
+        const float* a = data.data();
+        const float* b = other.data.data();
+        float* r = result.data.data();
+
+    #if HAS_OPENMP
+        #pragma omp parallel for simd schedule(static)
+    #endif
+        for (size_t i = 0; i < N; ++i) {
+            r[i] = (a[i] > b[i]) ? 1.0f : 0.0f;
+        }
+
+        return result;
+    }
+
 
     ZTensor reshape(const std::vector<size_t>& new_shape) const {
         // 1. Calcular tamanho total do novo shape
@@ -1473,8 +1493,68 @@ static void tensor_to_php_array(const ZTensor& tensor, zval *return_value) {
     std::vector<size_t> initial_indices(tensor.shape.size());
     build_array(return_value, initial_indices, 0);
 }
-static bool zmatrix_get_tensor_ptr(zval *input_zv, ZTensor* &output_ptr, ZTensor &tmp_tensor, zend_class_entry *expected_ce) { if (Z_TYPE_P(input_zv) == IS_OBJECT && instanceof_function(Z_OBJCE_P(input_zv), expected_ce)) { zmatrix_ztensor_object *obj = Z_MATRIX_ZTENSOR_P(input_zv); if (!obj->tensor) { zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0); return false; } output_ptr = obj->tensor; return true; } else if (Z_TYPE_P(input_zv) == IS_ARRAY) { try { tmp_tensor = php_array_to_tensor(input_zv); output_ptr = &tmp_tensor; return true; } catch (const std::exception& e) { zend_throw_exception(zend_ce_exception, e.what(), 0); return false; } } else { zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_INVALID_ARG_TYPE, 0); return false; } }
-static void zmatrix_return_tensor_obj(const ZTensor& result_tensor, zval *return_value, zend_class_entry *tensor_ce) { try { object_init_ex(return_value, tensor_ce); zmatrix_ztensor_object *result_obj = Z_MATRIX_ZTENSOR_P(return_value); result_obj->tensor = new ZTensor(result_tensor); } catch (const std::bad_alloc& e) { zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_ALLOC_FAILED, 0); ZVAL_NULL(return_value); } catch (const std::exception& e) { zend_throw_exception(zend_ce_exception, e.what(), 0); ZVAL_NULL(return_value); } }
+
+/**
+ * Obtém ponteiro para tensor a partir de um zval. Pode ser uma instância de ZTensor ou um array PHP.
+ *
+ * @param input_zv       Entrada zval (ZTensor ou array)
+ * @param output_ptr     Saída: ponteiro para tensor (objeto ou temporário)
+ * @param tmp_tensor     Saída temporária (precisa estar no escopo do chamador)
+ * @param expected_ce    Classe esperada (ZTensor)
+ * @return true se sucesso, false se erro
+ */
+static bool zmatrix_get_tensor_ptr(zval *input_zv, ZTensor* &output_ptr, ZTensor &tmp_tensor, zend_class_entry *expected_ce)
+{
+    if (Z_TYPE_P(input_zv) == IS_OBJECT && instanceof_function(Z_OBJCE_P(input_zv), expected_ce)) {
+        zmatrix_ztensor_object *obj = Z_MATRIX_ZTENSOR_P(input_zv);
+        if (!obj->tensor) {
+            zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0);
+            return false;
+        }
+        output_ptr = obj->tensor;
+        return true;
+    } else if (Z_TYPE_P(input_zv) == IS_ARRAY) {
+        try {
+            tmp_tensor = php_array_to_tensor(input_zv);
+            output_ptr = &tmp_tensor;
+            return true;
+        } catch (const std::exception& e) {
+            zend_throw_exception(zend_ce_exception, e.what(), 0);
+            return false;
+        }
+    } else {
+        zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_INVALID_ARG_TYPE, 0);
+        return false;
+    }
+}
+
+
+static void zmatrix_return_tensor_obj(const ZTensor& result_tensor, zval *return_value, zend_class_entry *tensor_ce) {
+    try {
+        object_init_ex(return_value, tensor_ce);
+
+        zmatrix_ztensor_object *result_obj = Z_MATRIX_ZTENSOR_P(return_value);
+
+        if (result_obj->tensor != nullptr) {
+            if (result_obj->tensor->owns_data) {
+                delete result_obj->tensor;
+            }
+            result_obj->tensor = nullptr;
+        }
+
+        result_obj->tensor = new ZTensor(result_tensor);
+        result_obj->tensor->owns_data = true;  // 🔥 ESSENCIAL
+
+    } catch (const std::bad_alloc& e) {
+        zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_ALLOC_FAILED, 0);
+        ZVAL_NULL(return_value);
+    } catch (const std::exception& e) {
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+        ZVAL_NULL(return_value);
+    }
+}
+
+
 // --- Fim Funções Auxiliares ---
 
 // ==========================================================================
@@ -3389,80 +3469,21 @@ PHP_METHOD(ZTensor, greater)
 
     ZTensor *other_ptr = nullptr;
     ZTensor tmp_other;
+
     if (!zmatrix_get_tensor_ptr(other_zv, other_ptr, tmp_other, zmatrix_ce_ZTensor)) {
         RETURN_THROWS();
     }
 
     try {
-        ZTensor &A = *self_obj->tensor;
-        ZTensor &B = *other_ptr;
-        const auto &shapeA = A.shape;
-        const auto &shapeB = B.shape;
-
-        // 1) mesmos formatos → elemento a elemento
-        if (shapeA == shapeB) {
-            size_t N = A.size();
-            ZTensor R(shapeA);
-            float *rdat = R.data.data();
-            const float *adat = A.data.data();
-            const float *bdat = B.data.data();
-
-            #if HAS_OPENMP
-            #pragma omp parallel for simd schedule(static)
-            #endif
-            for (size_t i = 0; i < N; ++i) {
-                rdat[i] = (adat[i] > bdat[i] ? 1.0f : 0.0f);
-            }
-
-            zmatrix_return_tensor_obj(R, return_value, zmatrix_ce_ZTensor);
-            return;
-        }
-
-        // 2) A 2D [M×N], B 1D [N] → replicar B
-        if (shapeA.size() == 2 && shapeB.size() == 1 && shapeB[0] == shapeA[1]) {
-            size_t M = shapeA[0], N = shapeA[1];
-            ZTensor R(shapeA);
-            float *rdat = R.data.data();
-            const float *adat = A.data.data();
-            const float *bdat = B.data.data();
-
-            for (size_t i = 0; i < M; ++i) {
-                const float *rowA = &adat[i * N];
-                for (size_t j = 0; j < N; ++j) {
-                    rdat[i * N + j] = (rowA[j] > bdat[j] ? 1.0f : 0.0f);
-                }
-            }
-
-            zmatrix_return_tensor_obj(R, return_value, zmatrix_ce_ZTensor);
-            return;
-        }
-
-        // 3) Broadcast inverso: A [N], B [M×N]
-        if (shapeA.size() == 1 && shapeB.size() == 2 && shapeA[0] == shapeB[1]) {
-            size_t M = shapeB[0], N = shapeB[1];
-            ZTensor R(shapeB);
-            const float *adat = A.data.data();
-            const float *bdat = B.data.data();
-            float *rdat = R.data.data();
-
-            for (size_t i = 0; i < M; ++i) {
-                const float *rowB = &bdat[i * N];
-                for (size_t j = 0; j < N; ++j) {
-                    rdat[i * N + j] = (adat[j] > rowB[j] ? 1.0f : 0.0f);
-                }
-            }
-
-            zmatrix_return_tensor_obj(R, return_value, zmatrix_ce_ZTensor);
-            return;
-        }
-
-        // 4) Demais casos inválidos
-        throw std::runtime_error(ZMATRIX_ERR_SHAPE_MISMATCH);
-    } catch (const std::exception &e) {
+        ZTensor result = self_obj->tensor->greater_than(*other_ptr);
+        zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
+    } catch (const std::exception& e) {
         zend_throw_exception(zend_ce_exception, e.what(), 0);
         RETURN_THROWS();
     }
 }
+
+
 
 
 // --- ARG_INFO para minimum e maximum ---
@@ -3776,7 +3797,7 @@ PHP_METHOD(ZTensor, tile)
         RETURN_THROWS();
     }
 }
-ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor___tostring, 0, 0, 0)
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_ztensor___tostring, 0, 0, IS_STRING, 0)
 ZEND_END_ARG_INFO()
 
 PHP_METHOD(ZTensor, __toString)
@@ -3793,7 +3814,7 @@ PHP_METHOD(ZTensor, __toString)
         RETURN_STRING(result.c_str());
     } catch (const std::exception& e) {
         zend_throw_exception(zend_ce_exception, e.what(), 0);
-        RETURN_NULL();
+        RETURN_STRING("[ZTensor: error]");
     }
 }
 
