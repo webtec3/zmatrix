@@ -6,8 +6,15 @@ Testa operações básicas e utilitários do ZTensor
 <?php
 use ZMatrix\ZTensor;
 
+// Função segura para arredondar e exibir tensores 1D ou 2D
 function roundPrint(ZTensor $t, int $precision = 6): string {
-    $rounded = array_map(fn($v) => round($v, $precision), array_values(array_merge(...$t->toArray())));
+    $data = $t->toArray();
+    if (is_array($data) && is_array(reset($data))) {
+        $flat = array_merge(...$data);
+    } else {
+        $flat = $data;
+    }
+    $rounded = array_map(fn($v) => round($v, $precision), $flat);
     return json_encode($rounded);
 }
 
@@ -50,6 +57,15 @@ echo "identity=". ZTensor::identity(2) . "\n";
 // Formato
 echo "reshape="   . ZTensor::arr([[1,2],[3,4]])->reshape([4,1]) . "\n";
 echo "transpose=" . ZTensor::arr([[1,2],[3,4]])->transpose()    . "\n";
+
+// Extras
+echo "matmul=" . ZTensor::arr([[1,2,3]])->matmul([[4],[5],[6]]) . "\n"; // [[32]]
+echo "tile="   . ZTensor::tile(ZTensor::arr([[1,2]]), 3) . "\n"; // [[1,2],[1,2],[1,2]]
+echo "safe="   . ZTensor::safe([[7,8],[9,10]]) . "\n"; // [[7,8],[9,10]]
+$base = ZTensor::arr([[1,2],[3,4]]);
+$bias = ZTensor::arr([10,20]);
+echo "broadcast=" . $base->broadcast($bias) . "\n"; // [[11,22],[13,24]]
+echo "clip=" . ZTensor::clip([[-1,5,15]], 0.0, 10.0) . "\n"; // [[0,5,10]]
 ?>
 --EXPECTF--
 add=[[6,8],[10,12]]
@@ -78,3 +94,8 @@ full=[[9,9,9]]
 identity=[[1,0],[0,1]]
 reshape=[[1],[2],[3],[4]]
 transpose=[[1,3],[2,4]]
+matmul=[[32]]
+tile=[[1,2],[1,2],[1,2]]
+safe=[[7,8],[9,10]]
+broadcast=[[11,22],[13,24]]
+clip=[[0,5,10]]
