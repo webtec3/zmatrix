@@ -79,7 +79,7 @@ jobs:
             valgrind --leak-check=full --show-leak-kinds=all \
               --track-origins=yes --error-exitcode=1 \
               --log-file=valgrind.log \
-              php tests/example.php || exit 1
+              php examples/functions.php || exit 1
           else
             echo "🧪 Running normal tests..."
             sudo make test TEST_PHP_EXECUTABLE="/usr/local/php/bin/php -dextension=zmatrix.so"
