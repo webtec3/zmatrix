@@ -1,0 +1,39 @@
+{
+  "name": "webtec3/zmatrix",
+  "description": "ZMatrix – PHP extension for high-performance multidimensional tensor operations (BLAS, OpenMP, SIMD)",
+  "type": "php-extension",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "Seu Nome",
+      "email": "webdesenvolver.agenda@gmail.com"
+    }
+  ],
+  "require": {
+    "php": ">=8.4"
+  },
+  "autoload": {
+    "psr-4": {
+      "ZMatrix\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "classmap": [
+      "tests/"
+    ]
+  },
+  "scripts": {
+    "test": "php -d extension=zmatrix.so tests/basic.phpt"
+  },
+  "support": {
+    "issues": "https://github.com/webtec3/zmatrix/issues",
+    "source": "https://github.com/webtec3/zmatrix"
+  },
+  "extra": {
+    "branch-alias": {
+      "dev-main": "0.4.x-dev"
+    }
+  },
+  "minimum-stability": "dev",
+  "prefer-stable": true
+}
