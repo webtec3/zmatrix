@@ -7,68 +7,94 @@ on:
   workflow_dispatch:
 
 jobs:
-  build_matrix:
+  build_php:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
         php_version: [8.4.0]
-        mode: [normal, leak]
-    name: PHP ${{ matrix.php_version }} - ${{ matrix.mode }}
+
+    outputs:
+      php_path: ${{ steps.set-output.outputs.php_path }}
 
     steps:
       - name: 🔄 Checkout
         uses: actions/checkout@v3
 
-      - name: 💾 Cache PHP compilado
+      - name: 💾 Cache do PHP compilado
         id: cache-php
         uses: actions/cache@v3
         with:
-          path: /usr/local/php
+          path: ${{ runner.workspace }}/php-src
           key: php-${{ matrix.php_version }}-build
 
-      - name: 🧰 Instalar dependências mínimas
+      - name: 🐘 Compilar PHP (se cache não existir)
+        if: steps.cache-php.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ${{ runner.workspace }}/php-src
+          cd ${{ runner.workspace }}/php-src
+          wget -O php.tar.gz https://www.php.net/distributions/php-${{ matrix.php_version }}.tar.gz
+          tar -xf php.tar.gz --strip-components=1
+          ./configure \
+            --prefix=/usr/local/php \
+            --with-config-file-path=/usr/local/php/etc \
+            --enable-debug
+          make -j$(nproc)
+          sudo make install
+
+      - name: 📦 Set output
+        id: set-output
+        run: echo "php_path=/usr/local/php/bin" >> $GITHUB_OUTPUT
+
+
+  build_test:
+    needs: build_php
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        mode: [normal, leak]
+    name: Test extension - ${{ matrix.mode }}
+
+    steps:
+      - name: 🔄 Checkout
+        uses: actions/checkout@v3
+
+      - name: 🧰 Instalar dependências
         run: |
           sudo apt update
           sudo apt install -y \
             build-essential autoconf libtool \
-            php-dev php-pear \
-            g++ pkg-config \
-            libopenblas-dev libgomp1 wget
-
-      - name: 🐘 Compilar PHP (somente se cache não existir)
-        if: steps.cache-php.outputs.cache-hit != 'true'
-        run: |
-          sudo mkdir -p /src
-          cd /src
-          sudo wget -O php.tar.gz https://www.php.net/distributions/php-${{ matrix.php_version }}.tar.gz
-          sudo tar -xf php.tar.gz --strip-components=1
-          sudo ./configure \
-            --prefix=/usr/local/php \
-            --with-config-file-path=/usr/local/php/etc \
-            --enable-debug
-          sudo make -j$(nproc)
-          sudo make install
+            php-dev php-pear g++ pkg-config \
+            libopenblas-dev libgomp1 wget valgrind
 
       - name: 🧭 Adicionar PHP ao PATH
-        run: echo "/usr/local/php/bin" >> $GITHUB_PATH
+        run: echo "${{ needs.build_php.outputs.php_path }}" >> $GITHUB_PATH
 
       - name: 🔧 Compilar extensão ZMatrix
         run: |
-          cd ${{ github.workspace }}
           phpize
+          if [ "${{ matrix.mode }}" = "leak" ]; then
+            export CFLAGS="-fsanitize=address -g -O1"
+            export CXXFLAGS="-fsanitize=address -g -O1"
+          fi
           ./configure
           make -j$(nproc)
           sudo make install
+
           sudo mkdir -p /usr/local/php/etc/conf.d
           echo "extension=zmatrix.so" | sudo tee /usr/local/php/etc/conf.d/zmatrix.ini
 
       - name: 🧪 Rodar testes
         continue-on-error: true
         run: |
-          export USE_ZEND_ALLOC=${{ matrix.mode == 'leak' && '1' || '0' }}
+          export USE_ZEND_ALLOC=0
 
-          # Testes padrão (PHPT)
-          sudo make test TEST_PHP_EXECUTABLE="/usr/local/php/bin/php -dextension=zmatrix.so"
+          if [ "${{ matrix.mode }}" = "leak" ]; then
+            valgrind --leak-check=full --show-leak-kinds=all \
+              --track-origins=yes --error-exitcode=1 \
+              php tests/example.php || exit 1
+          else
+            sudo make test TEST_PHP_EXECUTABLE="php -dextension=zmatrix.so"
+          fi
 
           # Testes personalizados .tphp
           if [ -d tests/.tphp ]; then
