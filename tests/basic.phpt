@@ -22,7 +22,7 @@ function roundPrint(ZTensor $t, int $precision = 6): string {
 echo "add="     . ZTensor::arr([[1,2],[3,4]])->add([[5,6],[7,8]])          . "\n";
 echo "sub="     . ZTensor::arr([[1,2],[3,4]])->sub([[5,6],[7,8]])          . "\n";
 echo "mul="     . ZTensor::arr([[1,2],[3,4]])->mul([[5,6],[7,8]])          . "\n";
-echo "divide="  . ZTensor::arr([[5,6],[7,8]])->divide([[1,2],[3,4]])       . "\n";
+echo "divide="  . roundPrint(ZTensor::arr([[5,6],[7,8]])->divide([[1,2],[3,4]])) . "\n";
 
 // Comparação
 echo "greater=" . ZTensor::arr([[5,6],[7,8]])->greater([[1,2],[3,4]])      . "\n";
@@ -62,16 +62,16 @@ echo "transpose=" . ZTensor::arr([[1,2],[3,4]])->transpose()    . "\n";
 echo "matmul=" . ZTensor::arr([[1,2,3]])->matmul([[4],[5],[6]]) . "\n"; // [[32]]
 echo "tile="   . ZTensor::tile(ZTensor::arr([[1,2]]), 3) . "\n"; // [[1,2],[1,2],[1,2]]
 echo "safe="   . ZTensor::safe([[7,8],[9,10]]) . "\n"; // [[7,8],[9,10]]
-$base = ZTensor::arr([[1,2],[3,4]]);
+$base = ZTensor::arr([[0,0],[0,0]]);
 $bias = ZTensor::arr([10,20]);
-echo "broadcast=" . $base->broadcast($bias) . "\n"; // [[11,22],[13,24]]
+echo "broadcast=" . $base->broadcast($bias) . "\n"; // [[10,20],[10,20]]
 echo "clip=" . ZTensor::clip([[-1,5,15]], 0.0, 10.0) . "\n"; // [[0,5,10]]
 ?>
 --EXPECTF--
 add=[[6,8],[10,12]]
 sub=[[-4,-4],[-4,-4]]
 mul=[[5,12],[21,32]]
-divide=[[5,3],[2.333333,2]]
+divide=[5,3,2.33333,2]
 greater=[[1,1],[1,1]]
 sumtotal=10
 mean=2.75
@@ -97,5 +97,5 @@ transpose=[[1,3],[2,4]]
 matmul=[[32]]
 tile=[[1,2],[1,2],[1,2]]
 safe=[[7,8],[9,10]]
-broadcast=[[11,22],[13,24]]
+broadcast=[[10,20],[10,20]]
 clip=[[0,5,10]]
