@@ -74,12 +74,12 @@ final class ZTensor
      *
      * Both tensors must have the exact same shape or be broadcastable.
      *
-     * @param ZTensor|array<int|float> $other The other tensor or array to add.
+     * @param ZTensor|float|int|array<int|float> $other The other tensor or array to add.
      * @return ZTensor A new tensor with the addition result.
      * @throws RuntimeException If shapes are incompatible (ZMATRIX_ERR_SHAPE_MISMATCH)
      * or if another internal error occurs.
      */
-    public function add(ZTensor|array $other): ZTensor
+    public function add(ZTensor|array|float|int $other): Ztensor
     {
     }
 
@@ -88,12 +88,12 @@ final class ZTensor
      *
      * Both tensors must have the exact same shape or be broadcastable.
      *
-     * @param ZTensor|array<int|float> $other The other tensor or array to subtract.
+     * @param ZTensor|float|int|array<int|float> $other The other tensor or array to subtract.
      * @return ZTensor A new tensor containing the subtraction result.
      * @throws RuntimeException If shapes are incompatible (ZMATRIX_ERR_SHAPE_MISMATCH)
      * or if another internal error occurs.
      */
-    public function sub(ZTensor|array $other): ZTensor
+    public function sub(ZTensor|array|float|int $other): ZTensor
     {
     }
 
@@ -147,12 +147,12 @@ final class ZTensor
      *
      * Both tensors must have the exact same shape or be broadcastable.
      *
-     * @param ZTensor|array<int|float> $other The other tensor or array to be multiplied.
+     * @param ZTensor|float|int|array<int|float> $other The other tensor or array to be multiplied.
      * @return ZTensor A new tensor containing the result of the element-wise multiplication.
      * @throws RuntimeException If shapes are incompatible (ZMATRIX_ERR_SHAPE_MISMATCH)
      * or if another internal error occurs.
      */
-    public function mul(ZTensor|array $other): ZTensor
+    public function mul(ZTensor|array|float|int $other): Ztensor
     {
     }
 
@@ -539,11 +539,11 @@ final class ZTensor
     /**
      * Divides this tensor by another tensor or array, element-wise.
      *
-     * @param ZTensor|array<int|float> $other Another tensor or array.
+     * @param ZTensor|float|int|array<int|float> $other Another tensor or array.
      * @return ZTensor
      * @throws RuntimeException
      */
-    public function divide(ZTensor|array $other): ZTensor
+    public function divide(ZTensor|array|float|int $other): ZTensor
     {
     }
 
