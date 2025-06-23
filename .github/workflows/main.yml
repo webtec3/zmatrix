@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
   workflow_dispatch:
 
@@ -13,70 +13,74 @@ jobs:
       matrix:
         php_version: [8.4.0]
 
-    outputs:
-      php_path: ${{ steps.set-output.outputs.php_path }}
-
     steps:
       - name: 🔄 Checkout
         uses: actions/checkout@v3
 
-      - name: 💾 Cache do PHP compilado
-        id: cache-php
-        uses: actions/cache@v3
-        with:
-          path: ${{ runner.workspace }}/php-src
-          key: php-${{ matrix.php_version }}-build
-
-      - name: 🐘 Compilar PHP (se cache não existir)
-        if: steps.cache-php.outputs.cache-hit != 'true'
+      - name: 🧰 Instalar dependências de build do PHP
         run: |
-          mkdir -p ${{ runner.workspace }}/php-src
-          cd ${{ runner.workspace }}/php-src
+          sudo apt update
+          sudo apt install -y \
+            build-essential autoconf libtool \
+            bison re2c \
+            g++ pkg-config wget
+
+      - name: 📥 Baixar e compilar PHP
+        run: |
+          mkdir php-src
+          cd php-src
           wget -O php.tar.gz https://www.php.net/distributions/php-${{ matrix.php_version }}.tar.gz
           tar -xf php.tar.gz --strip-components=1
           ./configure \
-            --prefix=/usr/local/php \
-            --with-config-file-path=/usr/local/php/etc \
-            --enable-debug
+            --prefix=$GITHUB_WORKSPACE/php-install \
+            --enable-debug \
+            --with-config-file-path=$GITHUB_WORKSPACE/php-install/etc
           make -j$(nproc)
-          sudo make install
+          make install
 
-      - name: 📦 Set output
-        id: set-output
-        run: echo "php_path=/usr/local/php/bin" >> $GITHUB_OUTPUT
+      - name: 📦 Exportar binários PHP
+        uses: actions/upload-artifact@v3
+        with:
+          name: php-bin-${{ matrix.php_version }}
+          path: php-install
 
-
-  build_test:
-    needs: build_php
+  build_zmatrix:
     runs-on: ubuntu-22.04
+    needs: build_php
     strategy:
       matrix:
+        php_version: [8.4.0]
         mode: [normal, leak]
-    name: Test extension - ${{ matrix.mode }}
 
     steps:
       - name: 🔄 Checkout
         uses: actions/checkout@v3
+
+      - name: 📥 Baixar PHP compilado
+        uses: actions/download-artifact@v3
+        with:
+          name: php-bin-${{ matrix.php_version }}
+          path: /usr/local/php
 
       - name: 🧰 Instalar dependências
         run: |
           sudo apt update
           sudo apt install -y \
-            build-essential autoconf libtool \
-            php-dev php-pear g++ pkg-config \
-            libopenblas-dev libgomp1 wget valgrind
-
-      - name: 🧭 Adicionar PHP ao PATH
-        run: echo "${{ needs.build_php.outputs.php_path }}" >> $GITHUB_PATH
+            php-dev php-pear \
+            libopenblas-dev libgomp1 \
+            valgrind g++ pkg-config
 
       - name: 🔧 Compilar extensão ZMatrix
         run: |
+          export PATH="/usr/local/php/bin:$PATH"
           phpize
+
           if [ "${{ matrix.mode }}" = "leak" ]; then
             export CFLAGS="-fsanitize=address -g -O1"
             export CXXFLAGS="-fsanitize=address -g -O1"
           fi
-          ./configure
+
+          ./configure --with-php-config=/usr/local/php/bin/php-config
           make -j$(nproc)
           sudo make install
 
@@ -86,24 +90,26 @@ jobs:
       - name: 🧪 Rodar testes
         continue-on-error: true
         run: |
+          export PATH="/usr/local/php/bin:$PATH"
           export USE_ZEND_ALLOC=0
 
           if [ "${{ matrix.mode }}" = "leak" ]; then
+            echo "🧠 Testes com Valgrind..."
             valgrind --leak-check=full --show-leak-kinds=all \
               --track-origins=yes --error-exitcode=1 \
               php tests/example.php || exit 1
           else
-            sudo make test TEST_PHP_EXECUTABLE="php -dextension=zmatrix.so"
+            echo "🧪 Testes normais com make test"
+            sudo make test TEST_PHP_EXECUTABLE="/usr/local/php/bin/php -dextension=zmatrix.so"
           fi
 
-          # Testes personalizados .tphp
+          # Testes personalizados
           if [ -d tests/.tphp ]; then
             for test_file in tests/.tphp/*.tphp; do
-              echo "▶️ Executando $test_file..."
               php "$test_file" || exit 1
             done
           fi
 
-      - name: 📄 Exibir resultado do make test
+      - name: 📄 Exibir resultados
         if: always()
         run: cat php_test_results_*.txt || echo "Sem relatório"
