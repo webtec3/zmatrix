@@ -21,18 +21,15 @@ echo "mean="     . ZTensor::arr([[1,2],[3,5]])->mean()       . "\n";
 echo "min="      . ZTensor::arr([1,2,3,4])->min()            . "\n";
 echo "max="      . ZTensor::arr([1,2,3,4])->max()            . "\n";
 echo "std="      . round(ZTensor::arr([1,2,3,4])->std(),4)   . "\n";
-
-// (… o resto permanece igual …)
 ?>
 --EXPECT--
 add=[[6,8],[10,12]]
 sub=[[-4,-4],[-4,-4]]
 mul=[[5,12],[21,32]]
-divide=[[5,3],[2.3333333,2]]
+divide=[[5,3],[2.33333,2]]
 greater=[[1,1],[1,1]]
 sumtotal=10
 mean=2.75
 min=1
 max=4
-std=1.290
-...
+std=1.291
