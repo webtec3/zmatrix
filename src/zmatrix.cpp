@@ -2227,7 +2227,7 @@ PHP_METHOD(ZTensor, matmul)
 
 // === Divide ===
 ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_divide, 0, 0, 1)
-    ZEND_ARG_OBJ_INFO(0, other, ZTensor, 0)
+    ZEND_ARG_INFO(0, other)
 ZEND_END_ARG_INFO()
 
 PHP_METHOD(ZTensor, divide)
