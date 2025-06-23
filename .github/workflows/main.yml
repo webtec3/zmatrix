@@ -16,17 +16,17 @@ jobs:
     name: PHP ${{ matrix.php_version }} - ${{ matrix.mode }}
 
     steps:
-      - name: 🔄 Checkout
+      - name: 🔄 Checkout repository
         uses: actions/checkout@v3
 
-      - name: 💾 Cache PHP compilado
+      - name: 💾 Cache compiled PHP
         id: cache-php
         uses: actions/cache@v3
         with:
           path: /usr/local/php
           key: php-${{ matrix.php_version }}-build
 
-      - name: 🧰 Instalar dependências mínimas
+      - name: 🧰 Install required dependencies
         run: |
           sudo apt update
           sudo apt install -y \
@@ -35,7 +35,7 @@ jobs:
             g++ pkg-config \
             libopenblas-dev libgomp1 wget valgrind
 
-      - name: 🐘 Compilar PHP (somente se cache não existir)
+      - name: 🐘 Compile PHP (only if not cached)
         if: steps.cache-php.outputs.cache-hit != 'true'
         run: |
           sudo mkdir -p /src
@@ -49,10 +49,10 @@ jobs:
           sudo make -j$(nproc)
           sudo make install
 
-      - name: 🧭 Adicionar PHP ao PATH
+      - name: 🧭 Add PHP to PATH
         run: echo "/usr/local/php/bin" >> $GITHUB_PATH
 
-      - name: 🔧 Compilar extensão ZMatrix
+      - name: 🔧 Build ZMatrix extension
         run: |
           cd ${{ github.workspace }}
           phpize
@@ -69,29 +69,29 @@ jobs:
           sudo mkdir -p /usr/local/php/etc/conf.d
           echo "extension=zmatrix.so" | sudo tee /usr/local/php/etc/conf.d/zmatrix.ini
 
-      - name: 🧪 Rodar testes
+      - name: 🧪 Run tests
         continue-on-error: true
         run: |
           export USE_ZEND_ALLOC=0
 
           if [ "${{ matrix.mode }}" = "leak" ]; then
-            echo "🧠 Executando testes com Valgrind..."
+            echo "🧠 Running tests with Valgrind..."
             valgrind --leak-check=full --show-leak-kinds=all \
               --track-origins=yes --error-exitcode=1 \
               php tests/example.php || exit 1
           else
-            echo "🧪 Executando testes normais..."
+            echo "🧪 Running normal tests..."
             sudo make test TEST_PHP_EXECUTABLE="/usr/local/php/bin/php -dextension=zmatrix.so"
           fi
 
-          # Testes personalizados .tphp
+          # Custom tests (.tphp)
           if [ -d tests/.tphp ]; then
             for test_file in tests/.tphp/*.tphp; do
-              echo "▶️ Executando $test_file..."
+              echo "▶️ Running $test_file..."
               php "$test_file" || exit 1
             done
           fi
 
-      - name: 📄 Exibir resultado do make test
+      - name: 📄 Show make test output
         if: always()
-        run: cat php_test_results_*.txt || echo "Sem relatório"
+        run: cat php_test_results_*.txt || echo "No report available"
