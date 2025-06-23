@@ -78,6 +78,7 @@ jobs:
             echo "🧠 Running tests with Valgrind..."
             valgrind --leak-check=full --show-leak-kinds=all \
               --track-origins=yes --error-exitcode=1 \
+              --log-file=valgrind.log \
               php tests/example.php || exit 1
           else
             echo "🧪 Running normal tests..."
@@ -95,3 +96,7 @@ jobs:
       - name: 📄 Show make test output
         if: always()
         run: cat php_test_results_*.txt || echo "No report available"
+
+      - name: 🧠 Show Valgrind log (if leak mode)
+        if: matrix.mode == 'leak' && always()
+        run: cat valgrind.log || echo "No Valgrind output"
