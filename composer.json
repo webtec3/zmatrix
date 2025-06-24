@@ -1,0 +1,12 @@
+{
+  "name": "webtec3/zmatrix",
+  "type": "php-ext",
+  "license": "MIT",
+  "description": "High-performance tensor operations for PHP using BLAS, OpenMP, and SIMD. Native PHP extension written in C++.",
+  "require": {
+    "php": ">=8.4"
+  },
+  "php-ext": {
+    "extension-name": "zmatrix"
+  }
+}

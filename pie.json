@@ -1,6 +1,0 @@
-{
-  "type": "php-ext",
-  "name": "webtec3/zmatrix",
-  "ext-name": "zmatrix",
-  "src-dir": "src"
-}
