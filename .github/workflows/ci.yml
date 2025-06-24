@@ -38,8 +38,8 @@ jobs:
       - name: 🐘 Compile PHP (only if not cached)
         if: steps.cache-php.outputs.cache-hit != 'true'
         run: |
-          mkdir -p /src
-          cd /src
+          mkdir -p php-src
+          cd php-src
           wget -O php.tar.gz https://www.php.net/distributions/php-${{ matrix.php_version }}.tar.gz
           tar -xf php.tar.gz --strip-components=1
           ./configure \
