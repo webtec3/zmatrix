@@ -5,18 +5,14 @@
   "license": "MIT",
   "authors": [
     {
-      "name": "Seu Nome",
+      "name": "Wesley Teixeira",
       "email": "webdesenvolver.agenda@gmail.com"
     }
   ],
   "require": {
     "php": ">=8.4"
   },
-  "autoload": {
-    "psr-4": {
-      "ZMatrix\\": "src/"
-    }
-  },
+  "autoload": {},
   "autoload-dev": {
     "classmap": [
       "tests/"
