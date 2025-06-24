@@ -18,14 +18,8 @@
     "issues": "https://github.com/webtec3/zmatrix/issues",
     "source": "https://github.com/webtec3/zmatrix"
   },
-  "autoload": {
-    "psr-4": {
-      "ZMatrix\\": "src/"
-    }
-  },
   "scripts": {
-    "test": "php -dextension=zmatrix.so tests/basic.phpt",
-    "lint": "php --syntax-check src/*.php"
+    "test": "php -dextension=zmatrix.so tests/basic.phpt"
   },
   "extra": {
     "php-ext-src": "src"
