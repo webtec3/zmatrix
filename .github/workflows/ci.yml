@@ -99,3 +99,15 @@ jobs:
       - name: 🧠 Show Valgrind log (if leak mode)
         if: matrix.mode == 'leak' && always()
         run: cat valgrind.log || echo "No Valgrind output"
+
+      - name: 🎨 Code Formatting
+        run: |
+          # Verifica se o código está formatado corretamente
+          find . -name "*.[ch]pp" -print0 | xargs -0 clang-format -n -Werror
+      
+          # (Opcional) Formata o código automaticamente
+          # find . -name "*.[ch]pp" -print0 | xargs -0 clang-format -i
+          
+      - name: 🔍 Static Analysis (cppcheck)
+        run: |
+          cppcheck --enable=all --suppress=missingIncludeSystem ${{ github.workspace }}
