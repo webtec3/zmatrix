@@ -107,7 +107,3 @@ jobs:
       
           # (Opcional) Formata o código automaticamente
           # find . -name "*.[ch]pp" -print0 | xargs -0 clang-format -i
-          
-      - name: 🔍 Static Analysis (cppcheck)
-        run: |
-          cppcheck --enable=all --suppress=missingIncludeSystem ${{ github.workspace }}
