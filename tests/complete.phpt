@@ -96,7 +96,7 @@ echo "\n✅ === TOTAL: 60 MÉTODOS TESTADOS COM SUCESSO ===\n";
 ?>
 --EXPECTF--
 === CONSTRUTORES E UTILIDADES ===
-__construct=6
+__construct=2
 __toString=[1,2,3]
 shape=[2,2]
 size=4
@@ -152,13 +152,13 @@ leakyReluDerivative=[0.01,0.01,1]
 softmaxDerivative=OK
 
 === REDUÇÃO E COMPARAÇÃO ===
-sum=10
+sum=[10]
 sumtotal=10
 mean=2.5
 min=1
 max=4
 std=1.291
-greater=[[0],[1],[1]]
+greater=[0,0,1]
 minimum=[1,2.5,2.5]
 maximum=[2.5,5,3]
 

@@ -601,7 +601,7 @@ function main(): void
                     $show_progress = false;
                     break;
                 case '--version':
-                    echo '$Id: 4654ead998f9aabe1bb9a10badec4b09caeeef2c $' . "\n";
+                    echo '$Id: e437487f4d17740345ab3e770b4b7e2212fbcd1b $' . "\n";
                     exit(1);
 
                 default:
@@ -646,6 +646,12 @@ function main(): void
     }
     if ($online !== null) {
         $environment['SKIP_ONLINE_TESTS'] = $online ? '0' : '1';
+    }
+
+    if (!defined('STDIN') || !stream_isatty(STDIN)
+     || !defined('STDOUT') || !stream_isatty(STDOUT)
+     || !defined('STDERR') || !stream_isatty(STDERR)) {
+        $environment['SKIP_IO_CAPTURE_TESTS'] = '1';
     }
 
     if ($selected_tests && count($test_files) === 0) {
@@ -2798,6 +2804,11 @@ function is_flaky(TestFile $test): bool
 {
     if ($test->hasSection('FLAKY')) {
         return true;
+    }
+    if ($test->hasSection('SKIPIF')) {
+        if (strpos($test->getSection('SKIPIF'), 'SKIP_PERF_SENSITIVE') !== false) {
+            return true;
+        }
     }
     if (!$test->hasSection('FILE')) {
         return false;
