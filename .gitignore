@@ -1,0 +1,101 @@
+# === BUILD AND COMPILATION ===
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+*.la
+*.lo
+.libs/
+*.dep
+*.loT
+.dirstamp
+
+# === PHP EXTENSION SPECIFIC ===
+modules/
+zmatrix.la
+zmatrix.lo
+.clang-tidy
+config.h
+config.h.in
+config.h.in~
+config.log
+config.nice
+config.status
+configure
+configure.log
+configure~
+libtool
+Makefile
+Makefile.fragments
+Makefile.objects
+zmatrix_arginfo.h
+zmatrix.stub.php
+ztensor.stub.php
+exported_symbols.txt
+cppcheck_report.txt
+
+# === AUTOCONF/AUTOMAKE ===
+autom4te.cache/
+.m4/
+build/
+
+# === IDEs AND EDITORS ===
+.vscode/
+.idea/
+.sublime-project
+.sublime-workspace
+*.swp
+*.swo
+*~
+.DS_Store
+*.iml
+
+# === PYTHON ===
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# === COMPOSER ===
+vendor/
+composer.lock
+
+# === PHP ===
+.phpunit.result.cache
+phpunit.log
+
+# === TEST ARTIFACTS ===
+*.phpt.log
+test-results.txt
+
+# === TEMP FILES ===
+*.tmp
+*.temp
+*.bak
+*.backup
+.backup/
+
+# === OS ===
+Thumbs.db
+.DS_Store
+.directory
+
+# === DEBUG ===
+*.debug
+core.*
+vgcore.*
+
+# === GENERATED FILES (keep in git for now, can remove later) ===
+# index.php
+# example.php
+# run-tests.php
+# test.sh
+# build.sh
+# benchmark.php
+
