@@ -2,6 +2,15 @@ PHP_ARG_ENABLE(zmatrix, whether to enable ZMatrix support,
 [  --enable-zmatrix   Enable ZMatrix support], no)
 
 if test "$PHP_ZMATRIX" != "no"; then
+  dnl Generate arginfo from stub files before compilation
+  AC_MSG_CHECKING([for gen_arginfo.sh])
+  if test -f "$abs_srcdir/gen_arginfo.sh"; then
+    AC_MSG_RESULT([found])
+    sh "$abs_srcdir/gen_arginfo.sh"
+  else
+    AC_MSG_RESULT([not found, skipping arginfo generation])
+  fi
+
   AC_LANG_PUSH([C++])
   AC_PROG_CXX([g++ clang++ c++])
   PHP_REQUIRE_CXX()

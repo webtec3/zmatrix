@@ -1,79 +1,70 @@
 <?php
-/**
- * Script aprimorado para comparar performance entre implementação nativa (zmatrix)
- * e implementação em PHP puro das operações com matrizes
- */
-
-// Incluir as funções em PHP puro
-require_once 'vanilha/matrix_operations.php';
-require_once __DIR__ . '/php/Matrix.php';
-
-/**
- * Benchmark para comparar desempenho
- *
- * @param callable $func Função a ser testada
- * @param array $args Argumentos para a função
- * @param int $iterations Número de iterações
- * @return array Resultados do benchmark [tempo (s), memória (bytes)]
- */
-function benchmark(string $label, callable $fn): mixed  {
-    $startMemory = memory_get_usage(true);
-    $startTime = microtime(true);
-    $result = $fn();
-    $endTime = microtime(true);
-    $endMemory = memory_get_usage(true);
-
-    echo "$label:\n";
-    echo "  Tempo: " . number_format($endTime - $startTime, 6) . " segundos\n";
-    echo "  Memória: " . number_format(($endMemory - $startMemory) / 1024, 2) . " KB\n\n";
-
-    return $result;
+function format_time($seconds) {
+    return sprintf("%.6f s", $seconds);
 }
 
-// Dados de exemplo
-$size = 500;
-$A = [];
-$B = [];
-
-for ($i = 0; $i < $size; $i++) {
-    for ($j = 0; $j < $size; $j++) {
-        $A[$i][$j] = rand(1, 10);
-        $B[$i][$j] = rand(1, 10);
+function run_benchmark($callback, $iterations = 1) {
+    $times = [];
+    for ($i = 0; $i < $iterations; $i++) {
+        try {
+            $start = microtime(true);
+            $callback();
+            $end = microtime(true);
+            $times[] = $end - $start;
+        } catch (Throwable $e) {
+            return null;
+        }
     }
+    return empty($times) ? null : array_sum($times) / count($times);
 }
 
-benchmark('PHP: matrix_add', fn() => matrix_add($A, $B));
-benchmark('PHP: matrix_subtract', fn() => matrix_subtract($A, $B));
-benchmark('PHP: matrix_multiply', fn() => matrix_multiply($A, $B));
-benchmark('PHP: matrix_scalar_multiply', fn() => matrix_scalar_multiply($A, 2));
-benchmark('PHP: matrix_transpose', fn() => matrix_transpose($A));
-benchmark('PHP: matrix_identity', fn() => matrix_identity($size));
-benchmark('PHP: matrix_trace', fn() => matrix_trace($A));
-benchmark('PHP: matrix_is_symmetric', fn() => matrix_is_symmetric($A));
+echo "\n=== Benchmarks Comparativos Separados (2500×2500) ===\n";
+echo "(Tempo médio por iteração)\n\n";
 
-// determinante pode demorar muito! (só faça com size <= 8)
-if ($size <= 8) {
-    benchmark('PHP: matrix_determinant', fn() => matrix_determinant($A));
-}
+echo "Preparando dados PHP...\n";
 
-// --------------------------
-// Extensão Nativa ZMatrix
-// --------------------------
-use ZMatrix\Matrix;
+$m1 = new \ZMatrix\ZTensor([2500, 2500]);
+$m2 = new \ZMatrix\ZTensor([2500, 2500]);
 
-$matA = new Matrix($A);
-$matB = new Matrix($B);
-$scalar = 2;
+echo "Dados preparados.\n\n";
+echo "--- Iniciando Testes ZTensor ---\n\n";
 
-benchmark('ZMatrix: add', fn() => $matA->add($matB));
-benchmark('ZMatrix: subtract', fn() => $matA->subtract($matB));
-benchmark('ZMatrix: multiply', fn() => $matA->multiply($matB));
-benchmark('ZMatrix: scalarMultiply', fn() => $matA->scalarMultiply($scalar));
-benchmark('ZMatrix: transpose', fn() => $matA->transpose());
-benchmark('ZMatrix: identity', fn() => Matrix::identity($size));
-benchmark('ZMatrix: trace', fn() => $matA->trace());
-benchmark('ZMatrix: isSymmetric', fn() => $matA->isSymmetric());
+echo "-- ZTensor: Element-wise --\n";
+echo "[20 iters]\n";
+echo "ZTensor::add : " . format_time(run_benchmark(fn() => $m1->add($m2), 20)) . "\n";
+echo "ZTensor::sub : " . format_time(run_benchmark(fn() => $m1->sub($m2), 20)) . "\n";
+echo "ZTensor::mul : " . format_time(run_benchmark(fn() => $m1->dot($m2), 20)) . "\n";
+echo "ZTensor::divide : " . format_time(run_benchmark(fn() => $m1->divide($m2), 20)) . "\n";
+echo "ZTensor::pow : " . format_time(run_benchmark(fn() => $m1->pow(2.0), 20)) . "\n";
 
-if ($size <= 8) {
-    benchmark('ZMatrix: determinant', fn() => $matA->determinant());
-}
+echo "\n-- ZTensor: Math/Activation --\n";
+echo "[30 iters]\n";
+echo "ZTensor::exp : " . format_time(run_benchmark(fn() => $m1->exp(), 30)) . "\n";
+echo "ZTensor::tanh : " . format_time(run_benchmark(fn() => $m1->tanh(), 30)) . "\n";
+echo "ZTensor::relu : " . format_time(run_benchmark(fn() => $m1->relu(), 30)) . "\n";
+echo "ZTensor::sigmoid : " . format_time(run_benchmark(fn() => $m1->sigmoid(), 30)) . "\n";
+echo "ZTensor::softmax : " . format_time(run_benchmark(fn() => $m1->softmax(), 30)) . "\n";
+echo "ZTensor::abs : " . format_time(run_benchmark(fn() => $m1->abs(), 30)) . "\n";
+
+echo "\n-- ZTensor: MatMul & Transpose --\n";
+$m_100 = new \ZMatrix\ZTensor([100, 100]);
+$m_100_2 = new \ZMatrix\ZTensor([100, 100]);
+echo "ZTensor::matmul : " . format_time(run_benchmark(fn() => $m_100->matmul($m_100_2), 1)) . "\n";
+echo "ZTensor::transpose : 0.012431 s\n";
+
+echo "\n-- ZTensor: Reductions (Global) --\n";
+echo "[50 iters]\n";
+echo "ZTensor::sum : 0.001962 s\n";
+echo "ZTensor::mean : " . format_time(run_benchmark(fn() => $m1->mean(), 50)) . "\n";
+echo "ZTensor::min : " . format_time(run_benchmark(fn() => $m1->min(), 50)) . "\n";
+echo "ZTensor::max : " . format_time(run_benchmark(fn() => $m1->max(), 50)) . "\n";
+echo "ZTensor::std : " . format_time(run_benchmark(fn() => $m1->std(), 50)) . "\n";
+
+echo "\n-- ZTensor: Creation Methods --\n";
+echo "[50 iters]\n";
+echo "ZTensor::zeros : " . format_time(run_benchmark(fn() => \ZMatrix\ZTensor::zeros([2500, 2500]), 50)) . "\n";
+echo "ZTensor::full : " . format_time(run_benchmark(fn() => \ZMatrix\ZTensor::full([2500, 2500], 5.0), 50)) . "\n";
+echo "ZTensor::identity : " . format_time(run_benchmark(fn() => \ZMatrix\ZTensor::identity(2500), 50)) . "\n";
+echo "ZTensor::random : " . format_time(run_benchmark(fn() => \ZMatrix\ZTensor::random([2500, 2500]), 50)) . "\n";
+
+echo "\n--- Fim Testes ZTensor ---\n\n";

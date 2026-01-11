@@ -16,7 +16,7 @@ function array_diff_recursive(array $a, array $b): array
     foreach ($a as $k => $v) {
         if (!array_key_exists($k, $b)) {
             $diff[$k] = $v;
-        } elseif (is_array($v) && is_array($b[$k])) {
+        } elseif (is_array($v) || is_array($b[$k])) {
             $d = array_diff_recursive($v, $b[$k]);
             if (!empty($d)) {
                 $diff[$k] = $d;
@@ -41,9 +41,12 @@ $tests = [
         $a = ZTensor::arr([1,2,3]);
         try {
             $a->greater(ZTensor::arr([[1,2],[3,4]]));
-            throw new RuntimeException("Esperava RuntimeException de shape mismatch");
-        } catch (RuntimeException $e) {
-            // OK
+            throw new RuntimeException("Esperava exceção de shape mismatch");       
+        } catch (Exception $e) {
+            // OK - captura qualquer exceção (RuntimeException ou Exception)
+            if (strpos($e->getMessage(), 'mismatch') === false || strpos($e->getMessage(), 'Shape') === false) {
+                throw new RuntimeException("Erro esperado diferente: " . $e->getMessage());
+            }
         }
     },
 

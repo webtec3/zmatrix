@@ -3219,22 +3219,25 @@ PHP_METHOD(ZTensor, clip)
         const size_t N = result.size();
         float * __restrict__ a = result.data.data();
         const float fmin = static_cast<float>(min_val);
-        const float fmax = static_cast<float>(max_val);
-
-        #if HAS_OPENMP
+    #if HAS_AVX512
+        abs_avx512_kernel(a, N);
+    #else
+    #if HAS_OPENMP
         if (N > ZMATRIX_PARALLEL_THRESHOLD) {
-//            #pragma omp parallel for simd schedule(static)
-            for (size_t i = 0; i < N; ++i) {
-                a[i] = std::max(fmin, std::min(fmax, a[i]));
+            for(size_t i = 0; i < N; ++i) {
+                a[i] = std::fabs(a[i]);
             }
-        } else
-        #endif
-        {
-            for (size_t i = 0; i < N; ++i) {
-                a[i] = std::max(fmin, std::min(fmax, a[i]));
+        } else {
+            for(size_t i = 0; i < N; ++i) {
+                a[i] = std::fabs(a[i]);
             }
         }
-
+    #else
+        for(size_t i = 0; i < N; ++i) {
+            a[i] = std::fabs(a[i]);
+        }
+    #endif
+    #endif
         zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
     } catch (const std::exception& e) {
         zend_throw_exception(zend_ce_exception, e.what(), 0);
