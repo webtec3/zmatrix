@@ -68,4 +68,4 @@ echo "ZTensor::identity : " . format_time(run_benchmark(fn() => \ZMatrix\ZTensor
 echo "ZTensor::random : " . format_time(run_benchmark(fn() => \ZMatrix\ZTensor::random([2500, 2500]), 50)) . "\n";
 
 echo "\n--- Fim Testes ZTensor ---\n\n";
-?>
+

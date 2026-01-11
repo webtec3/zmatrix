@@ -45,6 +45,8 @@
 #endif
 // --- Fim OpenMP / SIMD ---
 
+#include "simd/simd_dispatch.h"
+
 #ifndef ZMATRIX_ERRORS_H
 #define ZMATRIX_ERRORS_H
 #define ZMATRIX_ERR_INVALID_VALUE "Invalid value for the operation"
@@ -219,16 +221,13 @@ struct ZTensor {
                    a[i] += b[i];
                }
            } else {
-               for (size_t i = 0; i < N; ++i) { // Loop sequencial
-                   a[i] += b[i];
-               }
+               zmatrix_simd::add_f32(a, b, N);
            }
         #else
-           for (size_t i = 0; i < N; ++i) { // Loop sequencial se não houver OpenMP
-               a[i] += b[i];
-           }
+           zmatrix_simd::add_f32(a, b, N);
         #endif
     }
+
 
     void clip(const ZTensor& other) {
         if (!same_shape(other)) throw std::invalid_argument(ZMATRIX_ERR_SHAPE_MISMATCH);
@@ -332,18 +331,16 @@ struct ZTensor {
             for (size_t i = 0; i < N; ++i) {
                 a[i] -= b[i];
             }
-        } else { // Loop sequencial se pequeno
-            for (size_t i = 0; i < N; ++i) {
-                a[i] -= b[i];
-            }
+        } else {
+            zmatrix_simd::sub_f32(a, b, N);
         }
-        #else // Loop sequencial se não houver OpenMP
-        for (size_t i = 0; i < N; ++i) {
-            a[i] -= b[i];
-        }
+        #else
+        zmatrix_simd::sub_f32(a, b, N);
         #endif
 
     }
+
+
 
     // --- Multiplicação Elemento a Elemento (float) - Loop Canônico ---
     void mul(const ZTensor& other) {
@@ -359,17 +356,15 @@ struct ZTensor {
              for (size_t i = 0; i < N; ++i) {
                 a[i] *= b[i];
             }
-        } else { // Loop sequencial se pequeno
-             for (size_t i = 0; i < N; ++i) {
-                a[i] *= b[i];
-            }
+        } else {
+             zmatrix_simd::mul_f32(a, b, N);
         }
-        #else // Loop sequencial se não houver OpenMP
-         for (size_t i = 0; i < N; ++i) {
-            a[i] *= b[i];
-        }
+        #else
+         zmatrix_simd::mul_f32(a, b, N);
         #endif
     }
+
+
 
     void scalar_divide(float scalar) {
        const size_t N = size();
@@ -382,16 +377,14 @@ struct ZTensor {
                    a[i] /= scalar;
                }
            } else {
-               for (size_t i = 0; i < N; ++i) {
-                   a[i] /= scalar;
-               }
+               zmatrix_simd::scalar_div_f32(a, scalar, N);
            }
            #else
-           for (size_t i = 0; i < N; ++i) {
-               a[i] /= scalar;
-           }
+           zmatrix_simd::scalar_div_f32(a, scalar, N);
            #endif
     }
+
+
 
     // --- Multiplicação por Escalar (float) - Loop Canônico ---
     void multiply_scalar(float scalar) {
@@ -404,17 +397,15 @@ struct ZTensor {
             for (size_t i = 0; i < N; ++i) {
                 a[i] *= scalar;
             }
-        } else { // Loop sequencial se pequeno
-            for (size_t i = 0; i < N; ++i) {
-                a[i] *= scalar;
-            }
+        } else {
+            zmatrix_simd::scalar_mul_f32(a, scalar, N);
         }
-        #else // Loop sequencial se não houver OpenMP
-        for (size_t i = 0; i < N; ++i) {
-            a[i] *= scalar;
-        }
+        #else
+        zmatrix_simd::scalar_mul_f32(a, scalar, N);
         #endif
     }
+
+
 
     void scalar_add(float value) {
         size_t N = data.size();
@@ -429,11 +420,11 @@ struct ZTensor {
         } else
         #endif
         {
-            for (size_t i = 0; i < N; ++i) {
-                ptr[i] += value;
-            }
+            zmatrix_simd::scalar_add_f32(ptr, value, N);
         }
     }
+
+
 
     void scalar_subtract(float value) {
         size_t N = data.size();
@@ -448,11 +439,11 @@ struct ZTensor {
         } else
         #endif
         {
-            for (size_t i = 0; i < N; ++i) {
-                ptr[i] -= value;
-            }
+            zmatrix_simd::scalar_sub_f32(ptr, value, N);
         }
     }
+
+
 
     ZTensor reshape(const std::vector<size_t>& new_shape) const {
         // 1. Calcular tamanho total do novo shape
@@ -606,15 +597,11 @@ struct ZTensor {
              for(size_t i = 0; i < N; ++i) {
                   a[i] = std::fabs(a[i]);
               }
-         } else { // Loop sequencial se pequeno
-             for(size_t i = 0; i < N; ++i) {
-                  a[i] = std::fabs(a[i]);
-              }
+         } else {
+             zmatrix_simd::abs_f32(a, N);
          }
-         #else // Loop sequencial se não houver OpenMP
-         for(size_t i = 0; i < N; ++i) {
-              a[i] = std::fabs(a[i]);
-          }
+         #else
+         zmatrix_simd::abs_f32(a, N);
          #endif
      }
 
@@ -675,18 +662,15 @@ struct ZTensor {
             for(size_t i = 0; i < N; ++i) {
                 a[i] = std::max(0.0f, a[i]);
             }
-        } else { // Loop sequencial se pequeno
-            for(size_t i = 0; i < N; ++i) {
-                a[i] = std::max(0.0f, a[i]);
-            }
+        } else {
+            zmatrix_simd::relu_f32(a, N);
         }
-        #else // Loop sequencial se não houver OpenMP
-        for(size_t i = 0; i < N; ++i) {
-            a[i] = std::max(0.0f, a[i]);
-        }
+        #else
+        zmatrix_simd::relu_f32(a, N);
         #endif
 
     }
+
 
     void relu_derivative() {
         const size_t N = size();
@@ -700,14 +684,14 @@ struct ZTensor {
             for (size_t i = 0; i < N; ++i) {
                 a[i] = (a[i] > 0.0f) ? 1.0f : 0.0f;
             }
-        } else
-        #endif
-        {
-            for (size_t i = 0; i < N; ++i) {
-                a[i] = (a[i] > 0.0f) ? 1.0f : 0.0f;
-            }
+        } else {
+            zmatrix_simd::relu_derivative_f32(a, N);
         }
+        #else
+        zmatrix_simd::relu_derivative_f32(a, N);
+        #endif
     }
+
 
 
     void tanh()  {
@@ -768,14 +752,14 @@ struct ZTensor {
             for (size_t i = 0; i < N; ++i) {
                 a[i] = (a[i] > 0.0f) ? a[i] : alpha * a[i];
             }
-        } else
-        #endif
-        {
-            for (size_t i = 0; i < N; ++i) {
-                a[i] = (a[i] > 0.0f) ? a[i] : alpha * a[i];
-            }
+        } else {
+            zmatrix_simd::leaky_relu_f32(a, alpha, N);
         }
+        #else
+        zmatrix_simd::leaky_relu_f32(a, alpha, N);
+        #endif
     }
+
 
     void leaky_relu_derivative(float alpha = 0.01f) {
         const size_t N = size();
@@ -789,14 +773,14 @@ struct ZTensor {
             for (size_t i = 0; i < N; ++i) {
                 a[i] = (a[i] > 0.0f) ? 1.0f : alpha;
             }
-        } else
-        #endif
-        {
-            for (size_t i = 0; i < N; ++i) {
-                a[i] = (a[i] > 0.0f) ? 1.0f : alpha;
-            }
+        } else {
+            zmatrix_simd::leaky_relu_derivative_f32(a, alpha, N);
         }
+        #else
+        zmatrix_simd::leaky_relu_derivative_f32(a, alpha, N);
+        #endif
     }
+
 
     void softmax() {
         if (shape.empty() || (shape.size() != 1 && shape.size() != 2)) {
@@ -987,7 +971,7 @@ struct ZTensor {
         // Sem return ZTensor, pois é uma operação in-place
     }
 
-    void sqrt() { // Retorno void, não é const
+    void sqrt() { // Retorno void, n??o ?? const
         const size_t total_size = size();
         if (total_size == 0) return;
 
@@ -1003,31 +987,34 @@ struct ZTensor {
         if (total_size > ZMATRIX_PARALLEL_THRESHOLD) {
              #pragma omp parallel for schedule(static)
               for (size_t i = 0; i < total_size; ++i) {
-                 p_this[i] = std::sqrt(p_this[i]); // Modifica o dado do próprio objeto
+                 p_this[i] = std::sqrt(p_this[i]);
              }
-        } else { // Loop sequencial se pequeno
-             for (size_t i = 0; i < total_size; ++i) {
-                p_this[i] = std::sqrt(p_this[i]); // Modifica o dado do próprio objeto
-            }
+        } else {
+             zmatrix_simd::sqrt_f32(p_this, total_size);
         }
-        #else // Loop sequencial se não houver OpenMP
-            for (size_t i = 0; i < total_size; ++i) {
-                p_this[i] = std::sqrt(p_this[i]); // Modifica o dado do próprio objeto
-            }
+        #else
+        zmatrix_simd::sqrt_f32(p_this, total_size);
         #endif
 
     }
+
     // --- Reduções (float input, double accumulator) ---
       double sum() const {
           const size_t N = size();
           if (N == 0) return 0.0;
 
           const float* a = data.data();
+
+          #if HAS_AVX2
+          if (N <= ZMATRIX_PARALLEL_THRESHOLD) {
+              return zmatrix_simd::sum_f32(a, N);
+          }
+          #endif
+
           double total_sum = 0.0;
 
-          // Paralelize apenas se o tensor for grande o suficiente
           #if HAS_OPENMP
-          if (N > ZMATRIX_PARALLEL_THRESHOLD) {  // Ajuste este limite conforme necessário
+          if (N > ZMATRIX_PARALLEL_THRESHOLD) {
               #pragma omp parallel for reduction(+:total_sum) schedule(static)
               for (size_t i = 0; i < N; ++i) {
                   total_sum += a[i];
@@ -1056,6 +1043,13 @@ struct ZTensor {
          const size_t N = size();
          if (N == 0) return std::numeric_limits<float>::quiet_NaN();
          const float* p = data.data();
+
+         #if HAS_AVX2
+         if (N <= ZMATRIX_PARALLEL_THRESHOLD) {
+             return zmatrix_simd::min_f32(p, N);
+         }
+         #endif
+
          float m = p[0];
 
          #if HAS_OPENMP
@@ -1078,11 +1072,17 @@ struct ZTensor {
          return m;
      }
 
-
      float max() const {
          const size_t N = size();
          if (N == 0) return std::numeric_limits<float>::quiet_NaN();
          const float* p = data.data();
+
+         #if HAS_AVX2
+         if (N <= ZMATRIX_PARALLEL_THRESHOLD) {
+             return zmatrix_simd::max_f32(p, N);
+         }
+         #endif
+
          float M = p[0];
 
          #if HAS_OPENMP
@@ -1103,7 +1103,6 @@ struct ZTensor {
           #endif
          return M;
      }
-
 
      double std() const {
          const size_t N = size();
