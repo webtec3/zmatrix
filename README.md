@@ -11,6 +11,7 @@ sudo update-alternatives --config phpize
 ```bash
 git clone https://github.com/omegaalfa/zmatrix.git
 cd zmatrix
+make clean
 phpize
 ./configure --enable-zmatrix
 make

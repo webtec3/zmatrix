@@ -106,7 +106,7 @@ struct ZTensor {
                 }
                 strides.resize(shape.size());
                 size_t stride = 1;
-                for (int i = shape.size() - 1; i >= 0; --i) {
+                for (int i = static_cast<int>(shape.size()) - 1; i >= 0; --i) {
                     strides[i] = stride;
                      if (shape[i] > 0 && i > 0 && stride > (std::numeric_limits<size_t>::max() / shape[i])) {
                          throw std::overflow_error(ZMATRIX_ERR_OVERFLOW);
@@ -173,11 +173,17 @@ struct ZTensor {
     float& at(const std::vector<size_t>& indices) {
         if (this->size() == 0) { throw std::out_of_range("Access to empty tensor"); }
         size_t index = get_linear_index(indices);
+        if (index >= data.size()) {
+            throw std::out_of_range("Calculated index exceeds data size");
+        }
         return data[index];
     }
     const float& at(const std::vector<size_t>& indices) const {
          if (this->size() == 0) { throw std::out_of_range("Access to empty tensor"); }
          size_t index = get_linear_index(indices);
+         if (index >= data.size()) {
+             throw std::out_of_range("Calculated index exceeds data size");
+         }
         return data[index];
     }
     bool same_shape(const ZTensor& other) const { return shape == other.shape; }
@@ -208,7 +214,7 @@ struct ZTensor {
 
         #if HAS_OPENMP
            if (N > ZMATRIX_PARALLEL_THRESHOLD) {
-//               #pragma omp parallel for simd schedule(static)
+#pragma omp parallel for simd schedule(static)
                for (size_t i = 0; i < N; ++i) {
                    a[i] += b[i];
                }
@@ -235,7 +241,7 @@ struct ZTensor {
 
         #if HAS_OPENMP
         if (N > ZMATRIX_PARALLEL_THRESHOLD) {
-//            #pragma omp parallel for simd schedule(static)
+#pragma omp parallel for simd schedule(static)
             for (size_t i = 0; i < N; ++i) {
                 a[i] = std::max(-b[i], std::min(b[i], a[i])); // Exemplo: clip simétrico ±b[i]
             }
@@ -322,7 +328,7 @@ struct ZTensor {
         const float * __restrict__ b = other.data.data();
         #if HAS_OPENMP
         if (N > ZMATRIX_PARALLEL_THRESHOLD) {
-//            #pragma omp parallel for simd schedule(static)
+#pragma omp parallel for simd schedule(static)
             for (size_t i = 0; i < N; ++i) {
                 a[i] -= b[i];
             }
@@ -349,7 +355,7 @@ struct ZTensor {
 
         #if HAS_OPENMP
         if (N > ZMATRIX_PARALLEL_THRESHOLD) {
-//             #pragma omp parallel for simd schedule(static)
+#pragma omp parallel for simd schedule(static)
              for (size_t i = 0; i < N; ++i) {
                 a[i] *= b[i];
             }
@@ -371,7 +377,7 @@ struct ZTensor {
            float * __restrict__ a = data.data();
            #if HAS_OPENMP
            if (N > ZMATRIX_PARALLEL_THRESHOLD) {
-//               #pragma omp parallel for simd schedule(static)
+#pragma omp parallel for simd schedule(static)
                for (size_t i = 0; i < N; ++i) {
                    a[i] /= scalar;
                }
@@ -394,7 +400,7 @@ struct ZTensor {
         float * __restrict__ a = data.data();
         #if HAS_OPENMP
         if (N > ZMATRIX_PARALLEL_THRESHOLD) {
-//            #pragma omp parallel for simd schedule(static)
+#pragma omp parallel for simd schedule(static)
             for (size_t i = 0; i < N; ++i) {
                 a[i] *= scalar;
             }
@@ -416,7 +422,7 @@ struct ZTensor {
 
         #if HAS_OPENMP
         if (N > ZMATRIX_PARALLEL_THRESHOLD) {
-//            #pragma omp parallel for simd schedule(static)
+#pragma omp parallel for simd schedule(static)
             for (size_t i = 0; i < N; ++i) {
                 ptr[i] += value;
             }
@@ -435,7 +441,7 @@ struct ZTensor {
 
         #if HAS_OPENMP
         if (N > ZMATRIX_PARALLEL_THRESHOLD) {
-//            #pragma omp parallel for simd schedule(static)
+#pragma omp parallel for simd schedule(static)
             for (size_t i = 0; i < N; ++i) {
                 ptr[i] -= value;
             }
@@ -564,7 +570,7 @@ struct ZTensor {
     #if HAS_OPENMP
         const size_t total = rows * cols;
         if (total > 10000) {
-//            #pragma omp parallel for collapse(2) schedule(static)
+#pragma omp parallel for collapse(2) schedule(static)
             for (size_t ii = 0; ii < rows; ii += TILE_SIZE) {
                 for (size_t jj = 0; jj < cols; jj += TILE_SIZE) {
                     for (size_t i = ii; i < std::min(ii + TILE_SIZE, rows); ++i) {
@@ -596,7 +602,7 @@ struct ZTensor {
          float * __restrict__ a = data.data();
          #if HAS_OPENMP
          if (N > ZMATRIX_PARALLEL_THRESHOLD) {
-//             #pragma omp parallel for simd schedule(static)
+#pragma omp parallel for simd schedule(static)
              for(size_t i = 0; i < N; ++i) {
                   a[i] = std::fabs(a[i]);
               }
@@ -643,7 +649,7 @@ struct ZTensor {
 
         #if HAS_OPENMP
         if (N > ZMATRIX_PARALLEL_THRESHOLD) {
-//            #pragma omp parallel for simd schedule(static)
+#pragma omp parallel for simd schedule(static)
             for (size_t i = 0; i < N; ++i) {
                 float sig = a[i];
                 a[i] = sig * (1.0f - sig);
@@ -665,7 +671,7 @@ struct ZTensor {
         float * __restrict__ a = data.data();
         #if HAS_OPENMP
         if (N > ZMATRIX_PARALLEL_THRESHOLD) {
-//            #pragma omp parallel for simd schedule(static)
+#pragma omp parallel for simd schedule(static)
             for(size_t i = 0; i < N; ++i) {
                 a[i] = std::max(0.0f, a[i]);
             }
@@ -690,7 +696,7 @@ struct ZTensor {
 
         #if HAS_OPENMP
         if (N > ZMATRIX_PARALLEL_THRESHOLD) {
-//            #pragma omp parallel for simd schedule(static)
+#pragma omp parallel for simd schedule(static)
             for (size_t i = 0; i < N; ++i) {
                 a[i] = (a[i] > 0.0f) ? 1.0f : 0.0f;
             }
@@ -735,7 +741,7 @@ struct ZTensor {
 
         #if HAS_OPENMP
         if (N > ZMATRIX_PARALLEL_THRESHOLD) {
-//            #pragma omp parallel for simd schedule(static)
+#pragma omp parallel for simd schedule(static)
             for (size_t i = 0; i < N; ++i) {
                 float t = a[i];
                 a[i] = 1.0f - t * t;
@@ -758,7 +764,7 @@ struct ZTensor {
 
         #if HAS_OPENMP
         if (N > ZMATRIX_PARALLEL_THRESHOLD) {
-//            #pragma omp parallel for simd schedule(static)
+#pragma omp parallel for simd schedule(static)
             for (size_t i = 0; i < N; ++i) {
                 a[i] = (a[i] > 0.0f) ? a[i] : alpha * a[i];
             }
@@ -779,7 +785,7 @@ struct ZTensor {
 
         #if HAS_OPENMP
         if (N > ZMATRIX_PARALLEL_THRESHOLD) {
-//            #pragma omp parallel for simd schedule(static)
+#pragma omp parallel for simd schedule(static)
             for (size_t i = 0; i < N; ++i) {
                 a[i] = (a[i] > 0.0f) ? 1.0f : alpha;
             }
@@ -3219,25 +3225,24 @@ PHP_METHOD(ZTensor, clip)
         const size_t N = result.size();
         float * __restrict__ a = result.data.data();
         const float fmin = static_cast<float>(min_val);
-    #if HAS_AVX512
-        abs_avx512_kernel(a, N);
-    #else
-    #if HAS_OPENMP
+        const float fmax = static_cast<float>(max_val);
+
+        #if HAS_OPENMP
         if (N > ZMATRIX_PARALLEL_THRESHOLD) {
-            for(size_t i = 0; i < N; ++i) {
-                a[i] = std::fabs(a[i]);
+            #pragma omp parallel for schedule(static)
+            for (size_t i = 0; i < N; ++i) {
+                a[i] = std::max(fmin, std::min(fmax, a[i]));
             }
         } else {
-            for(size_t i = 0; i < N; ++i) {
-                a[i] = std::fabs(a[i]);
+            for (size_t i = 0; i < N; ++i) {
+                a[i] = std::max(fmin, std::min(fmax, a[i]));
             }
         }
-    #else
-        for(size_t i = 0; i < N; ++i) {
-            a[i] = std::fabs(a[i]);
+        #else
+        for (size_t i = 0; i < N; ++i) {
+            a[i] = std::max(fmin, std::min(fmax, a[i]));
         }
-    #endif
-    #endif
+        #endif
         zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
     } catch (const std::exception& e) {
         zend_throw_exception(zend_ce_exception, e.what(), 0);
@@ -3441,7 +3446,7 @@ PHP_METHOD(ZTensor, greater)
 
         #if HAS_OPENMP
         if (N > ZMATRIX_PARALLEL_THRESHOLD) {
-//            #pragma omp parallel for simd schedule(static)
+#pragma omp parallel for simd schedule(static)
             for (size_t i = 0; i < N; ++i) {
                 r_data[i] = (a_data[i] > b_data[i]) ? 1.0f : 0.0f;
             }
@@ -3494,7 +3499,7 @@ PHP_METHOD(ZTensor, minimum)
 
         #if HAS_OPENMP
         if (N > ZMATRIX_PARALLEL_THRESHOLD) {
-//            #pragma omp parallel for simd schedule(static)
+#pragma omp parallel for simd schedule(static)
             for (size_t i = 0; i < N; ++i) {
                 res_data[i] = (a_data[i] < scalar ? a_data[i] : scalar);
             }
@@ -3548,7 +3553,7 @@ PHP_METHOD(ZTensor, maximum)
 
         #if HAS_OPENMP
         if (N > ZMATRIX_PARALLEL_THRESHOLD) {
-//            #pragma omp parallel for simd schedule(static)
+#pragma omp parallel for simd schedule(static)
             for (size_t i = 0; i < N; ++i) {
                 res_data[i] = (a_data[i] > scalar ? a_data[i] : scalar);
             }
