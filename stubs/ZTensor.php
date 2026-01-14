@@ -695,6 +695,16 @@ final class ZTensor
     }
 
     /**
+     * Ativa ou desativa o rastreamento de gradiente para este tensor (autograd).
+     *
+     * @param bool $req Se true, ativa o rastreamento de gradiente.
+     * @return ZTensor O próprio tensor (para uso fluente).
+     */
+    public function requiresGrad(bool $req = true): ZTensor
+    {
+    }
+
+    /**
      * Adds a 1D vector [C] to each row of a 2D tensor [N×C], performing broadcasting on dimension 0.
      *
      * Example:

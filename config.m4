@@ -156,7 +156,7 @@ if test "$PHP_ZMATRIX" != "no"; then
   dnl Registra a extensão
     if test "$HAVE_CUDA" = "1"; then
       PHP_NEW_EXTENSION(zmatrix, [src/zmatrix.cpp], $ext_shared, , $ZMATRIX_CXXFLAGS)
-      PHP_ADD_MAKEFILE_FRAGMENT
+      PHP_ADD_MAKEFILE_FRAGMENT([src/Makefile.frag])
       AC_MSG_NOTICE([ZMatrix extension will be built with CUDA support])
     else
       PHP_NEW_EXTENSION(zmatrix, [src/zmatrix.cpp], $ext_shared, , $ZMATRIX_CXXFLAGS)

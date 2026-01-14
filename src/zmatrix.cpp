@@ -1,3 +1,6 @@
+#include <memory>
+#include <functional>
+#include <atomic>
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -21,7 +24,12 @@
 #include <functional>
 #include <string>
 #include <cstring>
+#include <cstdlib>
+#include <cstdio>
 #include <sstream>
+#ifdef HAVE_CUDA
+#include <cuda_runtime.h>
+#endif
 
 // #include <any>        // Removido se não usado
 
@@ -68,6 +76,35 @@
 
 #define ZMATRIX_PARALLEL_THRESHOLD 40000
 
+#define ZMATRIX_GPU_THRESHOLD 200000
+
+#ifdef HAVE_CUDA
+#include "gpu_wrapper.h"
+
+static inline bool zmatrix_force_cpu() {
+    const char *v = std::getenv("ZMATRIX_FORCE_CPU");
+    return (v != nullptr) && (v[0] == '1');
+}
+
+static inline bool zmatrix_gpu_debug_enabled() {
+    const char *v = std::getenv("ZMATRIX_GPU_DEBUG");
+    return (v != nullptr) && (v[0] == '1');
+}
+
+static inline void zmatrix_gpu_debug(const char *op, size_t n) {
+    if (zmatrix_gpu_debug_enabled()) {
+        std::fprintf(stderr, "[zmatrix][gpu] %s n=%zu\n", op, n);
+    }
+}
+
+static inline bool zmatrix_should_use_gpu(size_t n) {
+    if (zmatrix_force_cpu()) return false;
+    return (n >= ZMATRIX_GPU_THRESHOLD) && (gpu_available() != 0);
+}
+#else
+static inline bool zmatrix_should_use_gpu(size_t) { return false; }
+#endif
+
 // Gerador aleatório (mantido)
 static inline uint64_t xorshift64star(uint64_t& state) {
     state ^= state >> 12; state ^= state << 25; state ^= state >> 27;
@@ -80,11 +117,42 @@ static std::mt19937& get_global_mt19937() {
 }
 // --- Definição COMPLETA de ZTensor PRIMEIRO ---
 struct ZTensor {
+            // Gradiente acumulado (infraestrutura mínima para autograd)
+            std::unique_ptr<ZTensor> grad;
+        // --- Infraestrutura mínima para autograd ---
+        struct GradContext {
+            bool requires_grad = false;
+            std::vector<std::shared_ptr<GradContext>> parents;
+            std::function<void(const ZTensor& grad)> backward;
+        };
+        std::shared_ptr<GradContext> grad_ctx = nullptr;
+
+        // Helper para checar se requer gradiente
+        bool requires_grad() const {
+            return grad_ctx && grad_ctx->requires_grad;
+        }
+
+        // API fluente para ativar requires_grad
+        ZTensor& requiresGrad(bool req = true) {
+            if (req) {
+                if (!grad_ctx) grad_ctx = std::make_shared<GradContext>();
+                grad_ctx->requires_grad = true;
+            } else if (grad_ctx) {
+                grad_ctx->requires_grad = false;
+            }
+            return *this;
+        }
     std::vector<float> data; // <--- MUDANÇA: double para float
     std::vector<size_t> shape;
     std::vector<size_t> strides;
     size_t offset = 0;
     bool owns_data = true; // ← importante para views
+#ifdef HAVE_CUDA
+    mutable float *d_data = nullptr;
+    mutable size_t d_capacity = 0;
+    mutable bool device_valid = false;
+    mutable bool host_valid = true;
+#endif
 
 
     // Construtor Principal (inalterado, exceto 0.0f)
@@ -126,8 +194,168 @@ struct ZTensor {
     // Construtor Padrão (inalterado)
     ZTensor() = default;
 
+    ZTensor(const ZTensor& other)
+        : data(other.data),
+          shape(other.shape),
+          strides(other.strides),
+          offset(other.offset),
+          owns_data(other.owns_data)
+    {
+#ifdef HAVE_CUDA
+        other.ensure_host();
+        data = other.data;
+        d_data = nullptr;
+        d_capacity = 0;
+        device_valid = false;
+        host_valid = true;
+#endif
+    }
+
+    ZTensor& operator=(const ZTensor& other) {
+        if (this == &other) return *this;
+#ifdef HAVE_CUDA
+        other.ensure_host();
+        free_device();
+#endif
+        data = other.data;
+        shape = other.shape;
+        strides = other.strides;
+        offset = other.offset;
+        owns_data = other.owns_data;
+#ifdef HAVE_CUDA
+        d_data = nullptr;
+        d_capacity = 0;
+        device_valid = false;
+        host_valid = true;
+#endif
+        return *this;
+    }
+
+    ZTensor(ZTensor&& other) noexcept
+        : data(std::move(other.data)),
+          shape(std::move(other.shape)),
+          strides(std::move(other.strides)),
+          offset(other.offset),
+          owns_data(other.owns_data)
+    {
+#ifdef HAVE_CUDA
+        d_data = other.d_data;
+        d_capacity = other.d_capacity;
+        device_valid = other.device_valid;
+        host_valid = other.host_valid;
+        other.d_data = nullptr;
+        other.d_capacity = 0;
+        other.device_valid = false;
+        other.host_valid = true;
+#endif
+    }
+
+    ZTensor& operator=(ZTensor&& other) noexcept {
+        if (this == &other) return *this;
+#ifdef HAVE_CUDA
+        free_device();
+#endif
+        data = std::move(other.data);
+        shape = std::move(other.shape);
+        strides = std::move(other.strides);
+        offset = other.offset;
+        owns_data = other.owns_data;
+#ifdef HAVE_CUDA
+        d_data = other.d_data;
+        d_capacity = other.d_capacity;
+        device_valid = other.device_valid;
+        host_valid = other.host_valid;
+        other.d_data = nullptr;
+        other.d_capacity = 0;
+        other.device_valid = false;
+        other.host_valid = true;
+#endif
+        return *this;
+    }
+
+    ~ZTensor() {
+#ifdef HAVE_CUDA
+        free_device();
+#endif
+    }
+
+#ifdef HAVE_CUDA
+    static inline void cuda_check(cudaError_t err, const char *what) {
+        if (err != cudaSuccess) {
+            throw std::runtime_error(std::string(what) + ": " + cudaGetErrorString(err));
+        }
+    }
+
+    void ensure_device() const {
+        if (device_valid) return;
+        size_t n = size();
+        if (n == 0) {
+            device_valid = true;
+            return;
+        }
+        if (!host_valid) {
+            throw std::runtime_error("Host data is not valid for device upload");
+        }
+        if (!d_data || d_capacity < n) {
+            if (d_data) cudaFree(d_data);
+            cuda_check(cudaMalloc(reinterpret_cast<void**>(&d_data), n * sizeof(float)), "cudaMalloc");
+            d_capacity = n;
+        }
+        cuda_check(cudaMemcpy(d_data, data.data(), n * sizeof(float), cudaMemcpyHostToDevice), "cudaMemcpy H2D");
+        device_valid = true;
+    }
+
+    void ensure_host() const {
+        if (host_valid) return;
+        size_t n = size();
+        if (n == 0) {
+            host_valid = true;
+            return;
+        }
+        if (!d_data) {
+            throw std::runtime_error("Device data is not valid for host download");
+        }
+        cuda_check(cudaMemcpy(const_cast<float*>(data.data()), d_data, n * sizeof(float), cudaMemcpyDeviceToHost), "cudaMemcpy D2H");
+        host_valid = true;
+    }
+
+    void mark_host_modified() {
+        host_valid = true;
+        device_valid = false;
+    }
+
+    void mark_device_modified() const {
+        device_valid = true;
+        host_valid = false;
+    }
+
+    void free_device() {
+        if (d_data) {
+            cudaFree(d_data);
+            d_data = nullptr;
+        }
+        d_capacity = 0;
+        device_valid = false;
+    }
+
+    void to_gpu() {
+        ensure_device();
+    }
+
+    void to_cpu() {
+        ensure_host();
+    }
+
+    bool is_on_gpu() const {
+        return device_valid;
+    }
+#endif
+
     std::string to_string() const {
         std::ostringstream oss;
+#ifdef HAVE_CUDA
+        ensure_host();
+#endif
 
         if (shape.size() == 2) {
             oss << "[";
@@ -173,6 +401,10 @@ struct ZTensor {
         return linear_idx;
      }
     float& at(const std::vector<size_t>& indices) {
+#ifdef HAVE_CUDA
+        ensure_host();
+        mark_host_modified();
+#endif
         if (this->size() == 0) { throw std::out_of_range("Access to empty tensor"); }
         size_t index = get_linear_index(indices);
         if (index >= data.size()) {
@@ -181,6 +413,9 @@ struct ZTensor {
         return data[index];
     }
     const float& at(const std::vector<size_t>& indices) const {
+#ifdef HAVE_CUDA
+         ensure_host();
+#endif
          if (this->size() == 0) { throw std::out_of_range("Access to empty tensor"); }
          size_t index = get_linear_index(indices);
          if (index >= data.size()) {
@@ -205,14 +440,54 @@ struct ZTensor {
 
     // --- Adição (float) - Loop Canônico ---
     void add(const ZTensor& other) {
+
            if (!same_shape(other)) {
                throw std::invalid_argument(ZMATRIX_ERR_SHAPE_MISMATCH);
            }
            const size_t N = size();
            if (N == 0) return;
 
+           // --- Autograd infra: registra backward local se necessário ---
+           bool needs_grad = this->requires_grad() || other.requires_grad();
+           if (needs_grad) {
+               if (!this->grad_ctx) const_cast<ZTensor*>(this)->grad_ctx = std::make_shared<GradContext>();
+               if (!other.grad_ctx) const_cast<ZTensor&>(other).grad_ctx = std::make_shared<GradContext>();
+               auto ctx = std::make_shared<GradContext>();
+               ctx->requires_grad = true;
+               ctx->parents = { this->grad_ctx, other.grad_ctx };
+               ctx->backward = [lhs = this->grad_ctx, rhs = other.grad_ctx](const ZTensor& grad) {
+                   if (lhs && lhs->requires_grad) {/* acumulador de gradiente futuro */}
+                   if (rhs && rhs->requires_grad) {/* acumulador de gradiente futuro */}
+               };
+               // Limitação: em operações inplace, não é possível criar um novo resultado, então não sobrescreva grad_ctx do tensor de entrada.
+               // O correto seria: result.grad_ctx = ctx; (em operações out-of-place)
+               // Aqui, apenas documentamos a limitação.
+           }
+
+#ifdef HAVE_CUDA
+           if (device_valid) {
+               ensure_device();
+               other.ensure_device();
+               gpu_add_device(d_data, other.d_data, N);
+               mark_device_modified();
+               return;
+           }
+#endif
+
+#ifdef HAVE_CUDA
+           ensure_host();
+           other.ensure_host();
+#endif
            float * __restrict__ a = data.data();
            const float * __restrict__ b = other.data.data();
+
+        #if defined(HAVE_CUDA)
+           if (zmatrix_should_use_gpu(N)) {
+               zmatrix_gpu_debug("add", N);
+               gpu_add(a, b, N);
+               return;
+           }
+        #endif
 
         #if HAS_OPENMP
            if (N > ZMATRIX_PARALLEL_THRESHOLD) {
@@ -226,6 +501,9 @@ struct ZTensor {
         #else
            zmatrix_simd::add_f32(a, b, N);
         #endif
+#ifdef HAVE_CUDA
+           mark_host_modified();
+#endif
     }
 
 
@@ -254,6 +532,9 @@ struct ZTensor {
             a[i] = std::max(-b[i], std::min(b[i], a[i]));
         }
         #endif
+#ifdef HAVE_CUDA
+        mark_host_modified();
+#endif
     }
 
 
@@ -323,8 +604,28 @@ struct ZTensor {
         if (!same_shape(other)) throw std::invalid_argument(ZMATRIX_ERR_SHAPE_MISMATCH);
         const size_t N = size();
         if (N == 0) return;
+#ifdef HAVE_CUDA
+        if (device_valid) {
+            ensure_device();
+            other.ensure_device();
+            gpu_sub_device(d_data, other.d_data, N);
+            mark_device_modified();
+            return;
+        }
+        ensure_host();
+        other.ensure_host();
+#endif
         float * __restrict__ a = data.data();
         const float * __restrict__ b = other.data.data();
+
+        #if defined(HAVE_CUDA)
+        if (zmatrix_should_use_gpu(N)) {
+            zmatrix_gpu_debug("sub", N);
+            gpu_sub(a, b, N);
+            return;
+        }
+        #endif
+
         #if HAS_OPENMP
         if (N > ZMATRIX_PARALLEL_THRESHOLD) {
 #pragma omp parallel for simd schedule(static)
@@ -335,8 +636,11 @@ struct ZTensor {
             zmatrix_simd::sub_f32(a, b, N);
         }
         #else
-        zmatrix_simd::sub_f32(a, b, N);
+         zmatrix_simd::sub_f32(a, b, N);
         #endif
+#ifdef HAVE_CUDA
+        mark_host_modified();
+#endif
 
     }
 
@@ -347,8 +651,27 @@ struct ZTensor {
         if (!same_shape(other)) throw std::invalid_argument(ZMATRIX_ERR_SHAPE_MISMATCH);
         const size_t N = size();
         if (N == 0) return;
+#ifdef HAVE_CUDA
+        if (device_valid) {
+            ensure_device();
+            other.ensure_device();
+            gpu_mul_device(d_data, other.d_data, N);
+            mark_device_modified();
+            return;
+        }
+        ensure_host();
+        other.ensure_host();
+#endif
         float * __restrict__ a = data.data();
         const float * __restrict__ b = other.data.data();
+
+        #if defined(HAVE_CUDA)
+        if (zmatrix_should_use_gpu(N)) {
+            zmatrix_gpu_debug("mul", N);
+            gpu_mul(a, b, N);
+            return;
+        }
+        #endif
 
         #if HAS_OPENMP
         if (N > ZMATRIX_PARALLEL_THRESHOLD) {
@@ -362,6 +685,9 @@ struct ZTensor {
         #else
          zmatrix_simd::mul_f32(a, b, N);
         #endif
+#ifdef HAVE_CUDA
+        mark_host_modified();
+#endif
     }
 
 
@@ -369,7 +695,23 @@ struct ZTensor {
     void scalar_divide(float scalar) {
        const size_t N = size();
            if (N == 0) return;
+#ifdef HAVE_CUDA
+           if (device_valid) {
+               ensure_device();
+               gpu_scalar_div_device(d_data, scalar, N);
+               mark_device_modified();
+               return;
+           }
+           ensure_host();
+#endif
            float * __restrict__ a = data.data();
+        #if defined(HAVE_CUDA)
+           if (zmatrix_should_use_gpu(N)) {
+               zmatrix_gpu_debug("scalar_div", N);
+               gpu_scalar_div(a, scalar, N);
+               return;
+           }
+        #endif
            #if HAS_OPENMP
            if (N > ZMATRIX_PARALLEL_THRESHOLD) {
 #pragma omp parallel for simd schedule(static)
@@ -382,6 +724,9 @@ struct ZTensor {
            #else
            zmatrix_simd::scalar_div_f32(a, scalar, N);
            #endif
+#ifdef HAVE_CUDA
+           mark_host_modified();
+#endif
     }
 
 
@@ -390,7 +735,23 @@ struct ZTensor {
     void multiply_scalar(float scalar) {
         const size_t N = size();
         if (N == 0) return;
+#ifdef HAVE_CUDA
+        if (device_valid) {
+            ensure_device();
+            gpu_scalar_mul_device(d_data, scalar, N);
+            mark_device_modified();
+            return;
+        }
+        ensure_host();
+#endif
         float * __restrict__ a = data.data();
+        #if defined(HAVE_CUDA)
+        if (zmatrix_should_use_gpu(N)) {
+            zmatrix_gpu_debug("scalar_mul", N);
+            gpu_scalar_mul(a, scalar, N);
+            return;
+        }
+        #endif
         #if HAS_OPENMP
         if (N > ZMATRIX_PARALLEL_THRESHOLD) {
 #pragma omp parallel for simd schedule(static)
@@ -403,13 +764,32 @@ struct ZTensor {
         #else
         zmatrix_simd::scalar_mul_f32(a, scalar, N);
         #endif
+#ifdef HAVE_CUDA
+        mark_host_modified();
+#endif
     }
 
 
 
     void scalar_add(float value) {
         size_t N = data.size();
+#ifdef HAVE_CUDA
+        if (device_valid) {
+            ensure_device();
+            gpu_scalar_add_device(d_data, value, N);
+            mark_device_modified();
+            return;
+        }
+        ensure_host();
+#endif
         float *ptr = data.data();
+        #if defined(HAVE_CUDA)
+        if (zmatrix_should_use_gpu(N)) {
+            zmatrix_gpu_debug("scalar_add", N);
+            gpu_scalar_add(ptr, value, N);
+            return;
+        }
+        #endif
 
         #if HAS_OPENMP
         if (N > ZMATRIX_PARALLEL_THRESHOLD) {
@@ -422,13 +802,32 @@ struct ZTensor {
         {
             zmatrix_simd::scalar_add_f32(ptr, value, N);
         }
+#ifdef HAVE_CUDA
+        mark_host_modified();
+#endif
     }
 
 
 
     void scalar_subtract(float value) {
         size_t N = data.size();
+#ifdef HAVE_CUDA
+        if (device_valid) {
+            ensure_device();
+            gpu_scalar_sub_device(d_data, value, N);
+            mark_device_modified();
+            return;
+        }
+        ensure_host();
+#endif
         float *ptr = data.data();
+        #if defined(HAVE_CUDA)
+        if (zmatrix_should_use_gpu(N)) {
+            zmatrix_gpu_debug("scalar_sub", N);
+            gpu_scalar_sub(ptr, value, N);
+            return;
+        }
+        #endif
 
         #if HAS_OPENMP
         if (N > ZMATRIX_PARALLEL_THRESHOLD) {
@@ -441,6 +840,9 @@ struct ZTensor {
         {
             zmatrix_simd::scalar_sub_f32(ptr, value, N);
         }
+#ifdef HAVE_CUDA
+        mark_host_modified();
+#endif
     }
 
 
@@ -475,6 +877,9 @@ struct ZTensor {
             result.strides.clear();
             return result;
         }
+        #ifdef HAVE_CUDA
+        ensure_host();
+        #endif
         result.data = this->data;  // Cópia leve do vetor de dados
 
         // 4. Calcular strides para o novo shape
@@ -505,6 +910,10 @@ struct ZTensor {
          ZTensor result({M, N});
          if (M == 0 || N == 0 || K == 0) return result;  // Caso degenerado
 
+         #ifdef HAVE_CUDA
+         ensure_host();
+         other.ensure_host();
+         #endif
          const float* A_ptr = this->data.data();
          const float* B_ptr = other.data.data();
                float* C_ptr = result.data.data();
@@ -590,7 +999,23 @@ struct ZTensor {
      void abs()  {
          const size_t N = size();
          if (N == 0) return;
+#ifdef HAVE_CUDA
+         if (device_valid) {
+             ensure_device();
+             gpu_abs_device(d_data, N);
+             mark_device_modified();
+             return;
+         }
+         ensure_host();
+#endif
          float * __restrict__ a = data.data();
+        #if defined(HAVE_CUDA)
+         if (zmatrix_should_use_gpu(N)) {
+             zmatrix_gpu_debug("abs", N);
+             gpu_abs(a, N);
+             return;
+         }
+        #endif
          #if HAS_OPENMP
          if (N > ZMATRIX_PARALLEL_THRESHOLD) {
 #pragma omp parallel for simd schedule(static)
@@ -603,13 +1028,32 @@ struct ZTensor {
          #else
          zmatrix_simd::abs_f32(a, N);
          #endif
+#ifdef HAVE_CUDA
+         mark_host_modified();
+#endif
      }
 
     // --- sigmoid (float) ---
      void sigmoid()  {
         const size_t N = size();
         if (N == 0) return;
+#ifdef HAVE_CUDA
+        if (device_valid) {
+            ensure_device();
+            gpu_sigmoid_device(d_data, N);
+            mark_device_modified();
+            return;
+        }
+        ensure_host();
+#endif
         float * __restrict__ a = data.data();
+        #if defined(HAVE_CUDA)
+        if (zmatrix_should_use_gpu(N)) {
+            zmatrix_gpu_debug("sigmoid", N);
+            gpu_sigmoid(a, N);
+            return;
+        }
+        #endif
         #if HAS_OPENMP
         if (N > ZMATRIX_PARALLEL_THRESHOLD) {
             #pragma omp parallel for simd schedule(static)
@@ -626,12 +1070,18 @@ struct ZTensor {
             a[i] = 1.0f / (1.0f + expf(-a[i]));
         }
         #endif
+#ifdef HAVE_CUDA
+        mark_host_modified();
+#endif
      }
 
     void sigmoid_derivative() {
         const size_t N = size();
         if (N == 0) return;
 
+#ifdef HAVE_CUDA
+        ensure_host();
+#endif
         float* __restrict__ a = data.data();
 
         #if HAS_OPENMP
@@ -649,13 +1099,34 @@ struct ZTensor {
                 a[i] = sig * (1.0f - sig);
             }
         }
+#ifdef HAVE_CUDA
+        mark_host_modified();
+#endif
    }
 
     // --- New Activation Functions ---
     void relu()  {
         const size_t N = size();
         if (N == 0) return;
+#ifdef HAVE_CUDA
+        if (device_valid) {
+            ensure_device();
+            gpu_relu_device(d_data, N);
+            mark_device_modified();
+            return;
+        }
+        ensure_host();
+#endif
         float * __restrict__ a = data.data();
+
+        #if defined(HAVE_CUDA)
+        if (zmatrix_should_use_gpu(N)) {
+            zmatrix_gpu_debug("relu", N);
+            gpu_relu(a, N);
+            return;
+        }
+        #endif
+
         #if HAS_OPENMP
         if (N > ZMATRIX_PARALLEL_THRESHOLD) {
 #pragma omp parallel for simd schedule(static)
@@ -668,6 +1139,9 @@ struct ZTensor {
         #else
         zmatrix_simd::relu_f32(a, N);
         #endif
+#ifdef HAVE_CUDA
+        mark_host_modified();
+#endif
 
     }
 
@@ -676,6 +1150,9 @@ struct ZTensor {
         const size_t N = size();
         if (N == 0) return;
 
+#ifdef HAVE_CUDA
+        ensure_host();
+#endif
         float* __restrict__ a = data.data();
 
         #if HAS_OPENMP
@@ -690,6 +1167,9 @@ struct ZTensor {
         #else
         zmatrix_simd::relu_derivative_f32(a, N);
         #endif
+#ifdef HAVE_CUDA
+        mark_host_modified();
+#endif
     }
 
 
@@ -697,7 +1177,23 @@ struct ZTensor {
     void tanh()  {
         const size_t N = size();
         if (N == 0) return;
+#ifdef HAVE_CUDA
+        if (device_valid) {
+            ensure_device();
+            gpu_tanh_device(d_data, N);
+            mark_device_modified();
+            return;
+        }
+        ensure_host();
+#endif
         float * __restrict__ a = data.data();
+        #if defined(HAVE_CUDA)
+        if (zmatrix_should_use_gpu(N)) {
+            zmatrix_gpu_debug("tanh", N);
+            gpu_tanh(a, N);
+            return;
+        }
+        #endif
 
         #if HAS_OPENMP
         if (N > ZMATRIX_PARALLEL_THRESHOLD) {
@@ -715,12 +1211,18 @@ struct ZTensor {
             a[i] = std::tanh(a[i]);
         }
         #endif
+#ifdef HAVE_CUDA
+        mark_host_modified();
+#endif
     }
 
     void tanh_derivative() {
         const size_t N = size();
         if (N == 0) return;
 
+#ifdef HAVE_CUDA
+        ensure_host();
+#endif
         float* __restrict__ a = data.data();
 
         #if HAS_OPENMP
@@ -738,13 +1240,32 @@ struct ZTensor {
                 a[i] = 1.0f - t * t;
             }
         }
+#ifdef HAVE_CUDA
+        mark_host_modified();
+#endif
     }
 
     void leaky_relu(float alpha = 0.01f) {
         const size_t N = size();
         if (N == 0) return;
 
+#ifdef HAVE_CUDA
+        if (device_valid) {
+            ensure_device();
+            gpu_leaky_relu_device(d_data, alpha, N);
+            mark_device_modified();
+            return;
+        }
+        ensure_host();
+#endif
         float* __restrict__ a = data.data();
+        #if defined(HAVE_CUDA)
+        if (zmatrix_should_use_gpu(N)) {
+            zmatrix_gpu_debug("leaky_relu", N);
+            gpu_leaky_relu(a, alpha, N);
+            return;
+        }
+        #endif
 
         #if HAS_OPENMP
         if (N > ZMATRIX_PARALLEL_THRESHOLD) {
@@ -758,6 +1279,9 @@ struct ZTensor {
         #else
         zmatrix_simd::leaky_relu_f32(a, alpha, N);
         #endif
+#ifdef HAVE_CUDA
+        mark_host_modified();
+#endif
     }
 
 
@@ -765,7 +1289,23 @@ struct ZTensor {
         const size_t N = size();
         if (N == 0) return;
 
+#ifdef HAVE_CUDA
+        if (device_valid) {
+            ensure_device();
+            gpu_leaky_relu_derivative_device(d_data, alpha, N);
+            mark_device_modified();
+            return;
+        }
+        ensure_host();
+#endif
         float* __restrict__ a = data.data();
+        #if defined(HAVE_CUDA)
+        if (zmatrix_should_use_gpu(N)) {
+            zmatrix_gpu_debug("leaky_relu_derivative", N);
+            gpu_leaky_relu_derivative(a, alpha, N);
+            return;
+        }
+        #endif
 
         #if HAS_OPENMP
         if (N > ZMATRIX_PARALLEL_THRESHOLD) {
@@ -779,6 +1319,9 @@ struct ZTensor {
         #else
         zmatrix_simd::leaky_relu_derivative_f32(a, alpha, N);
         #endif
+#ifdef HAVE_CUDA
+        mark_host_modified();
+#endif
     }
 
 
@@ -787,6 +1330,9 @@ struct ZTensor {
             throw std::runtime_error("Softmax requires 1D or 2D tensor");
         }
 
+#ifdef HAVE_CUDA
+        ensure_host();
+#endif
         float* __restrict__ a = data.data();
 
         if (shape.size() == 1) {
@@ -835,6 +1381,9 @@ struct ZTensor {
                     row[j] *= inv;
             }
         }
+#ifdef HAVE_CUDA
+        mark_host_modified();
+#endif
     }
 
 
@@ -842,6 +1391,9 @@ struct ZTensor {
         const size_t N = size();
         if (N == 0) return;
 
+#ifdef HAVE_CUDA
+        ensure_host();
+#endif
         float* __restrict__ a = data.data();
 
         // CUIDADO: isso zera tudo se usado direto — normalmente usamos softmax + cross-entropy juntos
@@ -849,6 +1401,9 @@ struct ZTensor {
             float si = a[i];
             a[i] = si * (1.0f - si);  // diagonal da jacobiana
         }
+#ifdef HAVE_CUDA
+        mark_host_modified();
+#endif
     }
 
 
@@ -859,40 +1414,55 @@ struct ZTensor {
        }
        const size_t N = size();
        if (N == 0) return;
+#ifdef HAVE_CUDA
+       ensure_host();
+       other.ensure_host();
+#endif
        float * __restrict__ a = data.data();
        const float * __restrict__ b = other.data.data();
 
        #if HAS_OPENMP
        if (N > ZMATRIX_PARALLEL_THRESHOLD) {
-            #pragma omp parallel for simd schedule(static)
+           std::atomic<bool> error{false};
+           #pragma omp parallel for simd schedule(static)
            for (size_t i = 0; i < N; ++i) {
-                if (b[i] == 0.0f) {
-                    throw std::runtime_error("Divisão por zero detectada");
-                }
-                a[i] /= b[i];
-          }
+               if (b[i] == 0.0f) {
+                   error.store(true, std::memory_order_relaxed);
+               } else {
+                   a[i] /= b[i];
+               }
+           }
+           if (error.load()) {
+               throw std::runtime_error("Divisão por zero detectada");
+           }
        } else { // Loop sequencial se pequeno
            for (size_t i = 0; i < N; ++i) {
-             if (b[i] == 0.0f) {
-                 throw std::runtime_error("Divisão por zero detectada");
-             }
-             a[i] /= b[i];
+               if (b[i] == 0.0f) {
+                   throw std::runtime_error("Divisão por zero detectada");
+               }
+               a[i] /= b[i];
            }
        }
        #else // Loop sequencial se não houver OpenMP
        for (size_t i = 0; i < N; ++i) {
-          if (b[i] == 0.0f) {
-              throw std::runtime_error("Divisão por zero detectada");
-          }
-          a[i] /= b[i];
+           if (b[i] == 0.0f) {
+               throw std::runtime_error("Divisão por zero detectada");
+           }
+           a[i] /= b[i];
        }
        #endif
 
+#ifdef HAVE_CUDA
+       mark_host_modified();
+#endif
     }
 
      void pow(float exponent) {
         const size_t N = size();
         if (N == 0) return;
+#ifdef HAVE_CUDA
+        ensure_host();
+#endif
         float * __restrict__ a = data.data();
 
         #if HAS_OPENMP
@@ -911,12 +1481,31 @@ struct ZTensor {
             a[i] = std::pow(a[i], exponent);
         }
         #endif
+#ifdef HAVE_CUDA
+        mark_host_modified();
+#endif
     }
 
     void exp() {
         const size_t N = size();
         if (N == 0) return;
+#ifdef HAVE_CUDA
+        if (device_valid) {
+            ensure_device();
+            gpu_exp_device(d_data, N);
+            mark_device_modified();
+            return;
+        }
+        ensure_host();
+#endif
         float * __restrict__ a = data.data();
+        #if defined(HAVE_CUDA)
+        if (zmatrix_should_use_gpu(N)) {
+            zmatrix_gpu_debug("exp", N);
+            gpu_exp(a, N);
+            return;
+        }
+        #endif
         #if HAS_OPENMP
         if (N > ZMATRIX_PARALLEL_THRESHOLD) {
            #pragma omp parallel for simd schedule(static)
@@ -933,12 +1522,18 @@ struct ZTensor {
             a[i] = expf(a[i]);
         }
         #endif
+#ifdef HAVE_CUDA
+        mark_host_modified();
+#endif
     }
 
     void log() { // Retorno void, não é const pois modifica o objeto
         const size_t total_size = this->size();
         if (total_size == 0) return;
 
+#ifdef HAVE_CUDA
+        ensure_host();
+#endif
         float* p_this = this->data.data(); // Ponteiro para os dados DO PRÓPRIO objeto
 
         // Loop de pré-verificação (serial, o que é bom para lançar exceção antes do paralelo)
@@ -969,12 +1564,18 @@ struct ZTensor {
             }
         #endif
         // Sem return ZTensor, pois é uma operação in-place
+#ifdef HAVE_CUDA
+        mark_host_modified();
+#endif
     }
 
     void sqrt() { // Retorno void, n??o ?? const
         const size_t total_size = size();
         if (total_size == 0) return;
 
+#ifdef HAVE_CUDA
+        ensure_host();
+#endif
         float* p_this = this->data.data();
 
         for (size_t i = 0; i < total_size; ++i) {
@@ -995,6 +1596,9 @@ struct ZTensor {
         #else
         zmatrix_simd::sqrt_f32(p_this, total_size);
         #endif
+#ifdef HAVE_CUDA
+        mark_host_modified();
+#endif
 
     }
 
@@ -1003,6 +1607,9 @@ struct ZTensor {
           const size_t N = size();
           if (N == 0) return 0.0;
 
+#ifdef HAVE_CUDA
+          ensure_host();
+#endif
           const float* a = data.data();
 
           #if HAS_AVX2
@@ -1042,6 +1649,9 @@ struct ZTensor {
      float min() const {
          const size_t N = size();
          if (N == 0) return std::numeric_limits<float>::quiet_NaN();
+#ifdef HAVE_CUDA
+         ensure_host();
+#endif
          const float* p = data.data();
 
          #if HAS_AVX2
@@ -1075,6 +1685,9 @@ struct ZTensor {
      float max() const {
          const size_t N = size();
          if (N == 0) return std::numeric_limits<float>::quiet_NaN();
+#ifdef HAVE_CUDA
+         ensure_host();
+#endif
          const float* p = data.data();
 
          #if HAS_AVX2
@@ -1108,6 +1721,9 @@ struct ZTensor {
          const size_t N = size();
          if (N < 2) return std::numeric_limits<double>::quiet_NaN();
          double m = mean();  // já chama sum() otimizado
+#ifdef HAVE_CUDA
+         ensure_host();
+#endif
          const float* p = data.data();
          double sq = 0.0;
 
@@ -1418,6 +2034,9 @@ static ZTensor php_array_to_tensor(const zval *array) {
     return tensor;
 }
 static void tensor_to_php_array(const ZTensor& tensor, zval *return_value) {
+    #ifdef HAVE_CUDA
+    tensor.ensure_host();
+    #endif
     if (tensor.shape.empty()) { array_init(return_value); return; }
     // Tratamento de tensor com dimensão 0 (inalterado)
     if (tensor.empty() && !tensor.shape.empty()) { /* ... */ }
@@ -1894,6 +2513,9 @@ PHP_METHOD(ZTensor, scalarMultiply)
 ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_no_args, 0, 0, 0)
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_ztensor_isOnGpu, 0, 0, _IS_BOOL, 0)
+ZEND_END_ARG_INFO()
+
 
 ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_optional_float, 0, 0, 0)
     ZEND_ARG_TYPE_INFO(0, alpha, IS_DOUBLE, 1)
@@ -1939,6 +2561,65 @@ PHP_METHOD(ZTensor, sigmoidDerivative)
         zend_throw_exception(zend_ce_exception, e.what(), 0);
         RETURN_THROWS();
     }
+}
+
+PHP_METHOD(ZTensor, toGpu)
+{
+    ZEND_PARSE_PARAMETERS_NONE();
+    zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
+    if (!self_obj->tensor) {
+        zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0);
+        RETURN_THROWS();
+    }
+#ifdef HAVE_CUDA
+    try {
+        self_obj->tensor->to_gpu();
+        ZVAL_ZVAL(return_value, ZEND_THIS, 1, 0);
+    } catch (const std::exception& e) {
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+        RETURN_THROWS();
+    }
+#else
+    zend_throw_exception(zend_ce_exception, "CUDA support not available", 0);
+    RETURN_THROWS();
+#endif
+}
+
+PHP_METHOD(ZTensor, toCpu)
+{
+    ZEND_PARSE_PARAMETERS_NONE();
+    zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
+    if (!self_obj->tensor) {
+        zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0);
+        RETURN_THROWS();
+    }
+#ifdef HAVE_CUDA
+    try {
+        self_obj->tensor->to_cpu();
+        ZVAL_ZVAL(return_value, ZEND_THIS, 1, 0);
+    } catch (const std::exception& e) {
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+        RETURN_THROWS();
+    }
+#else
+    zend_throw_exception(zend_ce_exception, "CUDA support not available", 0);
+    RETURN_THROWS();
+#endif
+}
+
+PHP_METHOD(ZTensor, isOnGpu)
+{
+    ZEND_PARSE_PARAMETERS_NONE();
+    zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
+    if (!self_obj->tensor) {
+        zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0);
+        RETURN_THROWS();
+    }
+#ifdef HAVE_CUDA
+    RETURN_BOOL(self_obj->tensor->is_on_gpu());
+#else
+    RETURN_BOOL(0);
+#endif
 }
 
 
@@ -3834,6 +4515,9 @@ static const zend_function_entry zmatrix_ztensor_methods[] = {
     PHP_ME(ZTensor, pow,              arginfo_ztensor_pow,                ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, sigmoid,          arginfo_ztensor_no_args,     ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, sigmoidDerivative,  arginfo_ztensor_no_args,     ZEND_ACC_PUBLIC)
+    PHP_ME(ZTensor, toGpu,            arginfo_ztensor_no_args,     ZEND_ACC_PUBLIC)
+    PHP_ME(ZTensor, toCpu,            arginfo_ztensor_no_args,     ZEND_ACC_PUBLIC)
+    PHP_ME(ZTensor, isOnGpu,          arginfo_ztensor_isOnGpu,     ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, softmax,          arginfo_ztensor_softmax,            ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, softmaxDerivative,   arginfo_ztensor_no_args, ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, relu,             arginfo_ztensor_relu,               ZEND_ACC_PUBLIC)

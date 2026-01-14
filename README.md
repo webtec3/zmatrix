@@ -1,3 +1,42 @@
+## 🔬 Autograd (Diferenciação Automática) — Infraestrutura Experimental
+
+ZMatrix agora suporta a infraestrutura mínima para diferenciação automática (autograd), inspirada em PyTorch/Micrograd. Por padrão, não há overhead nem alteração de comportamento numérico.
+
+### Ativando requiresGrad
+
+```php
+$t = ZTensor::arr([[1,2],[3,4]])->requiresGrad(true);
+if ($t->requires_grad()) {
+    echo "Este tensor irá rastrear gradientes.";
+}
+```
+
+### Comportamento padrão (sem autograd)
+
+```php
+$t = ZTensor::arr([[1,2],[3,4]]);
+if (!$t->requires_grad()) {
+    echo "Execução numérica pura, sem rastreamento de gradientes.";
+}
+```
+
+### Observação
+
+O grafo de operações e o backward ainda não estão implementados. Esta infraestrutura é compatível com futuras extensões para autograd/backpropagation.
+
+### Limitações atuais do autograd
+
+- ⚠️ **Operações inplace não são seguras para autograd:**
+  - O contexto de gradiente (`grad_ctx`) não é corretamente preservado em operações inplace. O resultado deveria receber o novo contexto, mas hoje o tensor de entrada pode perder seu histórico.
+  - Recomenda-se evitar mutações em tensores com `requires_grad=true` após o forward.
+  - PyTorch e outros frameworks também alertam: operações inplace podem invalidar o grafo de autograd.
+- ⚠️ **Acumulação de gradiente:**
+  - O campo `.grad` existe e é inicializado sob demanda, mas o backward ainda não está implementado.
+- ⚠️ **Propagação de requires_grad:**
+  - O resultado de uma operação terá `requires_grad=true` se qualquer operando exigir, mas para operações inplace, o comportamento pode ser inconsistente.
+
+Essas limitações não afetam o uso numérico puro, mas devem ser consideradas ao experimentar autograd.
+
 # 📊 ZMatrix - High-Performance Matrix and Tensor Operations for PHP
 
 ZMatrix is a high-performance PHP extension for matrix and N-dimensional tensor operations, implemented in C++ with optimizations for parallel processing and BLAS integration.
