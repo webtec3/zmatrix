@@ -137,6 +137,15 @@ struct AutogradNode {
     // Mutex para thread-safety na acumulação de gradientes dos pais
     mutable std::mutex backward_lock;
     
+    // Armazena o tensor resultado (fraco para evitar ciclos)
+    std::weak_ptr<ZTensor> result_tensor;
+    
+    // Ponteiro RAW ao tensor resultado para acesso rápido (CUIDADO: lifetime management)
+    ZTensor* result_ptr_raw = nullptr;
+    
+    // Ponteiros RAW aos pais para acesso rápido (CUIDADO: lifetime management)
+    std::vector<ZTensor*> parents_raw;
+    
     AutogradNode() = default;
     
     AutogradNode(const std::string& name) : op_name(name) {}
@@ -245,11 +254,15 @@ struct ZTensor {
         
         // Percorre o grafo em DFS, visitando cada nó uma única vez
         std::set<std::shared_ptr<AutogradNode>> visited;
+        std::set<ZTensor*> processed_nodes;
         
-        std::function<void(std::shared_ptr<AutogradNode>)> backward_recursive = 
-            [&](std::shared_ptr<AutogradNode> node) {
+        std::function<void(std::shared_ptr<AutogradNode>, ZTensor*)> backward_recursive = 
+            [&](std::shared_ptr<AutogradNode> node, ZTensor* result_tensor) {
                 if (!node || visited.count(node)) return;
                 visited.insert(node);
+                
+                // Armazena ponteiro ao tensor resultado para acesso rápido no backward_fn
+                node->result_ptr_raw = result_tensor;
                 
                 // Executa backward_fn deste nó
                 if (node->backward_fn) {
@@ -261,16 +274,16 @@ struct ZTensor {
                 }
                 
                 // Recursivamente backward para pais
-                for (const auto& parent : node->parents) {
-                    if (parent && parent->grad_fn) {
-                        backward_recursive(parent->grad_fn);
+                for (const auto& parent_raw : node->parents_raw) {
+                    if (parent_raw && parent_raw->grad_fn) {
+                        backward_recursive(parent_raw->grad_fn, parent_raw);
                     }
                 }
             };
         
         // Inicia backward neste nó
         if (grad_fn) {
-            backward_recursive(grad_fn);
+            backward_recursive(grad_fn, this);
         }
     }
     
@@ -327,7 +340,9 @@ struct ZTensor {
     ZTensor() = default;
 
     ZTensor(const ZTensor& other)
-        : data(other.data),
+        : requires_grad(other.requires_grad),
+          grad_fn(other.grad_fn),
+          data(other.data),
           shape(other.shape),
           strides(other.strides),
           offset(other.offset),
@@ -354,6 +369,8 @@ struct ZTensor {
         strides = other.strides;
         offset = other.offset;
         owns_data = other.owns_data;
+        requires_grad = other.requires_grad;
+        grad_fn = other.grad_fn;
 #ifdef HAVE_CUDA
         d_data = nullptr;
         d_capacity = 0;
@@ -2144,32 +2161,42 @@ struct ZTensor {
         if (requires_grad) {
             auto node = std::make_shared<AutogradNode>("add");
             
-            // Captura pais E resultado como shared_ptr para evitar use-after-free
-            auto a_ptr = std::make_shared<ZTensor>(a);
-            auto b_ptr = std::make_shared<ZTensor>(b);
-            auto result_ptr = std::make_shared<ZTensor>(result);
-            node->parents = {a_ptr, b_ptr};
+            // Armazena pointers RAW aos operandos
+            ZTensor* a_ptr_raw = const_cast<ZTensor*>(&a);
+            ZTensor* b_ptr_raw = const_cast<ZTensor*>(&b);
+            node->parents_raw = {a_ptr_raw, b_ptr_raw};
             
             // Backward function para add
             // dy/da = 1, dy/db = 1
             bool a_req = a.requires_grad;
             bool b_req = b.requires_grad;
             
-            node->backward_fn = [result_ptr, a_ptr, b_ptr, a_req, b_req]() {
-                // grad_result é o gradiente no tensor resultado
-                const ZTensor* grad_result = result_ptr->getGrad();
+            node->backward_fn = [node, a_ptr_raw, b_ptr_raw, a_req, b_req]() {
+                // Obtém o gradiente do tensor resultado
+                ZTensor* result_raw = node->result_ptr_raw;
+                if (!result_raw) {
+                    auto result_shared = node->result_tensor.lock();
+                    if (!result_shared) return;
+                    result_raw = result_shared.get();
+                }
+                
+                const ZTensor* grad_result = result_raw->getGrad();
                 if (!grad_result) return;  // Nada a fazer
                 
                 // Para add: ambos os pais recebem o mesmo gradiente
                 if (a_req) {
-                    const_cast<ZTensor*>(a_ptr.get())->accumulate_grad(*grad_result);
+                    a_ptr_raw->accumulate_grad(*grad_result);
                 }
                 if (b_req) {
-                    const_cast<ZTensor*>(b_ptr.get())->accumulate_grad(*grad_result);
+                    b_ptr_raw->accumulate_grad(*grad_result);
                 }
             };
             
             result.grad_fn = node;
+            
+            // Armazena resultado para que backward possa acessá-lo
+            auto result_ptr = std::make_shared<ZTensor>(result);
+            node->result_tensor = result_ptr;
         }
         
         return result;
@@ -2217,20 +2244,28 @@ struct ZTensor {
         
         if (requires_grad) {
             auto node = std::make_shared<AutogradNode>("sub");
-            auto a_ptr = std::make_shared<ZTensor>(a);
-            auto b_ptr = std::make_shared<ZTensor>(b);
-            auto result_ptr = std::make_shared<ZTensor>(result);
-            node->parents = {a_ptr, b_ptr};
+            
+            // Armazena pointers RAW aos operandos
+            ZTensor* a_ptr_raw = const_cast<ZTensor*>(&a);
+            ZTensor* b_ptr_raw = const_cast<ZTensor*>(&b);
+            node->parents_raw = {a_ptr_raw, b_ptr_raw};
             
             bool a_req = a.requires_grad;
             bool b_req = b.requires_grad;
             
-            node->backward_fn = [result_ptr, a_ptr, b_ptr, a_req, b_req]() {
-                const ZTensor* grad_result = result_ptr->getGrad();
+            node->backward_fn = [node, a_ptr_raw, b_ptr_raw, a_req, b_req]() {
+                ZTensor* result_raw = node->result_ptr_raw;
+                if (!result_raw) {
+                    auto result_shared = node->result_tensor.lock();
+                    if (!result_shared) return;
+                    result_raw = result_shared.get();
+                }
+                
+                const ZTensor* grad_result = result_raw->getGrad();
                 if (!grad_result) return;
                 
                 if (a_req) {
-                    const_cast<ZTensor*>(a_ptr.get())->accumulate_grad(*grad_result);
+                    a_ptr_raw->accumulate_grad(*grad_result);
                 }
                 if (b_req) {
                     // Para sub: gradiente em b é negado
@@ -2243,11 +2278,15 @@ struct ZTensor {
                             dst[i] = -src[i];
                         }
                     }
-                    const_cast<ZTensor*>(b_ptr.get())->accumulate_grad(neg_grad);
+                    b_ptr_raw->accumulate_grad(neg_grad);
                 }
             };
             
             result.grad_fn = node;
+            
+            // Armazena resultado
+            auto result_ptr = std::make_shared<ZTensor>(result);
+            node->result_tensor = result_ptr;
         }
         
         return result;
@@ -2295,20 +2334,28 @@ struct ZTensor {
         
         if (requires_grad) {
             auto node = std::make_shared<AutogradNode>("mul");
-            auto a_ptr = std::make_shared<ZTensor>(a);
-            auto b_ptr = std::make_shared<ZTensor>(b);
-            auto result_ptr = std::make_shared<ZTensor>(result);
-            node->parents = {a_ptr, b_ptr};
+            
+            // Armazena pointers RAW aos operandos
+            ZTensor* a_ptr_raw = const_cast<ZTensor*>(&a);
+            ZTensor* b_ptr_raw = const_cast<ZTensor*>(&b);
+            node->parents_raw = {a_ptr_raw, b_ptr_raw};
             
             bool a_req = a.requires_grad;
             bool b_req = b.requires_grad;
             
-            // Captura cópias dos operandos para usar no backward
+            // Armazena cópias dos valores para usar no backward
             auto a_copy = std::make_shared<ZTensor>(a);
             auto b_copy = std::make_shared<ZTensor>(b);
             
-            node->backward_fn = [result_ptr, a_ptr, b_ptr, a_copy, b_copy, a_req, b_req]() {
-                const ZTensor* grad_result = result_ptr->getGrad();
+            node->backward_fn = [node, a_ptr_raw, b_ptr_raw, a_copy, b_copy, a_req, b_req]() {
+                ZTensor* result_raw = node->result_ptr_raw;
+                if (!result_raw) {
+                    auto result_shared = node->result_tensor.lock();
+                    if (!result_shared) return;
+                    result_raw = result_shared.get();
+                }
+                
+                const ZTensor* grad_result = result_raw->getGrad();
                 if (!grad_result) return;
                 
                 const size_t N = grad_result->size();
@@ -2323,7 +2370,7 @@ struct ZTensor {
                     for (size_t i = 0; i < N; ++i) {
                         grad_a_data[i] = b_data[i] * grad_data[i];
                     }
-                    const_cast<ZTensor*>(a_ptr.get())->accumulate_grad(grad_a);
+                    a_ptr_raw->accumulate_grad(grad_a);
                 }
                 
                 // db = a * grad_output
@@ -2336,11 +2383,15 @@ struct ZTensor {
                     for (size_t i = 0; i < N; ++i) {
                         grad_b_data[i] = a_data[i] * grad_data[i];
                     }
-                    const_cast<ZTensor*>(b_ptr.get())->accumulate_grad(grad_b);
+                    b_ptr_raw->accumulate_grad(grad_b);
                 }
             };
             
             result.grad_fn = node;
+            
+            // Armazena resultado
+            auto result_ptr = std::make_shared<ZTensor>(result);
+            node->result_tensor = result_ptr;
         }
         
         return result;
@@ -2384,16 +2435,24 @@ struct ZTensor {
         
         if (t.requires_grad) {
             auto node = std::make_shared<AutogradNode>("sum");
-            auto t_ptr = std::make_shared<ZTensor>(t);
-            auto result_ptr = std::make_shared<ZTensor>(result);
-            node->parents = {t_ptr};
+            
+            // Armazena pointer RAW ao operando
+            ZTensor* t_ptr_raw = const_cast<ZTensor*>(&t);
+            node->parents_raw = {t_ptr_raw};
             
             // Armazena shape original para broadcast no backward
             auto input_shape = t.shape;
             auto input_size = t.size();
             
-            node->backward_fn = [result_ptr, t_ptr, input_shape, input_size]() {
-                const ZTensor* grad_result = result_ptr->getGrad();
+            node->backward_fn = [node, t_ptr_raw, input_shape, input_size]() {
+                ZTensor* result_raw = node->result_ptr_raw;
+                if (!result_raw) {
+                    auto result_shared = node->result_tensor.lock();
+                    if (!result_shared) return;
+                    result_raw = result_shared.get();
+                }
+                
+                const ZTensor* grad_result = result_raw->getGrad();
                 if (!grad_result) return;
                 
                 // grad_input[i] = grad_result[0] para cada i
@@ -2407,10 +2466,14 @@ struct ZTensor {
                     }
                 }
                 
-                const_cast<ZTensor*>(t_ptr.get())->accumulate_grad(grad_input);
+                t_ptr_raw->accumulate_grad(grad_input);
             };
             
             result.grad_fn = node;
+            
+            // Armazena resultado
+            auto result_ptr = std::make_shared<ZTensor>(result);
+            node->result_tensor = result_ptr;
         }
         
         return result;
