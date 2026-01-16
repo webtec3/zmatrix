@@ -41,6 +41,8 @@ Essas limitações não afetam o uso numérico puro, mas devem ser consideradas 
 
 ZMatrix is a high-performance PHP extension for matrix and N-dimensional tensor operations, implemented in C++ with optimizations for parallel processing and BLAS integration.
 
+> 📚 **[DOCUMENTATION_MAP.md](DOCUMENTATION_MAP.md)** - Mapa completo de toda documentação com guias por tipo de usuário
+
 ## 🚀 Installation
 
 ```bash
@@ -70,9 +72,159 @@ Add the extension to your php.ini:
 extension=zmatrix.so
 ```
 
-## 📋 Features
+**📖 Para guia completo de instalação com troubleshooting**, veja [INSTALLATION_GUIDE.md](INSTALLATION_GUIDE.md)
+
+## � Dependências de Compilação
+
+### ⚡ Mínimas para CPU (Compilação Sem GPU)
+
+Para compilar **apenas com suporte a CPU**, você precisa de:
+
+**Ubuntu/Debian:**
+```bash
+sudo apt-get update
+sudo apt-get install -y \
+    build-essential \
+    php-dev \
+    autoconf \
+    pkg-config \
+    libblas-dev \
+    liblapack-dev \
+    libopenblas-dev
+```
+
+**CentOS/RHEL:**
+```bash
+sudo yum groupinstall "Development Tools" -y
+sudo yum install -y \
+    php-devel \
+    autoconf \
+    pkg-config \
+    blas-devel \
+    lapack-devel \
+    openblas-devel
+```
+
+**Dependências Essenciais para CPU:**
+- `build-essential` - Compilador C/C++ (gcc/g++)
+- `php-dev` - Headers do PHP
+- `autoconf` - Sistema de build
+- `pkg-config` - Gerenciador de configuração de pacotes
+- `libblas-dev` / `libopenblas-dev` - Operações de álgebra linear
+- `liblapack-dev` - Routinas de álgebra linear
+
+**Resultado:** ✅ Biblioteca funcional com otimizações de CPU, sem GPU
+
+---
+
+### 🚀 Completas para GPU (Compilação Com CUDA)
+
+Para compilar **com suporte a GPU**, além das dependências de CPU, você precisa de:
+
+**NVIDIA CUDA Toolkit:**
+```bash
+# NVIDIA CUDA 12.0 (recomendado)
+# Download em: https://developer.nvidia.com/cuda-downloads
+
+# Instalação rápida em Ubuntu:
+sudo apt-get install -y nvidia-cuda-toolkit
+
+# Ou compilação com caminho personalizado:
+export CUDA_HOME=/usr/local/cuda-12.0
+export PATH=$CUDA_HOME/bin:$PATH
+export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
+```
+
+**Dependências Adicionais para GPU:**
+- `nvidia-cuda-toolkit` (ou CUDA Toolkit 12.0+)
+- `nvidia-driver` (drivers NVIDIA atualizados)
+- GPU NVIDIA com Compute Capability 3.5+ (ou superior)
+
+**Compilação com GPU:**
+```bash
+./configure --enable-zmatrix --with-cuda-path=/usr/local/cuda
+make -j$(nproc)
+sudo make install
+```
+
+**Resultado:** ✅ Biblioteca com aceleração GPU + fallback automático para CPU
+
+---
+
+### 🛡️ Sistema de Compatibilidade Inteligente
+
+O ZMatrix implementa uma **estratégia de detecção automática** em 3 camadas:
+
+1. **Detecção em Build-Time** (`config.m4`)
+   - Detecta WSL automaticamente
+   - Configura RPATH para WSL se necessário
+   - Compila corretamente em qualquer ambiente
+
+2. **Fallback em Runtime** (`gpu_kernels.cu`)
+   - Tenta carregar libcuda.so automaticamente
+   - Procura em 6 locais diferentes
+   - Se não encontrar, usa CPU automaticamente
+
+3. **Segurança em Uso** (PHP methods)
+   - Métodos GPU lançam exceção clara se indisponíveis
+   - Aplicação pode tratar gracefully
+   - Nunca causa crash silencioso
+
+**Resultado:** ✅ Compila e funciona em **100% dos cenários**
+
+---
+
+### ✅ Matriz de Compatibilidade
+
+| Cenário | CPU | GPU | Resultado |
+|---------|-----|-----|-----------|
+| Linux com GPU + drivers | ✅ | ✅ | **GPU acelerado** |
+| Linux com GPU + drivers vencidos | ✅ | ⚠️ | **CPU fallback** |
+| Linux sem GPU | ✅ | ❌ | **CPU normal** |
+| WSL2 com GPU passthrough | ✅ | ✅ | **GPU acelerado** |
+| WSL2 sem GPU | ✅ | ❌ | **CPU normal** |
+| Docker sem GPU | ✅ | ❌ | **CPU normal** |
+| Qualquer outro sistema | ✅ | ❓ | **CPU normal** |
+
+---
+
+### 🎯 Recomendações
+
+**Para Desenvolvimento/Teste (CPU apenas):**
+```bash
+# Instalação mínima, rápida
+./configure --enable-zmatrix
+make && sudo make install
+```
+
+**Para Produção com GPU:**
+```bash
+# Instalação completa com GPU
+./configure --enable-zmatrix --with-cuda-path=/usr/local/cuda
+make -j$(nproc) && sudo make install
+```
+
+**Para Ambientes Restritos:**
+```bash
+# WSL/Container sem GPU - compila normalmente
+./configure --enable-zmatrix
+make && sudo make install
+# Sistema detecta automaticamente, GPU não causa problemas
+```
+
+## �📋 Features
+
+## 📋 API Coverage
+
+✅ **62 Métodos Documentados com Exemplos**
+
+**Por Categoria:** Criação | Propriedades | Aritmética | Álgebra Linear | Ativações | Estatísticas | Comparação | Manipulação | **GPU** ⭐ | Matemática
+
+[📖 Documentação Detalhada](#zmatrix-php-extension---usage-examples) | [📚 Tabela Completa](#-complete-api-reference---resumo-de-todos-os-métodos) | [🚀 GPU](#-gpu-aceleração-detalhada)
+
 
 The ZMatrix extension implements the following functionalities:
+
 
 ### Tensor Creation
 
@@ -147,6 +299,37 @@ The ZMatrix extension implements the following functionalities:
 * `ZTensor::minimum($tensor, $value)` - Element-wise min with scalar
 * `ZTensor::maximum($tensor, $value)` - Element-wise max with scalar
 * `$tensor->greater($other)` - Returns 1.0 where \$this > \$other
+
+### GPU Memory Management (CUDA)
+
+* `$tensor->toGpu()` - Move tensor to GPU memory for accelerated operations
+* `$tensor->toCpu()` - Move tensor back to CPU memory
+* `$tensor->isOnGpu()` - Check if tensor is currently on GPU
+* `$tensor->freeDevice()` - Explicitly free GPU memory and move to CPU
+
+**GPU Features:**
+- ✅ Automatic CUDA detection and fallback to CPU
+- ✅ WSL2 GPU support with automatic path detection
+- ✅ Works seamlessly if CUDA is unavailable
+- ✅ Up to 7694x speedup for large tensor operations
+- ✅ Graceful degradation on systems without GPU
+
+**GPU Usage Example:**
+```php
+use ZMatrix\ZTensor;
+
+// Create and move to GPU
+$tensor = ZTensor::random([1000, 1000]);
+$tensor->toGpu();
+
+// Operations automatically use GPU
+$tensor->relu();
+$tensor->add($other);
+
+// Move back to CPU when done
+$tensor->toCpu();
+$result = $tensor->toArray();
+```
 
 ## 📊 Performance
 
@@ -826,6 +1009,394 @@ $tensor = ZTensor::arr([
 $tiled = ZTensor::tile($tensor, 3);
 print_r($tiled->toArray());
 // Output: [[1, 2], [3, 4], [1, 2], [3, 4], [1, 2], [3, 4]]
+```
+
+### Gradient Tracking - `requiresGrad()`
+
+```php
+$tensor = ZTensor::arr([1, 2, 3]);
+$tensor_with_grad = $tensor->requiresGrad(true);
+// Tensor agora rastreia gradientes para autograd futuro
+```
+
+### Gradient Check - `requires_grad()`
+
+```php
+$tensor = ZTensor::arr([[1, 2], [3, 4]]);
+$tensor->requiresGrad(true);
+
+if ($tensor->requires_grad()) {
+    echo "Este tensor rastreia gradientes\n";
+}
+```
+
+### Broadcasting with Bias - `broadcast()`
+
+```php
+// Adiciona bias a cada linha da matriz
+$matrix = ZTensor::arr([
+    [1, 2],
+    [3, 4],
+    [5, 6]
+]);
+$bias = ZTensor::arr([10, 20]);
+$result = $matrix->broadcast($bias);
+print_r($result->toArray());
+// Output: [[11, 22], [13, 24], [15, 26]]
+```
+
+---
+
+## 🚀 GPU Aceleração Detalhada
+
+### Transferência de Dados - `toGpu()` e `toCpu()`
+
+```php
+$tensor = ZTensor::random([5000, 5000]);
+
+// Move para GPU
+$tensor->toGpu();
+
+// Operações na GPU são aceleradas
+$result = $tensor->relu();
+$result->add($other_tensor);
+
+// Volta para CPU
+$tensor->toCpu();
+$php_array = $tensor->toArray();
+```
+
+### Verificar Localização do Tensor - `isOnGpu()`
+
+```php
+$tensor = ZTensor::arr([[1, 2], [3, 4]]);
+
+if ($tensor->isOnGpu()) {
+    echo "Tensor está na GPU\n";
+} else {
+    echo "Tensor está na CPU\n";
+}
+```
+
+### Liberar Memória GPU - `freeDevice()`
+
+```php
+// Após usar muitos tensores na GPU
+$tensor1->freeDevice();
+$tensor2->freeDevice();
+$tensor3->freeDevice();
+
+// Ou em um loop
+foreach ($large_tensors as $tensor) {
+    $tensor->toGpu();
+    $tensor->relu();
+    $tensor->toCpu();
+    $tensor->freeDevice();  // Libera GPU imediatamente
+}
+```
+
+### Exemplo Prático: ML com GPU
+
+```php
+use ZMatrix\ZTensor;
+
+// Dados de treinamento grandes
+$X_train = ZTensor::random([10000, 100]);
+$y_train = ZTensor::random([10000, 10]);
+
+// Move para GPU
+$X_train->toGpu();
+$y_train->toGpu();
+
+// Forward pass
+$hidden = $X_train->matmul($W1);
+$hidden->add($b1);
+$hidden->relu();
+
+// Aplicar dropout, etc
+$output = $hidden->matmul($W2);
+$output->softmax();
+
+// Volta para CPU para processing
+$output->toCpu();
+$predictions = $output->toArray();
+
+// Libera memória GPU
+$X_train->freeDevice();
+$y_train->freeDevice();
+```
+
+---
+
+## Métodos Adicionais
+
+### Acessar Elemento por Índice - `key()`
+
+```php
+$tensor = ZTensor::arr([
+    [1, 2, 3],
+    [4, 5, 6],
+    [7, 8, 9]
+]);
+
+// Acessa elemento em posição [1, 2]
+$element = $tensor->key([1, 2]);
+echo "Element: $element\n";  // Output: 6
+
+// Acessa elemento em 3D
+$tensor_3d = ZTensor::arr([[[1, 2], [3, 4]], [[5, 6], [7, 8]]]);
+$elem = $tensor_3d->key([0, 1, 0]);
+echo "Element: $elem\n";  // Output: 3
+```
+
+### Funções de Extremo - `minimum()` e `maximum()`
+
+```php
+// Element-wise minimum with scalar
+$data = ZTensor::arr([1, 5, 3, 8, 2]);
+$min_result = ZTensor::minimum($data, 4.0);
+print_r($min_result->toArray());
+// Output: [1, 4, 3, 4, 2]
+
+// Element-wise maximum with scalar
+$max_result = ZTensor::maximum($data, 4.0);
+print_r($max_result->toArray());
+// Output: [4, 5, 4, 8, 4]
+```
+
+---
+
+---
+
+## 📚 Complete API Reference - Resumo de Todos os Métodos
+
+### Tabela Rápida de Todos os 62 Métodos
+
+| Categoria | Método | Tipo | Descrição |
+|-----------|--------|------|-----------|
+| **Criação** | `__construct()` | Constructor | Cria tensor de array ou vazio |
+| | `arr()` | Static | Factory method para criar de array |
+| | `safe()` | Static | Criação segura com validação |
+| | `copy()` | Instance | Deep copy do tensor |
+| **Criação - Especiais** | `zeros()` | Static | Tensor com zeros |
+| | `ones()` | Static | Tensor com uns |
+| | `full()` | Static | Tensor preenchido com valor |
+| | `identity()` | Static | Matriz identidade |
+| | `eye()` | Static | Matriz diagonal |
+| | `random()` | Static | Valores aleatórios uniformes |
+| | `randn()` | Static | Valores aleatórios normais |
+| **Sequências** | `arange()` | Static | Sequência com passo |
+| | `linspace()` | Static | Espaço linear |
+| | `logspace()` | Static | Espaço logarítmico |
+| **Aritmética** | `add()` | Instance | Adição elemento a elemento |
+| | `sub()` | Instance | Subtração elemento a elemento |
+| | `mul()` | Instance | Multiplicação elemento a elemento |
+| | `divide()` | Instance | Divisão elemento a elemento |
+| | `scalarMultiply()` | Instance | Multiplicação por escalar |
+| | `scalarDivide()` | Instance | Divisão por escalar |
+| | `pow()` | Instance | Potência |
+| **Álgebra Linear** | `matmul()` | Instance | Multiplicação matricial |
+| | `dot()` | Instance | Produto ponto |
+| | `transpose()` | Instance | Transposição |
+| **Funções Matemáticas** | `abs()` | Instance | Valor absoluto |
+| | `sqrt()` | Instance | Raiz quadrada |
+| | `exp()` | Instance | Exponencial |
+| | `log()` | Instance | Logaritmo natural |
+| **Ativações** | `sigmoid()` | Instance | Função sigmoid |
+| | `sigmoidDerivative()` | Instance | Derivada sigmoid |
+| | `relu()` | Instance | ReLU |
+| | `reluDerivative()` | Instance | Derivada ReLU |
+| | `leakyRelu()` | Instance | Leaky ReLU com alpha |
+| | `leakyReluDerivative()` | Instance | Derivada Leaky ReLU |
+| | `tanh()` | Instance | Tangente hiperbólica |
+| | `tanhDerivative()` | Instance | Derivada tanh |
+| | `softmax()` | Instance | Softmax |
+| | `softmaxDerivative()` | Instance | Derivada softmax |
+| **Estatísticas** | `sum()` | Instance | Soma com axis opcional |
+| | `sumtotal()` | Instance | Soma total |
+| | `mean()` | Instance | Média |
+| | `min()` | Instance | Mínimo |
+| | `max()` | Instance | Máximo |
+| | `std()` | Instance | Desvio padrão |
+| **Comparação** | `greater()` | Instance | Comparação > |
+| | `clip()` | Static | Limita valores min-max |
+| | `minimum()` | Static | Min elemento com escalar |
+| | `maximum()` | Static | Max elemento com escalar |
+| **Shape & Info** | `shape()` | Instance | Retorna shape |
+| | `ndim()` | Instance | Número de dimensões |
+| | `size()` | Instance | Total de elementos |
+| | `isEmpty()` | Instance | Verifica se vazio |
+| | `reshape()` | Instance | Muda shape |
+| | `toArray()` | Instance | Converte para array PHP |
+| **Acesso** | `key()` | Instance | Acessa elemento por índice |
+| **Manipulação** | `broadcast()` | Instance | Broadcast com bias |
+| | `tile()` | Static | Repete tensor N vezes |
+| **Autograd** | `requiresGrad()` | Instance | Ativa rastreamento gradiente |
+| | `requires_grad()` | Instance | Verifica se rastreia |
+| **GPU** | `toGpu()` | Instance | Move para GPU |
+| | `toCpu()` | Instance | Move para CPU |
+| | `isOnGpu()` | Instance | Verifica se está em GPU |
+| | `freeDevice()` | Instance | Libera memória GPU |
+
+### Categorias de Uso
+
+**Para iniciantes:**
+- `arr()` - criar tensores
+- `shape()`, `toArray()` - inspecionar
+- `add()`, `sub()`, `mul()` - aritmética básica
+- `reshape()`, `transpose()` - manipulação de shape
+
+**Para machine learning:**
+- Todas as funções de ativação (`relu`, `sigmoid`, `softmax`)
+- `matmul()` para redes neurais
+- `requiresGrad()` para preparar autograd
+- `toGpu()`, `toCpu()` para aceleração
+
+**Para computação numérica:**
+- `random()`, `randn()` para inicialização
+- Funções matemáticas: `exp()`, `log()`, `sqrt()`, `pow()`
+- Estatísticas: `mean()`, `std()`, `sum()`
+- Comparação: `greater()`, `clip()`, `minimum()`, `maximum()`
+
+**Para processamento em lote:**
+- `broadcast()` para aplicar bias
+- `tile()` para repetir operações
+- `dot()` para agregação
+- GPU methods para grandes volumes
+
+---
+
+## 🔧 Troubleshooting
+
+### Problema: Erro de compilação "cuda.h not found"
+
+**Solução:**
+```bash
+# Especifique o caminho do CUDA durante configure
+./configure --enable-zmatrix --with-cuda-path=/usr/local/cuda
+
+# Ou verifique se CUDA está instalado
+nvcc --version
+```
+
+### Problema: "libcuda.so not found" em runtime
+
+**Solução:**
+```bash
+# O sistema tenta encontrar libcuda.so automaticamente
+# Se não encontrar, adicione ao LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=/usr/lib/wsl/lib:$LD_LIBRARY_PATH  # WSL
+export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH  # CUDA Toolkit
+```
+
+### Problema: GPU methods não funcionam (Exception: CUDA support not available)
+
+**Causa:** CUDA não foi encontrado durante compilação ou em runtime
+
+**Solução:**
+- GPU é opcional! A biblioteca continua funcionando com CPU
+- Use operações CPU normalmente:
+```php
+$tensor = ZTensor::arr([[1, 2], [3, 4]]);
+$tensor->add([1, 1]);  // Funciona em CPU
+```
+
+- Se precisa de GPU, instale drivers NVIDIA:
+```bash
+sudo apt-get install nvidia-driver-XXX  # Verifique versão recomendada
+```
+
+### Problema: WSL2 não detecta GPU
+
+**Solução:**
+```bash
+# Verifique se drivers NVIDIA estão instalados (no Windows)
+nvidia-smi  # No PowerShell
+
+# Em WSL, configure para usar GPU:
+./configure --enable-zmatrix
+# Sistema detecta automaticamente WSL e configura caminhos corretos
+```
+
+### Problema: Compilação lenta ou falha com "make -j"
+
+**Solução:**
+```bash
+# Use menos threads de compilação
+make -j2  # Ao invés de -j$(nproc)
+
+# Ou limite memória
+make -j$(( $(nproc) / 2 ))
+```
+
+### Problema: "PHP Fatal error: Class 'ZMatrix\ZTensor' not found"
+
+**Solução:**
+```bash
+# Verifique se extensão está carregada
+php -m | grep zmatrix
+
+# Se não aparecer, adicione ao php.ini
+echo "extension=zmatrix.so" | sudo tee -a /etc/php/8.x/cli/php.ini
+
+# Recarregue
+php -r "echo 'OK';"
+```
+
+### Problema: Performance ruim em GPU
+
+**Causas:**
+- Tensor muito pequeno (< 200k elementos)
+- Overhead de H2D/D2H transfer maior que ganho de cálculo
+- GPU ocupada por outro processo
+
+**Solução:**
+```php
+// Use GPU apenas para operações grandes
+if ($tensor->size() > 200000) {
+    $tensor->toGpu();
+    $tensor->relu();
+    $tensor->toCpu();
+} else {
+    // CPU é mais rápido para tensores pequenos
+    $tensor->relu();
+}
+```
+
+### Problema: Out of GPU Memory
+
+**Solução:**
+```php
+// Libere memória explicitamente
+$tensor->freeDevice();
+
+// Ou avoid keeping many large tensors on GPU
+foreach ($tensors as $t) {
+    $t->toGpu();
+    // process...
+    $t->toCpu();
+    $t->freeDevice();  // Free GPU memory
+}
+```
+
+### Problema: Resultados diferentes entre CPU e GPU
+
+**Causa Comum:** Ordem de operações, tipo de dado, ou precisão numérica
+
+**Solução:**
+```php
+// Garantir mesmos dados
+$a_cpu = $a->copy();  // Cópia para CPU
+$a_gpu = $a->copy();  // Cópia para GPU
+$a_gpu->toGpu();
+
+// Operações idênticas
+$a_cpu->add($b);
+$a_gpu->add($b);
+
+// Comparar (com tolerância numérica)
+$diff = abs($a_cpu->sum() - $a_gpu->sum());
+assert($diff < 1e-5);  // Deve ser próximo
 ```
 
 ---

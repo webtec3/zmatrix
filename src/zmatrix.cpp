@@ -344,6 +344,7 @@ struct ZTensor {
 
     void to_cpu() {
         ensure_host();
+        device_valid = false;  // Mark as no longer on GPU
     }
 
     bool is_on_gpu() const {

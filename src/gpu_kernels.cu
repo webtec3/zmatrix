@@ -4,6 +4,54 @@
 #include <math.h>
 #include <cstdio>
 #include <cstdlib>
+#include <dlfcn.h>
+
+// ========== WSL CUDA DRIVER FALLBACK ==========
+// Função para encontrar libcuda.so com fallback para caminhos especiais (WSL)
+// Isso resolve o problema onde WSL coloca libcuda.so em /usr/lib/wsl/lib/
+static void* load_cuda_driver() {
+    // Lista de caminhos a tentar em ordem de prioridade
+    const char* cuda_lib_paths[] = {
+        "libcuda.so.1",                           // Caminho padrão (via LD_LIBRARY_PATH)
+        "/usr/lib/wsl/lib/libcuda.so.1",         // WSL2 específico
+        "/usr/lib/x86_64-linux-gnu/libcuda.so.1", // Linux padrão
+        "libcuda.so",                             // Fallback sem versão
+        "/usr/lib/wsl/lib/libcuda.so",           // WSL2 sem versão
+        "/usr/lib/x86_64-linux-gnu/libcuda.so",  // Linux sem versão
+        nullptr
+    };
+
+    void* handle = nullptr;
+    for (int i = 0; cuda_lib_paths[i] != nullptr; i++) {
+        handle = dlopen(cuda_lib_paths[i], RTLD_NOW | RTLD_GLOBAL);
+        if (handle != nullptr) {
+            const char *dbg = std::getenv("ZMATRIX_GPU_DEBUG");
+            if (dbg && dbg[0] == '1') {
+                std::fprintf(stderr, "[zmatrix][gpu] Successfully loaded CUDA driver from: %s\n", cuda_lib_paths[i]);
+            }
+            return handle;
+        }
+    }
+
+    // Se chegou aqui, nenhum caminho funcionou
+    const char *dbg = std::getenv("ZMATRIX_GPU_DEBUG");
+    if (dbg && dbg[0] == '1') {
+        std::fprintf(stderr, "[zmatrix][gpu] WARNING: Could not load CUDA driver from any path:\n");
+        for (int i = 0; cuda_lib_paths[i] != nullptr; i++) {
+            std::fprintf(stderr, "[zmatrix][gpu]   - Tried: %s\n", cuda_lib_paths[i]);
+        }
+        std::fprintf(stderr, "[zmatrix][gpu] Last dlopen error: %s\n", dlerror());
+        std::fprintf(stderr, "[zmatrix][gpu] TROUBLESHOOTING: Try exporting LD_LIBRARY_PATH=/usr/lib/wsl/lib:$LD_LIBRARY_PATH\n");
+    }
+    return nullptr;
+}
+
+// Executar carregamento uma única vez ao inicializar o módulo
+static void __attribute__((constructor)) init_cuda_driver() {
+    // Tenta carregar libcuda de forma robusta
+    // Nota: O construtor é chamado antes de cudaGetDeviceCount
+    load_cuda_driver();
+}
 
 static float *cache_a = nullptr;
 static size_t cap_a = 0;
@@ -61,7 +109,12 @@ extern "C" int gpu_available() {
     if (err != cudaSuccess) {
         const char *dbg = std::getenv("ZMATRIX_GPU_DEBUG");
         if (dbg && dbg[0] == '1') {
-            std::fprintf(stderr, "[zmatrix][gpu] cudaGetDeviceCount failed: %s\n", cudaGetErrorString(err));
+            std::fprintf(stderr, "[zmatrix][gpu] ERROR: cudaGetDeviceCount failed: %s\n", cudaGetErrorString(err));
+            std::fprintf(stderr, "[zmatrix][gpu] TROUBLESHOOTING:\n");
+            std::fprintf(stderr, "[zmatrix][gpu]   1. Ensure NVIDIA GPU driver is installed: nvidia-smi\n");
+            std::fprintf(stderr, "[zmatrix][gpu]   2. On WSL2, try: export LD_LIBRARY_PATH=/usr/lib/wsl/lib:$LD_LIBRARY_PATH\n");
+            std::fprintf(stderr, "[zmatrix][gpu]   3. Or add it permanently to ~/.bashrc\n");
+            std::fprintf(stderr, "[zmatrix][gpu]   4. Check if CUDA is properly installed: which nvcc\n");
         }
         return 0;
     }

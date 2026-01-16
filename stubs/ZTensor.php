@@ -750,4 +750,114 @@ final class ZTensor
     public static function tile(ZTensor $tensor, int $times): ZTensor
     {
     }
+
+    // ========== GPU MEMORY MANAGEMENT ==========
+
+    /**
+     * Moves this tensor's data to GPU memory.
+     *
+     * This method allocates CUDA device memory and copies the tensor data
+     * from CPU memory to the GPU. Subsequent operations will be performed
+     * on the GPU for better performance.
+     *
+     * The tensor remains accessible as a regular PHP object, but operations
+     * will automatically use the GPU version if available.
+     *
+     * @return ZTensor Returns $this for method chaining.
+     * @throws RuntimeException If CUDA support is not available or if GPU memory allocation fails.
+     *
+     * @example
+     * ```php
+     * $tensor = ZTensor::random([1000, 1000]);
+     * $tensor->toGpu();  // Move to GPU
+     * $tensor->add($other);  // Operations now use GPU
+     * ```
+     */
+    public function toGpu(): ZTensor
+    {
+    }
+
+    /**
+     * Moves this tensor's data back to CPU memory.
+     *
+     * This method copies the tensor data from GPU memory back to CPU memory.
+     * After calling this, the tensor will reside in host memory and subsequent
+     * operations will be performed on the CPU.
+     *
+     * This is useful for:
+     * - Saving memory on the GPU
+     * - Transferring data to other CPU-based libraries
+     * - Final results that need to be processed on the CPU
+     *
+     * @return ZTensor Returns $this for method chaining.
+     * @throws RuntimeException If CUDA support is not available or if the operation fails.
+     *
+     * @example
+     * ```php
+     * $tensor = ZTensor::random([1000, 1000])->toGpu();
+     * $tensor->relu();  // GPU operation
+     * $tensor->toCpu();  // Move back to CPU
+     * $result = $tensor->toArray();  // Get as PHP array
+     * ```
+     */
+    public function toCpu(): ZTensor
+    {
+    }
+
+    /**
+     * Checks whether this tensor's data is currently on GPU memory.
+     *
+     * Returns true if the tensor has been moved to GPU memory using toGpu()
+     * and has not been moved back to CPU yet. Returns false for CPU-resident
+     * tensors or if CUDA support is not available.
+     *
+     * @return bool True if tensor is on GPU, false otherwise.
+     *
+     * @example
+     * ```php
+     * $tensor = ZTensor::random([100, 100]);
+     * var_dump($tensor->isOnGpu());  // false
+     *
+     * $tensor->toGpu();
+     * var_dump($tensor->isOnGpu());  // true
+     *
+     * $tensor->toCpu();
+     * var_dump($tensor->isOnGpu());  // false
+     * ```
+     */
+    public function isOnGpu(): bool
+    {
+    }
+
+    /**
+     * Frees GPU memory associated with this tensor.
+     *
+     * Explicitly deallocates CUDA device memory for this tensor. After calling
+     * this method, the tensor is automatically moved back to CPU memory.
+     * If the tensor is not on GPU, this method does nothing.
+     *
+     * This is useful for:
+     * - Releasing GPU memory during long-running computations
+     * - Managing GPU resources in memory-constrained environments
+     * - Explicit cleanup before moving to another tensor
+     *
+     * The tensor remains valid and usable after calling this method.
+     * The data is preserved in CPU memory.
+     *
+     * @return void
+     * @throws RuntimeException If CUDA support is not available.
+     *
+     * @example
+     * ```php
+     * $tensor = ZTensor::random([5000, 5000])->toGpu();
+     * echo $tensor->isOnGpu();  // true
+     *
+     * $tensor->freeDevice();  // Explicitly free GPU memory
+     * echo $tensor->isOnGpu();  // false
+     * $data = $tensor->toArray();  // Data is still accessible via CPU
+     * ```
+     */
+    public function freeDevice(): void
+    {
+    }
 }

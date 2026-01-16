@@ -31,7 +31,19 @@ if test "$PHP_ZMATRIX" != "no"; then
   AC_MSG_CHECKING([for AVX/SIMD flags])
   AC_MSG_RESULT([using $ZMATRIX_ARCH_FLAGS])
 
-  dnl Detectar nvcc CUDA compiler
+dnl ========== DETECCAO DE WSL ==========
+    dnl Detecta se está rodando em WSL2 para ajustar paths CUDA
+    AC_MSG_CHECKING([for Windows Subsystem for Linux (WSL)])
+    if grep -qi "microsoft" /proc/version 2>/dev/null; then
+      WSL_DETECTED=1
+      AC_MSG_RESULT([yes, detected WSL2])
+      AC_DEFINE([HAVE_WSL], [1], [Define if running in WSL])
+    else
+      WSL_DETECTED=0
+      AC_MSG_RESULT([no, native Linux])
+    fi
+
+    dnl Detectar nvcc CUDA compiler
   AC_MSG_CHECKING([for nvcc CUDA compiler])
   AC_PATH_PROG([NVCC], [nvcc], [no])
   if test "$NVCC" != "no"; then
@@ -80,6 +92,13 @@ if test "$PHP_ZMATRIX" != "no"; then
       ZMATRIX_SHARED_LIBADD="$ZMATRIX_SHARED_LIBADD -L/usr/lib/x86_64-linux-gnu -lcudart -lcublas -lcurand"
     else
       AC_MSG_ERROR([CUDA libraries not found (tried $CUDA_ROOT/lib64 and /usr/lib/x86_64-linux-gnu)])
+    fi
+
+    dnl ========== RPATH SETUP PARA WSL ==========
+    dnl Se em WSL, adicionar rpath para /usr/lib/wsl/lib para fallback de libcuda
+    if test "$WSL_DETECTED" = "1"; then
+      AC_MSG_NOTICE([WSL detected - adding rpath for CUDA libraries in /usr/lib/wsl/lib])
+      ZMATRIX_SHARED_LIBADD="$ZMATRIX_SHARED_LIBADD -Wl,-rpath,/usr/lib/wsl/lib"
     fi
 
     dnl Flags de compilação CUDA
