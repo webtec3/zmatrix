@@ -850,19 +850,74 @@ echo "Standard deviation: $std_value\n";
 // Output: approximately 1.58
 ```
 
-### Sum Along Axis - `sum()`
+### Sum - `sum()` (v0.5.0+)
 
+**UPDATED (v0.5.0):** Method refactored for NumPy/PyTorch compatibility!
+
+#### Global Sum (all elements)
+```php
+$tensor = ZTensor::arr([[1, 2, 3], [4, 5, 6]]);
+$total = $tensor->sum();
+echo "Total: " . $total->toArray()[0] . "\n";  // 21 (as scalar tensor)
+```
+
+#### Sum Along Specific Axis
 ```php
 $tensor = ZTensor::arr([
     [1, 2, 3],
-    [4, 5, 6],
-    [7, 8, 9]
+    [4, 5, 6]
 ]);
-$sum_result = ZTensor::zeros([3]);
-$tensor->sum($sum_result, 1); // sum along axis 1
-print_r($sum_result->toArray());
-// Output: [6, 15, 24]
+
+// Sum along axis 0 (down columns)
+$sum_axis_0 = $tensor->sum(0);
+print_r($sum_axis_0->toArray());
+// Output: [5, 7, 9]
+
+// Sum along axis 1 (across rows)
+$sum_axis_1 = $tensor->sum(1);
+print_r($sum_axis_1->toArray());
+// Output: [6, 15]
 ```
+
+#### NumPy-style Negative Indexing
+```php
+$tensor = ZTensor::arr([
+    [1, 2, 3],
+    [4, 5, 6]
+]);
+
+// -1 = last axis (same as axis 1 for 2D)
+$sum_last = $tensor->sum(-1);
+print_r($sum_last->toArray());
+// Output: [6, 15]
+```
+
+#### Error Handling
+```php
+$tensor = ZTensor::arr([[1, 2, 3], [4, 5, 6]]);
+
+// Invalid axis (throws exception)
+try {
+    $tensor->sum(5);  // Out of bounds
+} catch (Exception $e) {
+    echo "Error: " . $e->getMessage() . "\n";
+}
+
+// Non-integer axis (throws TypeError)
+try {
+    $tensor->sum("0");  // Wrong type
+} catch (TypeError $e) {
+    echo "Type error: " . $e->getMessage() . "\n";
+}
+```
+
+**API Changes:**
+- ✅ Now returns `ZTensor` in ALL cases (always consistent)
+- ✅ Removed mandatory `$other` parameter
+- ✅ Optional `$axis` parameter for reduction
+- ✅ NumPy-compatible syntax
+- ✅ Validates axis bounds serially before parallel execution
+- ✅ Exception-safe with proper error messages
 
 ---
 
@@ -1011,37 +1066,167 @@ print_r($tiled->toArray());
 // Output: [[1, 2], [3, 4], [1, 2], [3, 4], [1, 2], [3, 4]]
 ```
 
-### Gradient Tracking - `requiresGrad()`
+---
+
+## Autograd & Gradient Operations (Experimental)
+
+> ⚠️ **Note:** Autograd infrastructure is experimental. Backward pass is not yet fully implemented.
+
+### Enabling Gradient Tracking - `requiresGrad()`
+
+```php
+// Enable gradient tracking
+$tensor = ZTensor::arr([1.0, 2.0, 3.0]);
+$tensor->requiresGrad(true);
+
+// Or method chaining
+$t = ZTensor::arr([[1, 2], [3, 4]])->requiresGrad(true);
+```
+
+### Checking Gradient Status - `isRequiresGrad()`
 
 ```php
 $tensor = ZTensor::arr([1, 2, 3]);
-$tensor_with_grad = $tensor->requiresGrad(true);
-// Tensor agora rastreia gradientes para autograd futuro
-```
-
-### Gradient Check - `requires_grad()`
-
-```php
-$tensor = ZTensor::arr([[1, 2], [3, 4]]);
 $tensor->requiresGrad(true);
 
-if ($tensor->requires_grad()) {
-    echo "Este tensor rastreia gradientes\n";
+if ($tensor->isRequiresGrad()) {
+    echo "This tensor tracks gradients\n";
 }
 ```
 
-### Broadcasting with Bias - `broadcast()`
+### Initializing Gradients - `ensureGrad()`
 
 ```php
-// Adiciona bias a cada linha da matriz
+$tensor = ZTensor::arr([1.0, 2.0, 3.0]);
+$tensor->requiresGrad(true);
+
+// Ensure gradient is allocated
+$tensor->ensureGrad();
+
+// Get gradient tensor
+$grad = $tensor->getGrad();
+if ($grad !== null) {
+    echo "Gradient allocated: " . $grad->size() . " elements\n";
+}
+```
+
+### Getting Current Gradient - `getGrad()`
+
+```php
+$tensor = ZTensor::arr([[1.0, 2.0], [3.0, 4.0]]);
+$tensor->requiresGrad(true);
+$tensor->ensureGrad();
+
+$gradient = $tensor->getGrad();
+if ($gradient !== null) {
+    echo "Gradient shape: ";
+    print_r($gradient->shape());
+    echo "Gradient values: ";
+    print_r($gradient->toArray());
+}
+```
+
+### Zeroing Gradients - `zeroGrad()`
+
+```php
+$tensor = ZTensor::arr([1.0, 2.0, 3.0]);
+$tensor->requiresGrad(true);
+$tensor->ensureGrad();
+
+// Accumulate gradients...
+// Then zero them for next iteration
+$tensor->zeroGrad();
+```
+
+### Automatic Differentiation - Autograd Methods
+
+**⚠️ Experimental: These methods prepare infrastructure for backpropagation. Full backward pass not yet implemented.**
+
+#### Adding with Autograd - `addAutograd()`
+```php
+$a = ZTensor::arr([1.0, 2.0])->requiresGrad(true);
+$b = ZTensor::arr([3.0, 4.0])->requiresGrad(true);
+
+$c = ZTensor::addAutograd($a, $b);
+echo "Result: ";
+print_r($c->toArray());
+// Output: [4, 6]
+```
+
+#### Subtracting with Autograd - `subAutograd()`
+```php
+$a = ZTensor::arr([5.0, 7.0])->requiresGrad(true);
+$b = ZTensor::arr([2.0, 3.0])->requiresGrad(true);
+
+$c = ZTensor::subAutograd($a, $b);
+echo "Result: ";
+print_r($c->toArray());
+// Output: [3, 4]
+```
+
+#### Multiplying with Autograd - `mulAutograd()`
+```php
+$a = ZTensor::arr([2.0, 3.0])->requiresGrad(true);
+$b = ZTensor::arr([4.0, 5.0])->requiresGrad(true);
+
+$c = ZTensor::mulAutograd($a, $b);
+echo "Result: ";
+print_r($c->toArray());
+// Output: [8, 15]
+```
+
+#### Sum with Autograd - `sumAutograd()`
+```php
+$tensor = ZTensor::arr([[1.0, 2.0], [3.0, 4.0]])->requiresGrad(true);
+
+$sum = ZTensor::sumAutograd($tensor);
+echo "Sum result: " . $sum->toArray()[0] . "\n";
+// Output: 10
+```
+
+### Backward Pass - `backward()`
+
+**⚠️ Experimental: Currently infrastructure-only. Full backpropagation not yet fully implemented.**
+
+```php
+// Example structure (backward pass not yet complete)
+$x = ZTensor::arr([1.0, 2.0, 3.0])->requiresGrad(true);
+$y = ZTensor::addAutograd($x, $x);
+$loss = ZTensor::sumAutograd($y);
+
+// Would trigger backpropagation (when fully implemented)
+// $loss->backward();
+
+// For now, you can manually zero and accumulate gradients
+// $loss->ensureGrad();
+// $loss->zeroGrad();
+```
+
+### String Representation - `__toString()`
+
+```php
+$tensor = ZTensor::arr([1, 2, 3, 4, 5, 6]);
+$tensor->reshape([2, 3]);
+
+echo $tensor;
+// Output: ZTensor([2, 3], dtype: float32, 6 elements)
+```
+
+---
+
+## Special Operations
+
+### Broadcasting - `broadcast()`
+
+```php
 $matrix = ZTensor::arr([
     [1, 2],
     [3, 4],
     [5, 6]
 ]);
 $bias = ZTensor::arr([10, 20]);
-$result = $matrix->broadcast($bias);
-print_r($result->toArray());
+$broadcasted = $matrix->broadcast($bias);
+print_r($broadcasted->toArray());
 // Output: [[11, 22], [13, 24], [15, 26]]
 ```
 
@@ -1192,12 +1377,12 @@ print_r($max_result->toArray());
 | | `sub()` | Instance | Subtração elemento a elemento |
 | | `mul()` | Instance | Multiplicação elemento a elemento |
 | | `divide()` | Instance | Divisão elemento a elemento |
+| | `pow()` | Instance | Potência elemento a elemento |
 | | `scalarMultiply()` | Instance | Multiplicação por escalar |
 | | `scalarDivide()` | Instance | Divisão por escalar |
-| | `pow()` | Instance | Potência |
-| **Álgebra Linear** | `matmul()` | Instance | Multiplicação matricial |
-| | `dot()` | Instance | Produto ponto |
-| | `transpose()` | Instance | Transposição |
+| **Álgebra Linear** | `matmul()` | Instance | Multiplicação de matrizes |
+| | `dot()` | Instance | Produto escalar/dot product |
+| | `transpose()` | Instance | Transposição (2D) |
 | **Funções Matemáticas** | `abs()` | Instance | Valor absoluto |
 | | `sqrt()` | Instance | Raiz quadrada |
 | | `exp()` | Instance | Exponencial |
@@ -1212,8 +1397,8 @@ print_r($max_result->toArray());
 | | `tanhDerivative()` | Instance | Derivada tanh |
 | | `softmax()` | Instance | Softmax |
 | | `softmaxDerivative()` | Instance | Derivada softmax |
-| **Estatísticas** | `sum()` | Instance | Soma com axis opcional |
-| | `sumtotal()` | Instance | Soma total |
+| **Estatísticas** | `sum()` | Instance | Soma global ou por eixo (v0.5.0+) |
+| | `sumtotal()` | Instance | Soma total de elementos |
 | | `mean()` | Instance | Média |
 | | `min()` | Instance | Mínimo |
 | | `max()` | Instance | Máximo |
@@ -1228,15 +1413,23 @@ print_r($max_result->toArray());
 | | `isEmpty()` | Instance | Verifica se vazio |
 | | `reshape()` | Instance | Muda shape |
 | | `toArray()` | Instance | Converte para array PHP |
-| **Acesso** | `key()` | Instance | Acessa elemento por índice |
+| **Acesso** | `key()` | Instance | Acessa elemento por índices |
 | **Manipulação** | `broadcast()` | Instance | Broadcast com bias |
 | | `tile()` | Static | Repete tensor N vezes |
 | **Autograd** | `requiresGrad()` | Instance | Ativa rastreamento gradiente |
-| | `requires_grad()` | Instance | Verifica se rastreia |
+| | `isRequiresGrad()` | Instance | Verifica rastreamento |
+| | `ensureGrad()` | Instance | Aloca tensor de gradiente |
+| | `zeroGrad()` | Instance | Zera gradiente acumulado |
+| | `getGrad()` | Instance | Obtém tensor de gradiente |
+| | `addAutograd()` | Static | Adição com autograd (exp) |
+| | `subAutograd()` | Static | Subtração com autograd (exp) |
+| | `mulAutograd()` | Static | Multiplicação com autograd (exp) |
+| | `sumAutograd()` | Static | Soma com autograd (exp) |
 | **GPU** | `toGpu()` | Instance | Move para GPU |
 | | `toCpu()` | Instance | Move para CPU |
 | | `isOnGpu()` | Instance | Verifica se está em GPU |
 | | `freeDevice()` | Instance | Libera memória GPU |
+| **String** | `__toString()` | Instance | Representação em string |
 
 ### Categorias de Uso
 
