@@ -695,16 +695,6 @@ final class ZTensor
     }
 
     /**
-     * Ativa ou desativa o rastreamento de gradiente para este tensor (autograd).
-     *
-     * @param bool $req Se true, ativa o rastreamento de gradiente.
-     * @return ZTensor O próprio tensor (para uso fluente).
-     */
-    public function requiresGrad(bool $req = true): ZTensor
-    {
-    }
-
-    /**
      * Adds a 1D vector [C] to each row of a 2D tensor [N×C], performing broadcasting on dimension 0.
      *
      * Example:
@@ -858,6 +848,246 @@ final class ZTensor
      * ```
      */
     public function freeDevice(): void
+    {
+    }
+
+    // ========== AUTOGRAD METHODS ==========
+
+    /**
+     * Enables or disables automatic differentiation for this tensor.
+     *
+     * When requires_grad is set to true, all operations on this tensor
+     * will be tracked for automatic differentiation. The computation graph
+     * is built during forward pass and can be used in backward() to compute
+     * gradients.
+     *
+     * By default, tensors do not require gradients.
+     *
+     * @param bool $requires_grad Whether to enable gradient tracking. Default: true
+     * @return ZTensor Returns $this for method chaining
+     *
+     * @example
+     * ```php
+     * $x = new ZTensor([1, 2, 3]);
+     * $x->requiresGrad(true);   // Enable autograd
+     * $x->requiresGrad(false);  // Disable autograd
+     * ```
+     */
+    public function requiresGrad(bool $requires_grad = true): ZTensor
+    {
+    }
+
+    /**
+     * Checks if this tensor has gradient tracking enabled.
+     *
+     * Returns true if this tensor will track gradients during operations.
+     *
+     * @return bool True if gradient tracking is enabled, false otherwise
+     *
+     * @example
+     * ```php
+     * $x = new ZTensor([1, 2, 3]);
+     * echo $x->is_requires_grad();  // false
+     *
+     * $x->requiresGrad(true);
+     * echo $x->isRequireGrad();  // true
+     * ```
+     */
+    public function isRequiresGrad(): bool
+    {
+    }
+
+    /**
+     * Ensures the gradient tensor is initialized.
+     *
+     * Lazily initializes the gradient tensor if it hasn't been created yet.
+     * This is called automatically during operations, so you typically don't
+     * need to call it manually.
+     *
+     * @return ZTensor Returns $this for method chaining
+     *
+     * @example
+     * ```php
+     * $x = new ZTensor([1, 2, 3]);
+     * $x->requiresGrad(true);
+     * $x->ensureGrad();  // Gradient tensor is now allocated
+     * ```
+     */
+    public function ensureGrad(): ZTensor
+    {
+    }
+
+    /**
+     * Clears accumulated gradients.
+     *
+     * Sets the gradient tensor to zero. Call this between training steps
+     * to prevent gradient accumulation.
+     *
+     * @return void
+     *
+     * @example
+     * ```php
+     * $x = new ZTensor([1, 2, 3]);
+     * $x->requiresGrad(true);
+     *
+     * // Do forward/backward pass
+     * $x->backward();
+     *
+     * // Clear gradients for next iteration
+     * $x->zeroGrad();
+     * ```
+     */
+    public function zeroGrad(): void
+    {
+    }
+
+    /**
+     * Returns the gradient tensor, if it exists.
+     *
+     * Returns the accumulated gradient for this tensor after a backward pass.
+     * Returns null if no gradient has been computed yet.
+     *
+     * @return ZTensor|null The gradient tensor, or null if not computed
+     *
+     * @example
+     * ```php
+     * $x = new ZTensor([1, 2, 3]);
+     * $x->requiresGrad(true);
+     *
+     * // Forward and backward would happen here
+     *
+     * $grad = $x->getGrad();
+     * if ($grad !== null) {
+     *     print_r($grad->toArray());
+     * }
+     * ```
+     */
+    public function getGrad(): ?ZTensor
+    {
+    }
+
+    /**
+     * Computes gradients via backpropagation.
+     *
+     * This tensor must be a scalar (single element) for backward() to work.
+     * Calls backward() to traverse the computation graph in reverse order and
+     * accumulate gradients in all tensors that have requires_grad=true.
+     *
+     * The computation graph is built during the forward pass with operations
+     * like add_autograd(), mul_autograd(), etc.
+     *
+     * @param ?ZTensor $grad_output Optional gradient to use for backpropagation. If null, assumes 1.0
+     * @return void
+     * @throws RuntimeException If this tensor is not a scalar or if an error occurs during backpropagation
+     *
+     * @example
+     * ```php
+     * $x = new ZTensor([2, 3]);
+     * $x->requiresGrad(true);
+     *
+     * // Forward: compute loss
+     * $loss = sum_autograd(mul_autograd($x, $x));  // sum(x^2)
+     *
+     * // Backward: compute gradients
+     * $loss->backward();
+     *
+     * // Access gradients
+     * $grad = $x->get_grad();  // Should be [4, 6]
+     * ```
+     */
+    public function backward(?ZTensor $grad_output = null): void
+    {
+    }
+
+    /**
+     * Static method: Element-wise addition with autograd support
+     *
+     * Adds two tensors and tracks the operation for backpropagation if either
+     * tensor has requires_grad=true.
+     *
+     * @param ZTensor $a First tensor
+     * @param ZTensor $b Second tensor
+     * @return ZTensor Result tensor with computation graph information
+     * @throws RuntimeException If shapes don't match
+     *
+     * @example
+     * ```php
+     * $x = ZTensor::ones([2, 2])->requiresGrad(true);
+     * $y = ZTensor::ones([2, 2])->requiresGrad(true);
+     * $z = ZTensor::addAutograd($x, $y);
+     * ```
+     */
+    public static function addAutograd(ZTensor $a, ZTensor $b): ZTensor
+    {
+    }
+
+    /**
+     * Static method: Element-wise subtraction with autograd support
+     *
+     * Subtracts b from a and tracks the operation for backpropagation.
+     *
+     * @param ZTensor $a First tensor (minuend)
+     * @param ZTensor $b Second tensor (subtrahend)
+     * @return ZTensor Result tensor with computation graph information
+     * @throws RuntimeException If shapes don't match
+     *
+     * @example
+     * ```php
+     * $x = ZTensor::ones([2, 2])->requiresGrad(true);
+     * $y = ZTensor::ones([2, 2])->requiresGrad(true);
+     * $z = ZTensor::subAutograd($x, $y);
+     * ```
+     */
+    public static function subAutograd(ZTensor $a, ZTensor $b): ZTensor
+    {
+    }
+
+    /**
+     * Static method: Element-wise multiplication with autograd support
+     *
+     * Multiplies two tensors element-wise and tracks the operation for backpropagation.
+     *
+     * @param ZTensor $a First tensor
+     * @param ZTensor $b Second tensor
+     * @return ZTensor Result tensor with computation graph information
+     * @throws RuntimeException If shapes don't match
+     *
+     * @example
+     * ```php
+     * $x = ZTensor::ones([2, 2])->requiresGrad(true);
+     * $y = ZTensor::ones([2, 2])->requiresGrad(true);
+     * $z = ZTensor::mulAutograd($x, $y);
+     * ```
+     */
+    public static function mulAutograd(ZTensor $a, ZTensor $b): ZTensor
+    {
+    }
+
+    /**
+     * Static method: Sum reduction with autograd support
+     *
+     * Sums all elements of a tensor and returns a scalar (shape [1]) with
+     * computation graph tracking.
+     *
+     * @param ZTensor $tensor Tensor to sum
+     * @return ZTensor Scalar result tensor
+     *
+     * @example
+     * ```php
+     * $x = ZTensor::ones([2, 3])->requiresGrad(true);
+     * $sum = ZTensor::sumAutograd($x);  // Result shape [1]
+     * ```
+     */
+    public static function sumAutograd(ZTensor $tensor): ZTensor
+    {
+    }
+
+    /**
+     * Returns the string representation of the tensor.
+     *
+     * @return string A formatted string representation of the tensor.
+     */
+    public function __toString(): string
     {
     }
 }

@@ -30,7 +30,7 @@ libtool
 Makefile
 Makefile.fragments
 Makefile.objects
-zmatrix_arginfo.h
+src/zmatrix_arginfo.h
 zmatrix.stub.php
 ztensor.stub.php
 exported_symbols.txt
