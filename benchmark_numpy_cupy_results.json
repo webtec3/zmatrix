@@ -1,0 +1,121 @@
+{
+  "creation_numpy_random": {
+    "name": "NumPy Random [1M]",
+    "avg_ms": 12.516355514526367,
+    "std_ms": 5.170725624463429,
+    "min_ms": 7.536649703979492,
+    "max_ms": 22.294044494628906
+  },
+  "creation_numpy_zeros": {
+    "name": "NumPy Zeros [1M]",
+    "avg_ms": 0.5048274993896484,
+    "std_ms": 0.06726203497926773,
+    "min_ms": 0.4096031188964844,
+    "max_ms": 0.6177425384521484
+  },
+  "creation_numpy_ones": {
+    "name": "NumPy Ones [1M]",
+    "avg_ms": 0.9279727935791016,
+    "std_ms": 0.1821828361344579,
+    "min_ms": 0.7355213165283203,
+    "max_ms": 1.211404800415039
+  },
+  "arithmetic_numpy_add": {
+    "name": "NumPy Add",
+    "avg_ms": 4.805994033813477,
+    "std_ms": 0.8031963536846072,
+    "min_ms": 3.7665367126464844,
+    "max_ms": 5.943536758422852
+  },
+  "arithmetic_numpy_sub": {
+    "name": "NumPy Sub",
+    "avg_ms": 4.509758949279785,
+    "std_ms": 0.7713438645459898,
+    "min_ms": 3.857851028442383,
+    "max_ms": 6.139278411865234
+  },
+  "arithmetic_numpy_mul": {
+    "name": "NumPy Mul",
+    "avg_ms": 4.948139190673828,
+    "std_ms": 0.8136202649754746,
+    "min_ms": 4.143476486206055,
+    "max_ms": 6.606101989746094
+  },
+  "arithmetic_numpy_div": {
+    "name": "NumPy Divide",
+    "avg_ms": 8.895015716552734,
+    "std_ms": 2.445195694665055,
+    "min_ms": 6.774663925170898,
+    "max_ms": 15.324115753173828
+  },
+  "activation_numpy_relu": {
+    "name": "NumPy ReLU",
+    "avg_ms": 3.730654716491699,
+    "std_ms": 0.8366371171978692,
+    "min_ms": 3.0426979064941406,
+    "max_ms": 5.928993225097656
+  },
+  "activation_numpy_sigmoid": {
+    "name": "NumPy Sigmoid",
+    "avg_ms": 18.23110580444336,
+    "std_ms": 2.507908274176352,
+    "min_ms": 15.55776596069336,
+    "max_ms": 22.133350372314453
+  },
+  "activation_numpy_tanh": {
+    "name": "NumPy Tanh",
+    "avg_ms": 15.076708793640137,
+    "std_ms": 1.3259545352147504,
+    "min_ms": 13.984441757202148,
+    "max_ms": 17.998456954956055
+  },
+  "activation_numpy_softmax": {
+    "name": "NumPy Softmax",
+    "avg_ms": 0.08282661437988281,
+    "std_ms": 0.048347878382933224,
+    "min_ms": 0.048160552978515625,
+    "max_ms": 0.2110004425048828
+  },
+  "linalg_numpy_matmul_1k": {
+    "name": "NumPy MatMul [1Kx1K]",
+    "avg_ms": 8.70672861735026,
+    "std_ms": 1.9141298618569287,
+    "min_ms": 7.329225540161133,
+    "max_ms": 11.41357421875
+  },
+  "linalg_numpy_dot_1m": {
+    "name": "NumPy Dot [1M]",
+    "avg_ms": 0.36661624908447266,
+    "std_ms": 0.04987931497626624,
+    "min_ms": 0.31495094299316406,
+    "max_ms": 0.453948974609375
+  },
+  "stats_numpy_sum": {
+    "name": "NumPy Sum",
+    "avg_ms": 1.8448114395141602,
+    "std_ms": 0.41183989548373157,
+    "min_ms": 1.5943050384521484,
+    "max_ms": 2.763986587524414
+  },
+  "stats_numpy_mean": {
+    "name": "NumPy Mean",
+    "avg_ms": 2.035379409790039,
+    "std_ms": 0.5838642022412137,
+    "min_ms": 1.5559196472167969,
+    "max_ms": 3.5440921783447266
+  },
+  "stats_numpy_std": {
+    "name": "NumPy Std",
+    "avg_ms": 8.692264556884766,
+    "std_ms": 0.59481036763207,
+    "min_ms": 7.90858268737793,
+    "max_ms": 9.778022766113281
+  },
+  "stats_numpy_minmax": {
+    "name": "NumPy Min/Max",
+    "avg_ms": 3.0084609985351562,
+    "std_ms": 0.16421091361829168,
+    "min_ms": 2.782583236694336,
+    "max_ms": 3.213167190551758
+  }
+}

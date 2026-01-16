@@ -428,27 +428,13 @@ struct ZTensor {
         if (!host_valid) {
             throw std::runtime_error("Host data is not valid for device upload");
         }
-        try {
-            if (!d_data || d_capacity < n) {
-                if (d_data) {
-                    cudaError_t err = cudaFree(d_data);
-                    if (err != cudaSuccess) {
-                        d_data = nullptr;
-                        throw std::runtime_error(std::string("cudaFree failed: ") + cudaGetErrorString(err));
-                    }
-                    d_data = nullptr; // Clear pointer on successful free
-                }
-                cuda_check(cudaMalloc(reinterpret_cast<void**>(&d_data), n * sizeof(float)), "cudaMalloc");
-                d_capacity = n;
-            }
-            cuda_check(cudaMemcpy(d_data, data.data(), n * sizeof(float), cudaMemcpyHostToDevice), "cudaMemcpy H2D");
-            device_valid = true;
-        } catch (const std::exception&) {
-            d_data = nullptr;
-            d_capacity = 0;
-            device_valid = false;
-            throw;
+        if (!d_data || d_capacity < n) {
+            if (d_data) cudaFree(d_data);
+            cuda_check(cudaMalloc(reinterpret_cast<void**>(&d_data), n * sizeof(float)), "cudaMalloc");
+            d_capacity = n;
         }
+        cuda_check(cudaMemcpy(d_data, data.data(), n * sizeof(float), cudaMemcpyHostToDevice), "cudaMemcpy H2D");
+        device_valid = true;
     }
 
     void ensure_host() const {
@@ -839,9 +825,6 @@ struct ZTensor {
 
 
     void scalar_divide(float scalar) {
-       if (scalar == 0.0f) {
-           throw std::invalid_argument("Cannot divide by zero");
-       }
        const size_t N = size();
            if (N == 0) return;
 #ifdef HAVE_CUDA
@@ -2576,11 +2559,6 @@ static void zmatrix_return_tensor_obj(
         object_init_ex(return_value, tensor_ce);
 
         zmatrix_ztensor_object *intern = Z_MATRIX_ZTENSOR_P(return_value);
-        if (UNEXPECTED(!intern)) {
-            zend_throw_exception(zend_ce_exception, "Failed to initialize ZTensor object", 0);
-            ZVAL_NULL(return_value);
-            return;
-        }
 
         // Não há tensor antigo para deletar (porque intern foi recém-criado)
         intern->tensor = new ZTensor(result_tensor);

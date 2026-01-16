@@ -1653,10 +1653,8 @@ PHP_METHOD(ZTensor, clip)
 
 PHP_METHOD(ZTensor, sum)
 {
-    zval *other_zv;
     zval *axis_zv = nullptr;
-    ZEND_PARSE_PARAMETERS_START(1, 2)
-        Z_PARAM_ZVAL(other_zv)
+    ZEND_PARSE_PARAMETERS_START(0, 1)
         Z_PARAM_OPTIONAL
         Z_PARAM_ZVAL(axis_zv)
     ZEND_PARSE_PARAMETERS_END();
@@ -1667,30 +1665,66 @@ PHP_METHOD(ZTensor, sum)
         RETURN_THROWS();
     }
 
-    ZTensor *other_ptr = nullptr;
-    ZTensor tmp_other;
-
-    if (!zmatrix_get_tensor_ptr(other_zv, other_ptr, tmp_other, zmatrix_ce_ZTensor)) {
-        RETURN_THROWS();
+    // ===== VALIDAÇÃO SERIAL (ANTES de qualquer operação) =====
+    zend_long axis_val = -1;  // sentinel: soma global
+    if (axis_zv && Z_TYPE_P(axis_zv) != IS_NULL) {
+        // Type checking
+        if (Z_TYPE_P(axis_zv) != IS_LONG) {
+            zend_throw_exception_ex(zend_ce_type_error, 0, 
+                "ZTensor::sum(): axis must be int|null, %s given", 
+                zend_zval_type_name(axis_zv));
+            RETURN_THROWS();
+        }
+        
+        axis_val = Z_LVAL_P(axis_zv);
+        size_t ndim = self_obj->tensor->shape.size();
+        
+        // Empty tensor check
+        if (ndim == 0) {
+            zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_EMPTY_MATRIX, 0);
+            RETURN_THROWS();
+        }
+        
+        // Normalize negative axis (e.g., -1 -> ndim-1)
+        if (axis_val < 0) {
+            axis_val = (zend_long)ndim + axis_val;
+        }
+        
+        // Bounds check
+        if (axis_val < 0 || (size_t)axis_val >= ndim) {
+            zend_throw_exception_ex(zend_ce_exception, 0,
+                "ZTensor::sum(): axis %ld out of bounds for tensor with %zu dimensions",
+                Z_LVAL_P(axis_zv), ndim);
+            RETURN_THROWS();
+        }
     }
+    // ===== FIM VALIDAÇÃO SERIAL =====
 
     try {
-        if (!axis_zv || Z_TYPE_P(axis_zv) == IS_NULL) {
-            // axis não fornecido → retorna soma total (escalares somados)
+        ZTensor result;
+        
+        if (axis_val == -1) {
+            // Soma global: retorna tensor escalar de shape {1}
             double total = self_obj->tensor->sum();
-            ZTensor scalar_tensor({1});
-            scalar_tensor.data[0] = static_cast<float>(total);
-            zmatrix_return_tensor_obj(scalar_tensor, return_value, zmatrix_ce_ZTensor);
+            result = ZTensor({1});
+            result.data[0] = static_cast<float>(total);
         } else {
-            zend_long axis = Z_LVAL_P(axis_zv);
-            self_obj->tensor->soma(*other_ptr, static_cast<int>(axis));
-            ZVAL_ZVAL(return_value, ZEND_THIS, 1, 0); // retorno this
+            // Soma por eixo: reduz dimensão do eixo especificado
+            std::vector<size_t> result_shape = self_obj->tensor->shape;
+            result_shape.erase(result_shape.begin() + axis_val);
+            
+            result = ZTensor(result_shape);
+            self_obj->tensor->soma(result, static_cast<int>(axis_val));
         }
-    } catch (const std::exception &e) {
+        
+        zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
+    } 
+    catch (const std::exception& e) {
         zend_throw_exception(zend_ce_exception, e.what(), 0);
         RETURN_THROWS();
     }
 }
+
 
 PHP_METHOD(ZTensor, broadcast)
 {

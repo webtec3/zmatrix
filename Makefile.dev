@@ -1,0 +1,36 @@
+#!/usr/bin/make -f
+# Quick Makefile for ZMatrix development
+# Makes it easier to regenerate stubs and compile
+
+.PHONY: all build install clean distclean test gen-stubs help
+
+help:
+	@echo "ZMatrix Extension Build Targets"
+	@echo "================================"
+	@echo ""
+	@echo "  make gen-stubs  - Regenerate arginfo from .stub.php files"
+	@echo "  make build      - Clean, generate stubs, configure, compile"
+	@echo "  make install    - Build and install (sudo)"
+	@echo "  make clean      - Clean build artifacts"
+	@echo "  make distclean  - Full clean (configure needed after)"
+	@echo "  make test       - Run test suite"
+	@echo ""
+
+gen-stubs:
+	@./gen_arginfo.sh
+
+build: gen-stubs clean
+	@./configure
+	@make
+
+install: build
+	@sudo make install
+
+clean:
+	@make clean
+
+distclean:
+	@make distclean
+
+test:
+	@php run-tests.php
