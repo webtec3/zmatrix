@@ -60,7 +60,7 @@ sudo make install
 ```
 ```bash
 phpize
-./configure --with-cuda-path=/usr/local/cuda
+./configure --with-cuda-path=/usr/local/cuda --enable-openmp
 make clean
 make -j$(nproc)
 sudo make install
@@ -246,6 +246,10 @@ The ZMatrix extension implements the following functionalities:
 * `$tensor->size()` - Returns the total number of elements
 * `$tensor->isEmpty()` - Checks whether the tensor is empty
 * `$tensor->toArray()` - Converts tensor to PHP array
+
+### Tensor Modification
+
+* `$tensor->fill($value)` - Fills the tensor with a constant scalar value (in-place)
 
 ### Basic Operations
 
@@ -452,6 +456,23 @@ $full = ZTensor::full([2, 2], 7.5);
 print_r($full->toArray());
 // Output: [[7.5, 7.5], [7.5, 7.5]]
 ```
+
+### Fill Existing Tensor - `fill()`
+
+Fills an existing tensor with a constant scalar value (in-place operation).
+
+```php
+$t = ZTensor::arr([1, 2, 3, 4]);
+$t->fill(5.0);
+print_r($t->toArray());
+// Output: [5.0, 5.0, 5.0, 5.0]
+```
+
+The `fill()` method modifies the tensor in-place and supports parallel execution with OpenMP for large tensors:
+
+- **Performance**: For tensors with more than `ZMATRIX_PARALLEL_THRESHOLD` (default: 10000) elements, the operation uses OpenMP parallel loops.
+- **GPU Support**: If CUDA is available, the tensor is transferred to host memory before the fill operation.
+- **Return Value**: Returns the modified tensor itself (`$this`), allowing method chaining.
 
 ### Identity Matrix - `identity()`
 

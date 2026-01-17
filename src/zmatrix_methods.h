@@ -627,6 +627,30 @@ PHP_METHOD(ZTensor, full)
     }
 }
 
+// Método de instância para preencher tensor com valor específico
+PHP_METHOD(ZTensor, fill)
+{
+    double value;
+
+    ZEND_PARSE_PARAMETERS_START(1, 1)
+        Z_PARAM_DOUBLE(value)
+    ZEND_PARSE_PARAMETERS_END();
+
+    zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
+    if (!self_obj->tensor) {
+        zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0);
+        RETURN_THROWS();
+    }
+
+    try {
+        self_obj->tensor->fill(static_cast<float>(value));
+        ZVAL_ZVAL(return_value, ZEND_THIS, 1, 0);
+    } catch (const std::exception& e) {
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+        RETURN_THROWS();
+    }
+}
+
 PHP_METHOD(ZTensor, identity)
 {
      zend_long size;

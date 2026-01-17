@@ -1019,7 +1019,37 @@ struct ZTensor {
 #endif
     }
 
+    void fill(float value) {
+            const size_t N = size();
+            if (N == 0) return;
 
+    #ifdef HAVE_CUDA
+            ensure_host();
+    #endif
+
+            float* __restrict__ p = data.data();
+
+    #if HAS_OPENMP
+            if (N > ZMATRIX_PARALLEL_THRESHOLD) {
+#pragma omp parallel for simd schedule(static)
+                for (size_t i = 0; i < N; ++i) {
+                    p[i] = value;
+                }
+            } else {
+                for (size_t i = 0; i < N; ++i) {
+                    p[i] = value;
+                }
+            }
+    #else
+            for (size_t i = 0; i < N; ++i) {
+                p[i] = value;
+            }
+    #endif
+
+#ifdef HAVE_CUDA
+        mark_host_modified();
+#endif
+    }
 
     ZTensor reshape(const std::vector<size_t>& new_shape) const {
         // 1. Calcular tamanho total do novo shape
@@ -2764,6 +2794,7 @@ static const zend_function_entry zmatrix_ztensor_methods[] = {
     PHP_ME(ZTensor, reshape,          arginfo_ztensor_reshape,            ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, slice,            arginfo_ztensor_slice,              ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, arr,              arginfo_ztensor_static_arr,         ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)
+    PHP_ME(ZTensor, fill,             arginfo_ztensor_fill,               ZEND_ACC_PUBLIC)
     // Métodos Estáticos de Criação Adicionais
     PHP_ME(ZTensor, randn,            arginfo_ztensor_static_randn,     ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)
     PHP_ME(ZTensor, arange,           arginfo_ztensor_static_arange,    ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)

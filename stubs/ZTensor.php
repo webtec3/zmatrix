@@ -108,7 +108,7 @@ final class ZTensor
      * @return ZTensor A new tensor containing the total sum (or returns $this if summing by axis into an output tensor).
      * @throws RuntimeException If shapes are incompatible or the axis is invalid.
      */
-    public function sum(ZTensor|array $other, int|null $axis = null): ZTensor
+    public function sum(ZTensor|array|null $other = null, int|null $axis = null): ZTensor
     {
     }
 
@@ -503,6 +503,20 @@ final class ZTensor
      * @throws RuntimeException If allocation fails or another error occurs.
      */
     public static function full(array $shape, float $value): ZTensor
+    {
+    }
+
+    /**
+     * Fills the current tensor with a constant scalar value (in-place).
+     *
+     * Replaces all elements of this tensor with the specified scalar value.
+     * This operation modifies the tensor in-place and is optimized with OpenMP parallelization.
+     *
+     * @param float $value The scalar value to fill the tensor with.
+     * @return ZTensor Returns $this (the modified tensor itself).
+     * @throws RuntimeException If the tensor is not initialized or another error occurs.
+     */
+    public function fill(float $value): ZTensor
     {
     }
 
