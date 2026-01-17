@@ -1,5 +1,23 @@
 # 🗺️ ROADMAP PRÁTICO - Por Onde Começar com Tudo Que Já Existe
 
+**Status:** v2 - Feedback integrado | Aprovado para implementação  
+**Data:** 17 de Janeiro de 2026
+
+---
+
+## 🔧 Correções de Engenharia Integradas
+
+| Correção | Risco | Status | Impacto |
+|----------|-------|--------|---------|
+| 🔴 Race condition em `block_sums` | Alto | ✅ Corrigido | Evita valores errados |
+| 🟡 AVX horizontal sum | Baixo | 📋 Futuro (Day 2) | +2-3% ganho |
+| 🟡 Fusion + OpenMP | Baixo | 📋 Futuro (pós-Day 5) | +15-20% em fused |
+| 🟢 DispatchMetrics lazy | Nenhum | 📋 Futuro (v1.1) | Flexibilidade |
+
+**Mudança Principal:** `sum_f32_tree()` agora pré-aloca `block_sums` em vez de usar `push_back()` dentro do loop OpenMP → zero data races ✅
+
+---
+
 ## 🎯 Situação Atual
 
 ```
@@ -114,18 +132,21 @@ simd/simd_dispatch.h: add_f32() {
 // Adicionar no namespace zmatrix_simd
 
 // Tree reduction para sum com SIMD horizontal add
+// ⚠️ IMPORTANTE: Pré-alocar block_sums para evitar race condition com OpenMP
 inline double sum_f32_tree(const float* a, size_t n) {
     if (n == 0) return 0.0;
     
     const size_t BLOCK_SIZE = 256;
-    std::vector<double> block_sums;
     
-    #if HAS_OPENMP
+    // PRÉ-ALOCAR o vetor (thread-safe, sem push_back)
+    size_t num_blocks = (n + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    std::vector<double> block_sums(num_blocks, 0.0);
+    
     #pragma omp parallel for schedule(static)
-    #endif
     for (size_t b = 0; b < n; b += BLOCK_SIZE) {
         size_t end = std::min(b + BLOCK_SIZE, n);
         double local_sum = 0.0;
+        size_t block_idx = b / BLOCK_SIZE;  // Índice fixo (sem data races)
         
         #if HAS_AVX2
         const __m256 zero = _mm256_setzero_ps();
@@ -153,15 +174,11 @@ inline double sum_f32_tree(const float* a, size_t n) {
         }
         #endif
         
-        // Armazenar resultado do bloco
-        if (b / BLOCK_SIZE < block_sums.size()) {
-            block_sums[b / BLOCK_SIZE] = local_sum;
-        } else {
-            block_sums.push_back(local_sum);
-        }
+        // ✅ Acesso thread-safe (índice pré-calculado, sem locks)
+        block_sums[block_idx] = local_sum;
     }
     
-    // Redução final
+    // Redução final (serial)
     double total = 0.0;
     for (double val : block_sums) {
         total += val;
@@ -174,25 +191,23 @@ inline float max_f32_tree(const float* a, size_t n) {
     if (n == 0) return std::numeric_limits<float>::quiet_NaN();
     
     const size_t BLOCK_SIZE = 256;
-    std::vector<float> block_maxs;
-    block_maxs.push_back(std::numeric_limits<float>::lowest());
     
-    #if HAS_OPENMP
+    // PRÉ-ALOCAR (thread-safe)
+    size_t num_blocks = (n + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    std::vector<float> block_maxs(num_blocks, std::numeric_limits<float>::lowest());
+    
     #pragma omp parallel for schedule(static)
-    #endif
     for (size_t b = 0; b < n; b += BLOCK_SIZE) {
         size_t end = std::min(b + BLOCK_SIZE, n);
+        size_t block_idx = b / BLOCK_SIZE;
         float local_max = std::numeric_limits<float>::lowest();
         
         for (size_t i = b; i < end; ++i) {
             local_max = std::max(local_max, a[i]);
         }
         
-        if (b / BLOCK_SIZE < block_maxs.size()) {
-            block_maxs[b / BLOCK_SIZE] = local_max;
-        } else {
-            block_maxs.push_back(local_max);
-        }
+        // ✅ Acesso thread-safe
+        block_maxs[block_idx] = local_max;
     }
     
     float result = std::numeric_limits<float>::lowest();
@@ -203,10 +218,17 @@ inline float max_f32_tree(const float* a, size_t n) {
 }
 ```
 
+**⚠️ Correção Crítica Aplicada:**
+- ✅ Pré-alocação do vetor → zero data races
+- ✅ Índice fixo calculado antes → sem `size()` ou `push_back()`
+- ✅ Cada thread escreve em posição única → thread-safe
+
 **Checklist:**
 - [ ] Código compila sem erros
 - [ ] Sem warnings
 - [ ] OpenMP não cria race conditions
+
+**🟡 Otimização Futura (Day 2):** Horizontal sum pode usar `_mm256_hadd_ps` em vez de store→load→add, ganho ~2-3%. Não é prioridade para Day 1, deixar como micro-otimização.
 
 ---
 
@@ -435,6 +457,8 @@ inline void fused_mul_add_relu_f32(float* a, const float* b, float bias, size_t 
 }
 ```
 
+**🟡 Nota Futura:** Quando OpenMP ativa, essas funções não rodamcom FMA pois usamos `#pragma omp parallel for simd` direto. Refactoring pós-Day 5 para rodar fusion dentro de blocos OpenMP ganhará ~15-20%. Não bloqueia implementação agora.
+
 ---
 
 ### Step 2.2: Criar Métodos em zmatrix.cpp
@@ -589,6 +613,8 @@ struct DispatchMetrics {
     }
 };
 ```
+
+**🟢 Nota Futura:** DispatchMetrics pode ser tornado lazy com environment variable `ZMATRIX_DISABLE_CALIBRATION` para suportar containers dinâmicos. Deixar para v1.1.
 
 ---
 
@@ -976,7 +1002,6 @@ COMBINADO       +1.6x    +1.8x    +3.0x    +1.1x   = 5.7x
 *Roadmap Prático - 17 de Janeiro de 2026*  
 **Status: PRONTO PARA IMPLEMENTAÇÃO IMEDIATA** 🚀
 
-
 # 🗺️ ROADMAP PRÁTICO v2 - Correções de Engenharia
 
 **Status:** Feedback integrado | Aprovado para implementação  
@@ -1293,3 +1318,4 @@ Autograd + Tree Reduction + Fusion + Auto-Dispatch
 
 *Documento v2 - Feedback Integrado*  
 *Pronto para produção ✅*
+
