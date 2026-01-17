@@ -1102,21 +1102,7 @@ Os números sustentam:
 
 ---
 
-# 🗺️ ROADMAP PRÁTICO v2 - Correções de Engenharia
-
-**Status:** Feedback integrado | Aprovado para implementação  
-**Data:** 17 de Janeiro de 2026
-
----
-
 ## 📌 Resumo das Correções
-
-# 🗺️ ROADMAP PRÁTICO v2 - Correções de Engenharia
-
-**Status:** Feedback integrado | Aprovado para implementação  
-**Data:** 17 de Janeiro de 2026
-
----
 
 ## 📌 Resumo das Correções
 
