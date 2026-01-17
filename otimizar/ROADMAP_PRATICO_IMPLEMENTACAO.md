@@ -975,3 +975,321 @@ COMBINADO       +1.6x    +1.8x    +3.0x    +1.1x   = 5.7x
 
 *Roadmap Prático - 17 de Janeiro de 2026*  
 **Status: PRONTO PARA IMPLEMENTAÇÃO IMEDIATA** 🚀
+
+
+# 🗺️ ROADMAP PRÁTICO v2 - Correções de Engenharia
+
+**Status:** Feedback integrado | Aprovado para implementação  
+**Data:** 17 de Janeiro de 2026
+
+---
+
+## 📌 Resumo das Correções
+
+| Ponto | Risco | Impacto | Status |
+|-------|-------|---------|--------|
+| Race condition `block_sums` | 🔴 Alto | Pode dar valores errados | **Corrigido** |
+| AVX horizontal sum | 🟡 Baixo | 2-3% ganho | Otimização futura |
+| Fusion + OpenMP separadas | 🟡 Baixo | Refinar depois | Aceitável agora |
+| DispatchMetrics não-lazy | 🟢 Nenhum | Flexibilidade futura | Aceitável agora |
+
+---
+
+## 🔴 CORREÇÃO 1: Race Condition em `block_sums`
+
+### ❌ PROBLEMA (Original)
+
+```cpp
+std::vector<double> block_sums;
+
+#pragma omp parallel for schedule(static)
+for (size_t b = 0; b < n; b += BLOCK_SIZE) {
+    // ...
+    if (b / BLOCK_SIZE < block_sums.size()) {
+        block_sums[b / BLOCK_SIZE] = local_sum;  // ← Data race!
+    } else {
+        block_sums.push_back(local_sum);         // ← Data race!
+    }
+}
+```
+
+**Por que é race condition:**
+- `size()` e `push_back()` não são thread-safe
+- Múltiplas threads podem executar `push_back` simultaneamente
+- Mesmo com índices distintos, a estrutura interna pode corromper
+
+---
+
+### ✅ SOLUÇÃO (Corrigida)
+
+```cpp
+// Tree reduction para sum com SIMD horizontal add
+inline double sum_f32_tree(const float* a, size_t n) {
+    if (n == 0) return 0.0;
+    
+    const size_t BLOCK_SIZE = 256;
+    
+    // PRÉ-ALOCAR o vetor (thread-safe agora)
+    size_t num_blocks = (n + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    std::vector<double> block_sums(num_blocks, 0.0);
+    
+    #pragma omp parallel for schedule(static)
+    for (size_t b = 0; b < n; b += BLOCK_SIZE) {
+        size_t end = std::min(b + BLOCK_SIZE, n);
+        double local_sum = 0.0;
+        size_t block_idx = b / BLOCK_SIZE;  // Índice fixo
+        
+        #if HAS_AVX2
+        const __m256 zero = _mm256_setzero_ps();
+        __m256 sum_vec = zero;
+        
+        size_t simd_end = b + ((end - b) / 8) * 8;
+        for (size_t i = b; i < simd_end; i += 8) {
+            __m256 v = _mm256_loadu_ps(a + i);
+            sum_vec = _mm256_add_ps(sum_vec, v);
+        }
+        
+        // Horizontal sum
+        float tmp[8];
+        _mm256_storeu_ps(tmp, sum_vec);
+        local_sum = tmp[0] + tmp[1] + tmp[2] + tmp[3] +
+                    tmp[4] + tmp[5] + tmp[6] + tmp[7];
+        
+        // Tail
+        for (size_t i = simd_end; i < end; ++i) {
+            local_sum += a[i];
+        }
+        #else
+        for (size_t i = b; i < end; ++i) {
+            local_sum += a[i];
+        }
+        #endif
+        
+        // ✅ Acesso thread-safe (índice pré-calculado, sem locks)
+        block_sums[block_idx] = local_sum;
+    }
+    
+    // Redução final (serial)
+    double total = 0.0;
+    for (double val : block_sums) {
+        total += val;
+    }
+    return total;
+}
+```
+
+**Por que funciona:**
+- ✅ Pré-alocação → nenhum `push_back`
+- ✅ Índice fixo calculado antes do loop → nenhum `size()`
+- ✅ Cada thread escreve em posição distinta → zero data races
+- ✅ Overhead = zero (vs locks)
+
+---
+
+### 🟡 OTIMIZAÇÃO FUTURA (Horizontal Sum)
+
+Atualmente:
+
+```cpp
+float tmp[8];
+_mm256_storeu_ps(tmp, sum_vec);
+local_sum = tmp[0] + ... + tmp[7];
+```
+
+Pode ser otimizado com (mas não é prioridade agora):
+
+```cpp
+// Opção A: _mm256_hadd_ps (menos instruções)
+__m256 v0 = _mm256_hadd_ps(sum_vec, sum_vec);
+__m256 v1 = _mm256_hadd_ps(v0, v0);
+local_sum = v1[0] + v1[4];  // Elementos 0 e 4 no registro
+
+// Opção B: Extração de 128-bit
+__m128 high = _mm256_extractf128_ps(sum_vec, 1);
+__m128 low = _mm256_castps256_ps128(sum_vec);
+__m128 sum128 = _mm_add_ps(high, low);
+// ... continuar com _mm_hadd_ps
+```
+
+**Status:** Deixar para Day 2 (otimização micro-scale)
+
+---
+
+## 🟡 CORREÇÃO 2: Fusion + OpenMP Separadas
+
+### Situação Atual
+
+```cpp
+if (N > threshold) {
+    // OpenMP sem SIMD fusion
+    #pragma omp parallel for simd
+    for (...) a[i] = a[i] * scale + offset;
+} else {
+    // SIMD fusion sem OpenMP
+    zmatrix_simd::fused_mul_add_f32(a, scale, offset, N);
+}
+```
+
+**Problema:** Quando OpenMP entra, você **não usa FMA** (multiply-fused-add)
+
+**Ganho perdido:** ~15-20% em operações fused (não é crítico agora)
+
+---
+
+### Solução Futura (POST-Day 5)
+
+```cpp
+// Depois você pode fazer:
+if (N > threshold) {
+    #pragma omp parallel for schedule(dynamic, BLOCK_SIZE/8)
+    for (size_t i = 0; i < N; i += BLOCK_SIZE) {
+        size_t end = std::min(i + BLOCK_SIZE, N);
+        zmatrix_simd::fused_mul_add_f32(&a[i], scale, offset, end - i);
+    }
+} else {
+    zmatrix_simd::fused_mul_add_f32(a, scale, offset, N);
+}
+```
+
+**Status:** Deixar para refactoring pós-Day 5 (não bloqueia implementação)
+
+---
+
+## 🟢 CORREÇÃO 3: DispatchMetrics Lazy (Futuro)
+
+### Situação Atual
+
+Calibração acontece em `PHP_MINIT_FUNCTION` (startup):
+
+```cpp
+PHP_MINIT_FUNCTION(zmatrix) {
+    DispatchMetrics::instance().calibrate();
+    // ... resto ...
+}
+```
+
+**Problema Futuro (não agora):**
+- Container com CPU variável
+- NUMA machines
+- CPU frequency scaling
+
+---
+
+### Solução Futura
+
+```cpp
+// Post-implementação: permitir override
+void DispatchMetrics::calibrate() {
+    const char* disable_env = getenv("ZMATRIX_DISABLE_CALIBRATION");
+    if (disable_env) return;  // User quer defaults
+    
+    // ... calibração normal ...
+}
+```
+
+**Status:** Anotar para v1.1 (não bloqueia v1.0)
+
+---
+
+## 📋 CHECKLIST REVISADO - DAY 1
+
+Aqui está a versão **corrigida** do Day 1:
+
+### Step 1.1: Tree Reduction com Pré-Alocação ✅
+
+```cpp
+// ✅ VERSÃO CORRIGIDA NO ROADMAP ACIMA
+```
+
+**Mudanças:**
+- [x] Pré-alocar `num_blocks`
+- [x] Remover `push_back`
+- [x] Usar índice fixo
+- [x] Adicionar comment sobre thread-safety
+
+---
+
+### Step 1.2: Integração em `sum()` - IGUAL ✅
+
+Sem mudanças (o método top-level está ok).
+
+---
+
+### Step 1.3: Integração em `max()` - ADAPTADO
+
+```cpp
+float max_f32_tree(const float* a, size_t n) {
+    if (n == 0) return std::numeric_limits<float>::quiet_NaN();
+    
+    const size_t BLOCK_SIZE = 256;
+    size_t num_blocks = (n + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    std::vector<float> block_maxs(num_blocks, std::numeric_limits<float>::lowest());
+    
+    #pragma omp parallel for schedule(static)
+    for (size_t b = 0; b < n; b += BLOCK_SIZE) {
+        size_t end = std::min(b + BLOCK_SIZE, n);
+        size_t block_idx = b / BLOCK_SIZE;
+        float local_max = std::numeric_limits<float>::lowest();
+        
+        for (size_t i = b; i < end; ++i) {
+            local_max = std::max(local_max, a[i]);
+        }
+        
+        block_maxs[block_idx] = local_max;
+    }
+    
+    float result = std::numeric_limits<float>::lowest();
+    for (float val : block_maxs) {
+        result = std::max(result, val);
+    }
+    return result;
+}
+```
+
+---
+
+### Step 1.4: Testes - SEM MUDANÇA ✅
+
+```php
+// tests/test_tree_reduction.php
+// (mesmo como estava)
+```
+
+---
+
+### Step 1.5: Benchmark - SEM MUDANÇA ✅
+
+```php
+// benchmarks/bench_tree_reduction.php
+// (mesmo como estava)
+```
+
+---
+
+## 🎯 META Final Revisada
+
+```
+Autograd + Tree Reduction + Fusion + Auto-Dispatch
+
+= Backend numérico competitivo com NumPy
+= Sem Python overhead
+= Com controle fino de hardware
+= Thread-safe e robusto
+```
+
+**Veredito:** ✅ **Pronto para começar Day 1**
+
+---
+
+## 📌 Próximos Passos
+
+1. **Hoje:** Implementar tree reduction (com correção #1)
+2. **Amanhã:** Integrar em `mean()` e `std()`
+3. **Day 3-4:** Fusion (sem otimização cruzada com OpenMP)
+4. **Day 5:** Auto-dispatch
+5. **Futuro:** Micro-otimizações (hadd_ps, NUMA awareness, etc)
+
+---
+
+*Documento v2 - Feedback Integrado*  
+*Pronto para produção ✅*
