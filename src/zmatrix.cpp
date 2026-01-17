@@ -340,7 +340,9 @@ struct ZTensor {
     ZTensor() = default;
 
     ZTensor(const ZTensor& other)
-        : data(other.data),
+        : requires_grad(other.requires_grad),
+          grad_fn(other.grad_fn),
+          data(other.data),
           shape(other.shape),
           strides(other.strides),
           offset(other.offset),
@@ -354,6 +356,10 @@ struct ZTensor {
         device_valid = false;
         host_valid = true;
 #endif
+        // Copia gradiente se existir
+        if (other.grad) {
+            grad = std::make_unique<ZTensor>(*other.grad);
+        }
     }
 
     ZTensor& operator=(const ZTensor& other) {
@@ -361,12 +367,18 @@ struct ZTensor {
 #ifdef HAVE_CUDA
         other.ensure_host();
         free_device();
+        // Copia gradiente se existir
+        if (other.grad) {
+            grad = std::make_unique<ZTensor>(*other.grad);
+        }
 #endif
         data = other.data;
         shape = other.shape;
         strides = other.strides;
         offset = other.offset;
         owns_data = other.owns_data;
+        requires_grad = other.requires_grad;
+        grad_fn = other.grad_fn;
 #ifdef HAVE_CUDA
         d_data = nullptr;
         d_capacity = 0;
@@ -377,12 +389,15 @@ struct ZTensor {
     }
 
     ZTensor(ZTensor&& other) noexcept
-        : data(std::move(other.data)),
+        : requires_grad(other.requires_grad),
+          grad_fn(std::move(other.grad_fn)),
+          data(std::move(other.data)),
           shape(std::move(other.shape)),
           strides(std::move(other.strides)),
           offset(other.offset),
           owns_data(other.owns_data)
     {
+        grad = std::move(other.grad);
 #ifdef HAVE_CUDA
         d_data = other.d_data;
         d_capacity = other.d_capacity;
