@@ -756,7 +756,7 @@ PHP_METHOD(ZTensor, divide)
     ZTensor &B = *other_ptr;
     const auto &shapeA = A.shape, &shapeB = B.shape;
 
-    // 4) Vetor‑1D de tamanho 1 → trate como escalar
+    // 4) Vetor‑1D de tamanho 1 → trate como escalar
     if (shapeB.size() == 1 && shapeB[0] == 1) {
         float scalar = B.data.data()[0];
         A.scalar_divide(scalar);
@@ -1670,26 +1670,26 @@ PHP_METHOD(ZTensor, sum)
     if (axis_zv && Z_TYPE_P(axis_zv) != IS_NULL) {
         // Type checking
         if (Z_TYPE_P(axis_zv) != IS_LONG) {
-            zend_throw_exception_ex(zend_ce_type_error, 0, 
-                "ZTensor::sum(): axis must be int|null, %s given", 
+            zend_throw_exception_ex(zend_ce_type_error, 0,
+                "ZTensor::sum(): axis must be int|null, %s given",
                 zend_zval_type_name(axis_zv));
             RETURN_THROWS();
         }
-        
+
         axis_val = Z_LVAL_P(axis_zv);
         size_t ndim = self_obj->tensor->shape.size();
-        
+
         // Empty tensor check
         if (ndim == 0) {
             zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_EMPTY_MATRIX, 0);
             RETURN_THROWS();
         }
-        
+
         // Normalize negative axis (e.g., -1 -> ndim-1)
         if (axis_val < 0) {
             axis_val = (zend_long)ndim + axis_val;
         }
-        
+
         // Bounds check
         if (axis_val < 0 || (size_t)axis_val >= ndim) {
             zend_throw_exception_ex(zend_ce_exception, 0,
@@ -1702,7 +1702,7 @@ PHP_METHOD(ZTensor, sum)
 
     try {
         ZTensor result;
-        
+
         if (axis_val == -1) {
             // Soma global: retorna tensor escalar de shape {1}
             double total = self_obj->tensor->sum();
@@ -1712,19 +1712,18 @@ PHP_METHOD(ZTensor, sum)
             // Soma por eixo: reduz dimensão do eixo especificado
             std::vector<size_t> result_shape = self_obj->tensor->shape;
             result_shape.erase(result_shape.begin() + axis_val);
-            
+
             result = ZTensor(result_shape);
             self_obj->tensor->soma(result, static_cast<int>(axis_val));
         }
-        
+
         zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
-    } 
+    }
     catch (const std::exception& e) {
         zend_throw_exception(zend_ce_exception, e.what(), 0);
         RETURN_THROWS();
     }
 }
-
 
 PHP_METHOD(ZTensor, broadcast)
 {
@@ -2382,6 +2381,66 @@ PHP_METHOD(ZTensor, sumAutograd)
     try {
         ZTensor result = ZTensor::sum_autograd(*a_obj->tensor);
         zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
+    } catch (const std::exception& e) {
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+        RETURN_THROWS();
+    }
+}
+
+PHP_METHOD(ZTensor, freeDevice)
+{
+    ZEND_PARSE_PARAMETERS_NONE();
+    zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
+    if (!self_obj->tensor) {
+        zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0);
+        RETURN_THROWS();
+    }
+    try {
+        self_obj->tensor->free_device();
+    } catch (const std::exception& e) {
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+        RETURN_THROWS();
+    }
+}
+
+
+
+PHP_METHOD(ZTensor, slice)
+{
+    zend_long axis, start, end;
+
+    ZEND_PARSE_PARAMETERS_START(3, 3)
+        Z_PARAM_LONG(axis)
+        Z_PARAM_LONG(start)
+        Z_PARAM_LONG(end)
+    ZEND_PARSE_PARAMETERS_END();
+
+    zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
+    if (!self_obj->tensor) {
+        zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0);
+        RETURN_THROWS();
+    }
+
+    try {
+        // Validar parâmetros
+        if (axis < 0 || start < 0 || end < 0) {
+            zend_throw_exception(zend_ce_exception, "Índices não podem ser negativos", 0);
+            RETURN_THROWS();
+        }
+
+        // Chamar método C++ slice
+        ZTensor sliced = self_obj->tensor->slice((size_t)axis, (size_t)start, (size_t)end);
+
+        // Empacotar resultado
+        object_init_ex(return_value, zmatrix_ce_ZTensor);
+        zmatrix_ztensor_object *res_obj = Z_MATRIX_ZTENSOR_P(return_value);
+        res_obj->tensor = new ZTensor(std::move(sliced));
+    } catch (const std::out_of_range& e) {
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+        RETURN_THROWS();
+    } catch (const std::invalid_argument& e) {
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+        RETURN_THROWS();
     } catch (const std::exception& e) {
         zend_throw_exception(zend_ce_exception, e.what(), 0);
         RETURN_THROWS();

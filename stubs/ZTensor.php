@@ -406,6 +406,23 @@ final class ZTensor
     }
 
     /**
+     * Extrai uma fatia (subarray) do tensor sem copiar dados
+     * 
+     * Cria uma VIEW do mesmo buffer com offset e shape ajustados.
+     * Operação de custo O(1) - sem cópia de dados.
+     * 
+     * @param int $axis Eixo ao longo do qual fazer slice
+     * @param int $start Índice inicial (inclusivo)
+     * @param int $end Índice final (exclusivo)
+     * @return ZTensor Uma VIEW do tensor com dimensão [axis] reduzida a [end-start]
+     * @throws RuntimeException Se axis >= ndim ou se start >= end ou end > shape[axis]
+     */
+    public function slice(int $axis, int $start, int $end): ZTensor
+    {
+    }
+
+
+    /**
      * Returns the number of dimensions of the tensor (ndim).
      *
      * Equivalent to count($tensor->shape()).

@@ -231,4 +231,10 @@ ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_matmul, 0, 0, 1)
     // ZEND_ARG_TYPE_INFO(0, use_blas, _IS_BOOL, 1) // Opcional para usar BLAS (não implementado aqui)
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_slice, 0, 0, 3)
+    ZEND_ARG_INFO(0, axis)
+    ZEND_ARG_INFO(0, start)
+    ZEND_ARG_INFO(0, end)
+ZEND_END_ARG_INFO()
+
 #endif /* ZMATRIX_ARGINFO_H */

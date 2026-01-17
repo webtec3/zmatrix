@@ -126,49 +126,49 @@ struct ZTensor;
 struct AutogradNode {
     // Parents (operandos que geraram este nó)
     std::vector<std::shared_ptr<ZTensor>> parents;
-    
+
     // Função backward para esta operação
     // Não recebe argumentos - ela captura tudo por closure
     std::function<void()> backward_fn;
-    
+
     // Identificador da operação (para debug)
     std::string op_name;
-    
+
     // Mutex para thread-safety na acumulação de gradientes dos pais
     mutable std::mutex backward_lock;
-    
+
     // Armazena o tensor resultado (fraco para evitar ciclos)
     std::weak_ptr<ZTensor> result_tensor;
-    
+
     // Ponteiro RAW ao tensor resultado para acesso rápido (CUIDADO: lifetime management)
     ZTensor* result_ptr_raw = nullptr;
-    
+
     // Ponteiros RAW aos pais para acesso rápido (CUIDADO: lifetime management)
     std::vector<ZTensor*> parents_raw;
-    
+
     AutogradNode() = default;
-    
+
     AutogradNode(const std::string& name) : op_name(name) {}
 };
 
 // --- Definição COMPLETA de ZTensor PRIMEIRO ---
 struct ZTensor {
     // ========== AUTOGRAD STATE ==========
-    
+
     // Flag: este tensor requer gradiente
     bool requires_grad = false;
-    
+
     // Gradiente acumulado (inicializa sob demanda)
     std::unique_ptr<ZTensor> grad;
-    
+
     // Nó do grafo computacional (nullptr para tensores folha)
     std::shared_ptr<AutogradNode> grad_fn = nullptr;
-    
+
     // Mutex para thread-safety na acumulação de gradientes
     mutable std::mutex grad_mutex;
-    
+
     // ========== MÉTODOS DE AUTOGRAD ==========
-    
+
     // Ativa rastreamento de gradientes
     ZTensor& requiresGrad(bool req = true) {
         requires_grad = req;
@@ -177,12 +177,12 @@ struct ZTensor {
         }
         return *this;
     }
-    
+
     // Retorna true se este tensor requer gradiente
     bool isRequiresGrad() const {
         return requires_grad;
     }
-    
+
     // Obtém ou cria o tensor de gradiente
     ZTensor& ensureGrad() {
         if (!grad) {
@@ -192,34 +192,34 @@ struct ZTensor {
         }
         return *grad;
     }
-    
+
     // Zera gradientes (apenas este tensor)
     void zeroGrad() {
         if (grad) {
             std::fill(grad->data.begin(), grad->data.end(), 0.0f);
         }
     }
-    
+
     // Obtém o gradiente (nullptr se não existir)
     const ZTensor* getGrad() const {
         return grad.get();
     }
-    
+
     // Acumula gradiente (+=) com thread-safety
     void accumulate_grad(const ZTensor& grad_in) {
         if (grad_in.shape != shape) {
             throw std::invalid_argument("Gradient shape mismatch in accumulate_grad");
         }
-        
+
         std::lock_guard<std::mutex> lock(grad_mutex);
-        
+
         ZTensor& g = ensureGrad();
         const size_t N = size();
         if (N == 0) return;
-        
+
         float* g_data = g.data.data();
         const float* gin_data = grad_in.data.data();
-        
+
 #if HAS_OPENMP
         if (N > ZMATRIX_PARALLEL_THRESHOLD) {
 #pragma omp parallel for simd schedule(static)
@@ -237,56 +237,56 @@ struct ZTensor {
         }
 #endif
     }
-    
+
     // Backward pass (reverse-mode autodiff)
     // Deve ser chamado apenas em tensores escalares
     void backward() {
-        // Validação: deve ser escalar
-        if (shape != std::vector<size_t>{1}) {
-            throw std::invalid_argument(
-                "backward() can only be called on scalar tensors (shape={1})"
-            );
-        }
-        
-        // Inicializa o gradiente deste tensor
-        ensureGrad();
-        grad->data[0] = 1.0f;
-        
-        // Percorre o grafo em DFS, visitando cada nó uma única vez
-        std::set<std::shared_ptr<AutogradNode>> visited;
-        std::set<ZTensor*> processed_nodes;
-        
-        std::function<void(std::shared_ptr<AutogradNode>, ZTensor*)> backward_recursive = 
-            [&](std::shared_ptr<AutogradNode> node, ZTensor* result_tensor) {
-                if (!node || visited.count(node)) return;
-                visited.insert(node);
-                
-                // Armazena ponteiro ao tensor resultado para acesso rápido no backward_fn
-                node->result_ptr_raw = result_tensor;
-                
-                // Executa backward_fn deste nó
-                if (node->backward_fn) {
-                    try {
-                        node->backward_fn();
-                    } catch (const std::exception& e) {
-                        // Log mas continua
+            // Validação: deve ser escalar
+            if (shape != std::vector<size_t>{1}) {
+                throw std::invalid_argument(
+                    "backward() can only be called on scalar tensors (shape={1})"
+                );
+            }
+
+            // Inicializa o gradiente deste tensor
+            ensureGrad();
+            grad->data[0] = 1.0f;
+
+            // Percorre o grafo em DFS, visitando cada nó uma única vez
+            std::set<std::shared_ptr<AutogradNode>> visited;
+            std::set<ZTensor*> processed_nodes;
+
+            std::function<void(std::shared_ptr<AutogradNode>, ZTensor*)> backward_recursive =
+                [&](std::shared_ptr<AutogradNode> node, ZTensor* result_tensor) {
+                    if (!node || visited.count(node)) return;
+                    visited.insert(node);
+
+                    // Armazena ponteiro ao tensor resultado para acesso rápido no backward_fn
+                    node->result_ptr_raw = result_tensor;
+
+                    // Executa backward_fn deste nó
+                    if (node->backward_fn) {
+                        try {
+                            node->backward_fn();
+                        } catch (const std::exception& e) {
+                            // Log mas continua
+                        }
                     }
-                }
-                
-                // Recursivamente backward para pais
-                for (const auto& parent_raw : node->parents_raw) {
-                    if (parent_raw && parent_raw->grad_fn) {
-                        backward_recursive(parent_raw->grad_fn, parent_raw);
+
+                    // Recursivamente backward para pais
+                    for (const auto& parent_raw : node->parents_raw) {
+                        if (parent_raw && parent_raw->grad_fn) {
+                            backward_recursive(parent_raw->grad_fn, parent_raw);
+                        }
                     }
-                }
-            };
-        
-        // Inicia backward neste nó
-        if (grad_fn) {
-            backward_recursive(grad_fn, this);
-        }
+                };
+
+            // Inicia backward neste nó
+            if (grad_fn) {
+                backward_recursive(grad_fn, this);
+            }
     }
-    
+
     std::vector<float> data; // <--- MUDANÇA: double para float
     std::vector<size_t> shape;
     std::vector<size_t> strides;
@@ -340,9 +340,7 @@ struct ZTensor {
     ZTensor() = default;
 
     ZTensor(const ZTensor& other)
-        : requires_grad(other.requires_grad),
-          grad_fn(other.grad_fn),
-          data(other.data),
+        : data(other.data),
           shape(other.shape),
           strides(other.strides),
           offset(other.offset),
@@ -369,8 +367,6 @@ struct ZTensor {
         strides = other.strides;
         offset = other.offset;
         owns_data = other.owns_data;
-        requires_grad = other.requires_grad;
-        grad_fn = other.grad_fn;
 #ifdef HAVE_CUDA
         d_data = nullptr;
         d_capacity = 0;
@@ -436,36 +432,36 @@ struct ZTensor {
     }
 
     void ensure_device() const {
-        if (device_valid) return;
-        size_t n = size();
-        if (n == 0) {
-            device_valid = true;
-            return;
-        }
-        if (!host_valid) {
-            throw std::runtime_error("Host data is not valid for device upload");
-        }
-        try {
-            if (!d_data || d_capacity < n) {
-                if (d_data) {
-                    cudaError_t err = cudaFree(d_data);
-                    if (err != cudaSuccess) {
-                        d_data = nullptr;
-                        throw std::runtime_error(std::string("cudaFree failed: ") + cudaGetErrorString(err));
-                    }
-                    d_data = nullptr; // Clear pointer on successful free
-                }
-                cuda_check(cudaMalloc(reinterpret_cast<void**>(&d_data), n * sizeof(float)), "cudaMalloc");
-                d_capacity = n;
+            if (device_valid) return;
+            size_t n = size();
+            if (n == 0) {
+                device_valid = true;
+                return;
             }
-            cuda_check(cudaMemcpy(d_data, data.data(), n * sizeof(float), cudaMemcpyHostToDevice), "cudaMemcpy H2D");
-            device_valid = true;
-        } catch (const std::exception&) {
-            d_data = nullptr;
-            d_capacity = 0;
-            device_valid = false;
-            throw;
-        }
+            if (!host_valid) {
+                throw std::runtime_error("Host data is not valid for device upload");
+            }
+            try {
+                if (!d_data || d_capacity < n) {
+                    if (d_data) {
+                        cudaError_t err = cudaFree(d_data);
+                        if (err != cudaSuccess) {
+                            d_data = nullptr;
+                            throw std::runtime_error(std::string("cudaFree failed: ") + cudaGetErrorString(err));
+                        }
+                        d_data = nullptr; // Clear pointer on successful free
+                    }
+                    cuda_check(cudaMalloc(reinterpret_cast<void**>(&d_data), n * sizeof(float)), "cudaMalloc");
+                    d_capacity = n;
+                }
+                cuda_check(cudaMemcpy(d_data, data.data(), n * sizeof(float), cudaMemcpyHostToDevice), "cudaMemcpy H2D");
+                device_valid = true;
+            } catch (const std::exception&) {
+                d_data = nullptr;
+                d_capacity = 0;
+                device_valid = false;
+                throw;
+            }
     }
 
     void ensure_host() const {
@@ -856,9 +852,6 @@ struct ZTensor {
 
 
     void scalar_divide(float scalar) {
-       if (scalar == 0.0f) {
-           throw std::invalid_argument("Cannot divide by zero");
-       }
        const size_t N = size();
            if (N == 0) return;
 #ifdef HAVE_CUDA
@@ -1110,7 +1103,49 @@ struct ZTensor {
          return result;
      }
 
+    // --- Slice (Zero-copy View) ---
+    /**
+     * Extrai uma fatia (subarray) do tensor sem copiar dados
+     * Cria uma VIEW do mesmo buffer com offset e shape ajustados
+     *
+     * @param axis Eixo ao longo do qual fazer slice
+     * @param start Índice inicial (inclusivo)
+     * @param end Índice final (exclusivo)
+     * @return ZTensor com mesmos dados mas offset/shape ajustados (zero-copy)
+     * @throws std::out_of_range Se axis >= ndim
+     * @throws std::invalid_argument Se start >= end ou end > shape[axis]
+     */
+    ZTensor slice(size_t axis, size_t start, size_t end) const {
+        // Validação do eixo
+        if (axis >= shape.size()) {
+            throw std::out_of_range("Eixo inválido para slice");
+        }
 
+        // Validação dos índices
+        if (start > end) {
+            throw std::invalid_argument("slice: start deve ser <= end");
+        }
+
+        if (end > shape[axis]) {
+            throw std::invalid_argument("slice: end excede dimensão " +
+                                       std::to_string(axis));
+        }
+
+        // Criar resultado (VIEW, não cópia)
+        ZTensor result;
+        result.shape = shape;  // Copia shape
+        result.shape[axis] = end - start;  // Ajusta dimensão sliceada
+        result.strides = strides;  // Copia strides (mesmos passos)
+        result.offset = offset + start * strides[axis];  // Novo offset
+        result.data = data;  // Compartilha buffer
+        result.owns_data = false;  // NÃO é dono dos dados
+
+        // Copia estado de autograd
+        result.requires_grad = requires_grad;
+        result.grad_fn = grad_fn;  // Mesmo computation node (backward irá processar)
+
+        return result;
+    }
 
     // --- Transpose (float) ---
     /**
@@ -2117,7 +2152,7 @@ struct ZTensor {
       }
 
     // ========== AUTOGRAD OPERATIONS (OUT-OF-PLACE) ==========
-    
+
     /**
      * Element-wise addition with autograd support
      * result = a + b
@@ -2127,15 +2162,15 @@ struct ZTensor {
         if (a.shape != b.shape) {
             throw std::invalid_argument(ZMATRIX_ERR_SHAPE_MISMATCH);
         }
-        
+
         ZTensor result(a.shape);
         const size_t N = a.size();
-        
+
         if (N > 0) {
             const float* a_data = a.data.data();
             const float* b_data = b.data.data();
             float* r_data = result.data.data();
-            
+
 #if HAS_OPENMP
             if (N > ZMATRIX_PARALLEL_THRESHOLD) {
 #pragma omp parallel for simd schedule(static)
@@ -2153,24 +2188,24 @@ struct ZTensor {
             }
 #endif
         }
-        
+
         // Autograd: cria nó se algum operando requer gradiente
         bool requires_grad = a.requires_grad || b.requires_grad;
         result.requires_grad = requires_grad;
-        
+
         if (requires_grad) {
             auto node = std::make_shared<AutogradNode>("add");
-            
+
             // Armazena pointers RAW aos operandos
             ZTensor* a_ptr_raw = const_cast<ZTensor*>(&a);
             ZTensor* b_ptr_raw = const_cast<ZTensor*>(&b);
             node->parents_raw = {a_ptr_raw, b_ptr_raw};
-            
+
             // Backward function para add
             // dy/da = 1, dy/db = 1
             bool a_req = a.requires_grad;
             bool b_req = b.requires_grad;
-            
+
             node->backward_fn = [node, a_ptr_raw, b_ptr_raw, a_req, b_req]() {
                 // Obtém o gradiente do tensor resultado
                 ZTensor* result_raw = node->result_ptr_raw;
@@ -2179,10 +2214,10 @@ struct ZTensor {
                     if (!result_shared) return;
                     result_raw = result_shared.get();
                 }
-                
+
                 const ZTensor* grad_result = result_raw->getGrad();
                 if (!grad_result) return;  // Nada a fazer
-                
+
                 // Para add: ambos os pais recebem o mesmo gradiente
                 if (a_req) {
                     a_ptr_raw->accumulate_grad(*grad_result);
@@ -2191,17 +2226,17 @@ struct ZTensor {
                     b_ptr_raw->accumulate_grad(*grad_result);
                 }
             };
-            
+
             result.grad_fn = node;
-            
+
             // Armazena resultado para que backward possa acessá-lo
             auto result_ptr = std::make_shared<ZTensor>(result);
             node->result_tensor = result_ptr;
         }
-        
+
         return result;
     }
-    
+
     /**
      * Element-wise subtraction with autograd support
      * result = a - b
@@ -2211,15 +2246,15 @@ struct ZTensor {
         if (a.shape != b.shape) {
             throw std::invalid_argument(ZMATRIX_ERR_SHAPE_MISMATCH);
         }
-        
+
         ZTensor result(a.shape);
         const size_t N = a.size();
-        
+
         if (N > 0) {
             const float* a_data = a.data.data();
             const float* b_data = b.data.data();
             float* r_data = result.data.data();
-            
+
 #if HAS_OPENMP
             if (N > ZMATRIX_PARALLEL_THRESHOLD) {
 #pragma omp parallel for simd schedule(static)
@@ -2237,22 +2272,22 @@ struct ZTensor {
             }
 #endif
         }
-        
+
         // Autograd
         bool requires_grad = a.requires_grad || b.requires_grad;
         result.requires_grad = requires_grad;
-        
+
         if (requires_grad) {
             auto node = std::make_shared<AutogradNode>("sub");
-            
+
             // Armazena pointers RAW aos operandos
             ZTensor* a_ptr_raw = const_cast<ZTensor*>(&a);
             ZTensor* b_ptr_raw = const_cast<ZTensor*>(&b);
             node->parents_raw = {a_ptr_raw, b_ptr_raw};
-            
+
             bool a_req = a.requires_grad;
             bool b_req = b.requires_grad;
-            
+
             node->backward_fn = [node, a_ptr_raw, b_ptr_raw, a_req, b_req]() {
                 ZTensor* result_raw = node->result_ptr_raw;
                 if (!result_raw) {
@@ -2260,10 +2295,10 @@ struct ZTensor {
                     if (!result_shared) return;
                     result_raw = result_shared.get();
                 }
-                
+
                 const ZTensor* grad_result = result_raw->getGrad();
                 if (!grad_result) return;
-                
+
                 if (a_req) {
                     a_ptr_raw->accumulate_grad(*grad_result);
                 }
@@ -2281,17 +2316,17 @@ struct ZTensor {
                     b_ptr_raw->accumulate_grad(neg_grad);
                 }
             };
-            
+
             result.grad_fn = node;
-            
+
             // Armazena resultado
             auto result_ptr = std::make_shared<ZTensor>(result);
             node->result_tensor = result_ptr;
         }
-        
+
         return result;
     }
-    
+
     /**
      * Element-wise multiplication with autograd support
      * result = a * b
@@ -2301,15 +2336,15 @@ struct ZTensor {
         if (a.shape != b.shape) {
             throw std::invalid_argument(ZMATRIX_ERR_SHAPE_MISMATCH);
         }
-        
+
         ZTensor result(a.shape);
         const size_t N = a.size();
-        
+
         if (N > 0) {
             const float* a_data = a.data.data();
             const float* b_data = b.data.data();
             float* r_data = result.data.data();
-            
+
 #if HAS_OPENMP
             if (N > ZMATRIX_PARALLEL_THRESHOLD) {
 #pragma omp parallel for simd schedule(static)
@@ -2327,26 +2362,26 @@ struct ZTensor {
             }
 #endif
         }
-        
+
         // Autograd
         bool requires_grad = a.requires_grad || b.requires_grad;
         result.requires_grad = requires_grad;
-        
+
         if (requires_grad) {
             auto node = std::make_shared<AutogradNode>("mul");
-            
+
             // Armazena pointers RAW aos operandos
             ZTensor* a_ptr_raw = const_cast<ZTensor*>(&a);
             ZTensor* b_ptr_raw = const_cast<ZTensor*>(&b);
             node->parents_raw = {a_ptr_raw, b_ptr_raw};
-            
+
             bool a_req = a.requires_grad;
             bool b_req = b.requires_grad;
-            
+
             // Armazena cópias dos valores para usar no backward
             auto a_copy = std::make_shared<ZTensor>(a);
             auto b_copy = std::make_shared<ZTensor>(b);
-            
+
             node->backward_fn = [node, a_ptr_raw, b_ptr_raw, a_copy, b_copy, a_req, b_req]() {
                 ZTensor* result_raw = node->result_ptr_raw;
                 if (!result_raw) {
@@ -2354,49 +2389,49 @@ struct ZTensor {
                     if (!result_shared) return;
                     result_raw = result_shared.get();
                 }
-                
+
                 const ZTensor* grad_result = result_raw->getGrad();
                 if (!grad_result) return;
-                
+
                 const size_t N = grad_result->size();
-                
+
                 // da = b * grad_output
                 if (a_req && N > 0) {
                     ZTensor grad_a(grad_result->shape);
                     const float* b_data = b_copy->data.data();
                     const float* grad_data = grad_result->data.data();
                     float* grad_a_data = grad_a.data.data();
-                    
+
                     for (size_t i = 0; i < N; ++i) {
                         grad_a_data[i] = b_data[i] * grad_data[i];
                     }
                     a_ptr_raw->accumulate_grad(grad_a);
                 }
-                
+
                 // db = a * grad_output
                 if (b_req && N > 0) {
                     ZTensor grad_b(grad_result->shape);
                     const float* a_data = a_copy->data.data();
                     const float* grad_data = grad_result->data.data();
                     float* grad_b_data = grad_b.data.data();
-                    
+
                     for (size_t i = 0; i < N; ++i) {
                         grad_b_data[i] = a_data[i] * grad_data[i];
                     }
                     b_ptr_raw->accumulate_grad(grad_b);
                 }
             };
-            
+
             result.grad_fn = node;
-            
+
             // Armazena resultado
             auto result_ptr = std::make_shared<ZTensor>(result);
             node->result_tensor = result_ptr;
         }
-        
+
         return result;
     }
-    
+
     /**
      * Sum reduction with autograd support
      * result = sum(tensor)  -> escalar
@@ -2405,7 +2440,7 @@ struct ZTensor {
     static ZTensor sum_autograd(const ZTensor& t) {
         const size_t N = t.size();
         double total = 0.0;
-        
+
         if (N > 0) {
             const float* data = t.data.data();
 #if HAS_OPENMP
@@ -2425,25 +2460,25 @@ struct ZTensor {
             }
 #endif
         }
-        
+
         // Resultado é escalar
         ZTensor result({1});
         result.data[0] = static_cast<float>(total);
-        
+
         // Autograd
         result.requires_grad = t.requires_grad;
-        
+
         if (t.requires_grad) {
             auto node = std::make_shared<AutogradNode>("sum");
-            
+
             // Armazena pointer RAW ao operando
             ZTensor* t_ptr_raw = const_cast<ZTensor*>(&t);
             node->parents_raw = {t_ptr_raw};
-            
+
             // Armazena shape original para broadcast no backward
             auto input_shape = t.shape;
             auto input_size = t.size();
-            
+
             node->backward_fn = [node, t_ptr_raw, input_shape, input_size]() {
                 ZTensor* result_raw = node->result_ptr_raw;
                 if (!result_raw) {
@@ -2451,13 +2486,13 @@ struct ZTensor {
                     if (!result_shared) return;
                     result_raw = result_shared.get();
                 }
-                
+
                 const ZTensor* grad_result = result_raw->getGrad();
                 if (!grad_result) return;
-                
+
                 // grad_input[i] = grad_result[0] para cada i
                 float grad_val = grad_result->data[0];
-                
+
                 ZTensor grad_input(input_shape);
                 if (input_size > 0) {
                     float* grad_data = grad_input.data.data();
@@ -2465,17 +2500,17 @@ struct ZTensor {
                         grad_data[i] = grad_val;
                     }
                 }
-                
+
                 t_ptr_raw->accumulate_grad(grad_input);
             };
-            
+
             result.grad_fn = node;
-            
+
             // Armazena resultado
             auto result_ptr = std::make_shared<ZTensor>(result);
             node->result_tensor = result_ptr;
         }
-        
+
         return result;
     }
 
@@ -2699,6 +2734,7 @@ static const zend_function_entry zmatrix_ztensor_methods[] = {
     PHP_ME(ZTensor, toGpu,            arginfo_ztensor_no_args,     ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, toCpu,            arginfo_ztensor_no_args,     ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, isOnGpu,          arginfo_ztensor_isOnGpu,     ZEND_ACC_PUBLIC)
+    PHP_ME(ZTensor, freeDevice,      arginfo_ztensor_no_args,     ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, softmax,          arginfo_ztensor_softmax,            ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, softmaxDerivative,   arginfo_ztensor_no_args, ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, relu,             arginfo_ztensor_relu,               ZEND_ACC_PUBLIC)
@@ -2711,6 +2747,7 @@ static const zend_function_entry zmatrix_ztensor_methods[] = {
     PHP_ME(ZTensor, log,              arginfo_ztensor_log,                ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, sqrt,             arginfo_ztensor_sqrt,               ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, reshape,          arginfo_ztensor_reshape,            ZEND_ACC_PUBLIC)
+    PHP_ME(ZTensor, slice,            arginfo_ztensor_slice,              ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, arr,              arginfo_ztensor_static_arr,         ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)
     // Métodos Estáticos de Criação Adicionais
     PHP_ME(ZTensor, randn,            arginfo_ztensor_static_randn,     ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)

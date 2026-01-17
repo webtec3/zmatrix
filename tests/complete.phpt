@@ -75,7 +75,7 @@ echo "softmaxDerivative=" . (ZTensor::arr([[1,2,3]])->softmax()->softmaxDerivati
 
 echo "\n=== REDUÇÃO E COMPARAÇÃO ===\n";
 $t = ZTensor::arr([1,2,3,4]);
-echo "sum=" . $t->sum($t) . "\n";
+echo "sum=" . $t->sum() . "\n";
 echo "sumtotal=" . ZTensor::arr([[1,2],[3,4]])->sumtotal() . "\n";
 echo "mean=" . ZTensor::arr([1,2,3,4])->mean() . "\n";
 echo "min=" . ZTensor::arr([4,2,1,3])->min() . "\n";

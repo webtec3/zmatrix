@@ -1604,3 +1604,59 @@ Contributions are welcome! Feel free to open issues or submit pull requests.
 ## 📄 License
 
 MIT License. See `LICENSE`.
+
+### Slice - `slice()`
+
+Create a view (no copy) of a tensor along a specific axis. This is an O(1) operation.
+
+```php
+$tensor = ZTensor::arr([
+    [1, 2, 3],
+    [4, 5, 6],
+    [7, 8, 9]
+]);
+
+// Slice rows: get rows from index 0 to 2 (exclusive end)
+$rows_0_2 = $tensor->slice(0, 0, 2);
+echo "Rows [0:2]:\n";
+print_r($rows_0_2->toArray());
+// Output: [[1, 2, 3], [4, 5, 6]]
+
+// Slice rows: get rows from index 1 to 3
+$rows_1_3 = $tensor->slice(0, 1, 3);
+echo "Rows [1:3]:\n";
+print_r($rows_1_3->toArray());
+// Output: [[4, 5, 6], [7, 8, 9]]
+
+// Slice columns: get columns from index 0 to 2
+$cols_0_2 = $tensor->slice(1, 0, 2);
+echo "Cols [0:2]:\n";
+print_r($cols_0_2->toArray());
+// Output: [[1, 2], [4, 5], [7, 8]]
+
+// Slice columns: get columns from index 1 to 3
+$cols_1_3 = $tensor->slice(1, 1, 3);
+echo "Cols [1:3]:\n";
+print_r($cols_1_3->toArray());
+// Output: [[2, 3], [5, 6], [8, 9]]
+
+// Works on GPU tensors too
+$gpu_tensor = $tensor->toGPU();
+$gpu_sliced = $gpu_tensor->slice(0, 0, 2);
+$result = $gpu_sliced->toCPU();
+echo "GPU slice result:\n";
+print_r($result->toArray());
+```
+
+**Parameters:**
+- `int $axis`: Axis along which to slice (0 for rows, 1 for columns, etc.)
+- `int $start`: Start index (inclusive)
+- `int $end`: End index (exclusive)
+
+**Returns:** `ZTensor` - A view of the tensor with the specified dimension reduced
+
+**Notes:**
+- Returns a view (not a copy), so no memory overhead
+- O(1) time complexity
+- Works on both CPU and GPU tensors
+- Useful for batching, windowing, and tensor manipulation
