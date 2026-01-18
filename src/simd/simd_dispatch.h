@@ -221,6 +221,50 @@ inline void mul_f32(float* a, const float* b, size_t n) {
 #endif
 }
 
+inline void divide_f32(float* a, const float* b, size_t n) {
+#if HAS_AVX2
+    const size_t vec_size = 8;
+    const size_t aligned_n = (n / vec_size) * vec_size;
+    const __m256 zero = _mm256_setzero_ps();
+
+    for (size_t i = 0; i < aligned_n; i += vec_size) {
+        __m256 vb = _mm256_loadu_ps(&b[i]);
+        __m256 mask = _mm256_cmp_ps(vb, zero, _CMP_EQ_OS);
+        
+        // Se houver zero, cair para fallback elemento a elemento
+        if (_mm256_movemask_ps(mask) != 0) {
+            // Há zeros neste bloco - processar elemento a elemento com validação
+            for (size_t j = i; j < i + vec_size && j < n; ++j) {
+                if (b[j] == 0.0f) {
+                    throw std::runtime_error("Divisão por zero detectada");
+                }
+                a[j] /= b[j];
+            }
+        } else {
+            // Nenhum zero - pode fazer divisão vetorial segura
+            __m256 va = _mm256_loadu_ps(&a[i]);
+            __m256 result = _mm256_div_ps(va, vb);
+            _mm256_storeu_ps(&a[i], result);
+        }
+    }
+
+    // Resto não-alinhado com verificação de zero
+    for (size_t i = aligned_n; i < n; ++i) {
+        if (b[i] == 0.0f) {
+            throw std::runtime_error("Divisão por zero detectada");
+        }
+        a[i] /= b[i];
+    }
+#else
+    // Fallback escalar com verificação de zero
+    for (size_t i = 0; i < n; ++i) {
+        if (b[i] == 0.0f) {
+            throw std::runtime_error("Divisão por zero detectada");
+        }
+        a[i] /= b[i];
+    }
+#endif
+}
 
 inline void relu_f32(float* a, size_t n) {
 #if HAS_AVX2

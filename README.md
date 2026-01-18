@@ -66,6 +66,35 @@ make -j$(nproc)
 sudo make install
 ```
 
+# Build optimal com todas as otimizações
+```bash
+phpize
+./configure \
+    --enable-cuda \
+    --with-cuda-path=/usr/local/cuda \
+    --enable-openmp \
+    --enable-simd \
+    --with-cblas \
+    --with-cflags="-O3 -march=native -mavx2"
+make clean
+make -j$(nproc)
+sudo make install
+```
+
+# Build conservador (compatibilidade máxima)
+```bash
+phpize
+./configure \
+    --enable-cuda \
+    --enable-openmp \
+    --disable-simd \
+    --with-cflags="-O2"
+make clean
+make -j$(nproc)
+sudo make install
+```
+
+
 Add the extension to your php.ini:
 
 ```

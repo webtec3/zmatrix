@@ -18,6 +18,8 @@ extern "C" void gpu_scalar_add(float* a, float value, size_t n);
 extern "C" void gpu_scalar_sub(float* a, float value, size_t n);
 extern "C" void gpu_scalar_mul(float* a, float value, size_t n);
 extern "C" void gpu_scalar_div(float* a, float value, size_t n);
+extern "C" void gpu_matmul(const float* a, const float* b, float* c, size_t m, size_t k, size_t n);
+extern "C" void gpu_matmul_device(const float* d_a, const float* d_b, float* d_c, size_t m, size_t k, size_t n);
 
 extern "C" void gpu_add_device(float* d_a, const float* d_b, size_t n);
 extern "C" void gpu_sub_device(float* d_a, const float* d_b, size_t n);

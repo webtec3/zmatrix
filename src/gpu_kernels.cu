@@ -1,10 +1,12 @@
 // gpu_kernels.cu
 #include <cuda_runtime.h>
+#include <cublas_v2.h>
 #include <stddef.h>
 #include <math.h>
 #include <cstdio>
 #include <cstdlib>
 #include <dlfcn.h>
+#include <mutex>
 
 // ========== WSL CUDA DRIVER FALLBACK ==========
 // Função para encontrar libcuda.so com fallback para caminhos especiais (WSL)
@@ -636,3 +638,88 @@ extern "C" void gpu_scalar_div_device(float* d_a, float value, size_t n) {
     kernel_scalar_div<<<blocks, threads>>>(d_a, value, n);
     cudaDeviceSynchronize();
 }
+// ========== GPU MATMUL FORWARD DECLARATIONS ==========
+extern "C" void gpu_matmul_device(const float* d_a, const float* d_b, float* d_c, size_t m, size_t k, size_t n);
+
+// ========== GPU MATMUL IMPLEMENTATIONS ==========
+// gpu_matmul: Host I/O version (copies data to GPU, computes, copies back)
+extern "C" void gpu_matmul(const float* a, const float* b, float* c, size_t m, size_t k, size_t n) {
+    if (!a || !b || !c) return;
+    
+    size_t size_a = m * k;
+    size_t size_b = k * n;
+    size_t size_c = m * n;
+    
+    float *d_a = nullptr, *d_b = nullptr, *d_c = nullptr;
+    
+    // Allocate device memory
+    if (cudaMalloc(&d_a, size_a * sizeof(float)) != cudaSuccess ||
+        cudaMalloc(&d_b, size_b * sizeof(float)) != cudaSuccess ||
+        cudaMalloc(&d_c, size_c * sizeof(float)) != cudaSuccess) {
+        if (d_a) cudaFree(d_a);
+        if (d_b) cudaFree(d_b);
+        if (d_c) cudaFree(d_c);
+        return;
+    }
+    
+    // Copy data to device
+    cudaMemcpy(d_a, a, size_a * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_b, b, size_b * sizeof(float), cudaMemcpyHostToDevice);
+    
+    // Call device version
+    gpu_matmul_device(d_a, d_b, d_c, m, k, n);
+    
+    // Copy result back to host
+    cudaMemcpy(c, d_c, size_c * sizeof(float), cudaMemcpyDeviceToHost);
+    
+    // Free device memory
+    cudaFree(d_a);
+    cudaFree(d_b);
+    cudaFree(d_c);
+}
+
+// gpu_matmul_device: Device-only version (assumes pointers are already on GPU)
+extern "C" void gpu_matmul_device(const float* d_a, const float* d_b, float* d_c, size_t m, size_t k, size_t n) {
+    if (!d_a || !d_b || !d_c) return;
+    
+    static cublasHandle_t handle = nullptr;
+    static std::mutex handle_mutex;
+    
+    {
+        std::lock_guard<std::mutex> lock(handle_mutex);
+        if (!handle) {
+            if (cublasCreate(&handle) != CUBLAS_STATUS_SUCCESS) {
+                return;
+            }
+        }
+    }
+    
+    // C = A * B where A is m×k, B is k×n
+    // CUBLAS uses column-major order, so we compute B^T * A^T = (A * B)^T
+    // To get C = A * B in row-major, we compute: C = B^T * A^T in column-major
+    
+    float alpha = 1.0f, beta = 0.0f;
+    cublasStatus_t status = cublasSgemm(
+        handle,
+        CUBLAS_OP_N,  // op_B: no transpose on B (which is A^T in col-major)
+        CUBLAS_OP_N,  // op_A: no transpose on A (which is B^T in col-major)
+        m, n, k,
+        &alpha,
+        d_a, m,       // A in row-major is A^T in column-major with ld=m
+        d_b, k,       // B in row-major is B^T in column-major with ld=k
+        &beta,
+        d_c, m        // C in row-major with ld=m
+    );
+    
+    if (status != CUBLAS_STATUS_SUCCESS) {
+        const char *dbg = std::getenv("ZMATRIX_GPU_DEBUG");
+        if (dbg && dbg[0] == '1') {
+            std::fprintf(stderr, "[zmatrix][gpu] gpu_matmul_device: cublasSgemm failed with status %d\n", status);
+        }
+        return;
+    }
+    
+    cudaDeviceSynchronize();
+}
+
+// ========== GPU MATMUL FORWARD DECLARATIONS ==========

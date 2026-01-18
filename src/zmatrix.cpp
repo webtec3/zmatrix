@@ -78,7 +78,7 @@
 #define ZMATRIX_ERR_OVERFLOW "Internal computation exceeded the maximum limit (overflow)"
 #define ZMATRIX_ERR_UNSUPPORTED_OP "Operation not supported for this tensor type/dimension"
 
-#define ZMATRIX_PARALLEL_THRESHOLD 40000
+#define ZMATRIX_PARALLEL_THRESHOLD 10000000  // Disable OpenMP - its slower!
 
 #define ZMATRIX_GPU_THRESHOLD 200000
 
@@ -647,13 +647,6 @@ struct ZTensor {
            float * __restrict__ a = data.data();
            const float * __restrict__ b = other.data.data();
 
-        #if defined(HAVE_CUDA)
-           if (zmatrix_should_use_gpu(N)) {
-               zmatrix_gpu_debug("add", N);
-               gpu_add(a, b, N);
-               return;
-           }
-        #endif
 
         #if HAS_OPENMP
            if (N > ZMATRIX_PARALLEL_THRESHOLD) {
@@ -784,13 +777,6 @@ struct ZTensor {
         float * __restrict__ a = data.data();
         const float * __restrict__ b = other.data.data();
 
-        #if defined(HAVE_CUDA)
-        if (zmatrix_should_use_gpu(N)) {
-            zmatrix_gpu_debug("sub", N);
-            gpu_sub(a, b, N);
-            return;
-        }
-        #endif
 
         #if HAS_OPENMP
         if (N > ZMATRIX_PARALLEL_THRESHOLD) {
@@ -839,13 +825,6 @@ struct ZTensor {
         float * __restrict__ a = data.data();
         const float * __restrict__ b = other.data.data();
 
-        #if defined(HAVE_CUDA)
-        if (zmatrix_should_use_gpu(N)) {
-            zmatrix_gpu_debug("mul", N);
-            gpu_mul(a, b, N);
-            return;
-        }
-        #endif
 
         #if HAS_OPENMP
         if (N > ZMATRIX_PARALLEL_THRESHOLD) {
@@ -879,13 +858,6 @@ struct ZTensor {
            ensure_host();
 #endif
            float * __restrict__ a = data.data();
-        #if defined(HAVE_CUDA)
-           if (zmatrix_should_use_gpu(N)) {
-               zmatrix_gpu_debug("scalar_div", N);
-               gpu_scalar_div(a, scalar, N);
-               return;
-           }
-        #endif
            #if HAS_OPENMP
            if (N > ZMATRIX_PARALLEL_THRESHOLD) {
 #pragma omp parallel for simd schedule(static)
@@ -920,11 +892,6 @@ struct ZTensor {
 #endif
         float * __restrict__ a = data.data();
         #if defined(HAVE_CUDA)
-        if (zmatrix_should_use_gpu(N)) {
-            zmatrix_gpu_debug("scalar_mul", N);
-            gpu_scalar_mul(a, scalar, N);
-            return;
-        }
         #endif
         #if HAS_OPENMP
         if (N > ZMATRIX_PARALLEL_THRESHOLD) {
@@ -958,11 +925,6 @@ struct ZTensor {
 #endif
         float *ptr = data.data();
         #if defined(HAVE_CUDA)
-        if (zmatrix_should_use_gpu(N)) {
-            zmatrix_gpu_debug("scalar_add", N);
-            gpu_scalar_add(ptr, value, N);
-            return;
-        }
         #endif
 
         #if HAS_OPENMP
@@ -995,13 +957,6 @@ struct ZTensor {
         ensure_host();
 #endif
         float *ptr = data.data();
-        #if defined(HAVE_CUDA)
-        if (zmatrix_should_use_gpu(N)) {
-            zmatrix_gpu_debug("scalar_sub", N);
-            gpu_scalar_sub(ptr, value, N);
-            return;
-        }
-        #endif
 
         #if HAS_OPENMP
         if (N > ZMATRIX_PARALLEL_THRESHOLD) {
@@ -1258,13 +1213,6 @@ struct ZTensor {
          ensure_host();
 #endif
          float * __restrict__ a = data.data();
-        #if defined(HAVE_CUDA)
-         if (zmatrix_should_use_gpu(N)) {
-             zmatrix_gpu_debug("abs", N);
-             gpu_abs(a, N);
-             return;
-         }
-        #endif
          #if HAS_OPENMP
          if (N > ZMATRIX_PARALLEL_THRESHOLD) {
 #pragma omp parallel for simd schedule(static)
@@ -1296,13 +1244,6 @@ struct ZTensor {
         ensure_host();
 #endif
         float * __restrict__ a = data.data();
-        #if defined(HAVE_CUDA)
-        if (zmatrix_should_use_gpu(N)) {
-            zmatrix_gpu_debug("sigmoid", N);
-            gpu_sigmoid(a, N);
-            return;
-        }
-        #endif
         #if HAS_OPENMP
         if (N > ZMATRIX_PARALLEL_THRESHOLD) {
             #pragma omp parallel for simd schedule(static)
@@ -1368,13 +1309,6 @@ struct ZTensor {
 #endif
         float * __restrict__ a = data.data();
 
-        #if defined(HAVE_CUDA)
-        if (zmatrix_should_use_gpu(N)) {
-            zmatrix_gpu_debug("relu", N);
-            gpu_relu(a, N);
-            return;
-        }
-        #endif
 
         #if HAS_OPENMP
         if (N > ZMATRIX_PARALLEL_THRESHOLD) {
@@ -1436,13 +1370,6 @@ struct ZTensor {
         ensure_host();
 #endif
         float * __restrict__ a = data.data();
-        #if defined(HAVE_CUDA)
-        if (zmatrix_should_use_gpu(N)) {
-            zmatrix_gpu_debug("tanh", N);
-            gpu_tanh(a, N);
-            return;
-        }
-        #endif
 
         #if HAS_OPENMP
         if (N > ZMATRIX_PARALLEL_THRESHOLD) {
@@ -1508,13 +1435,6 @@ struct ZTensor {
         ensure_host();
 #endif
         float* __restrict__ a = data.data();
-        #if defined(HAVE_CUDA)
-        if (zmatrix_should_use_gpu(N)) {
-            zmatrix_gpu_debug("leaky_relu", N);
-            gpu_leaky_relu(a, alpha, N);
-            return;
-        }
-        #endif
 
         #if HAS_OPENMP
         if (N > ZMATRIX_PARALLEL_THRESHOLD) {
@@ -1548,13 +1468,6 @@ struct ZTensor {
         ensure_host();
 #endif
         float* __restrict__ a = data.data();
-        #if defined(HAVE_CUDA)
-        if (zmatrix_should_use_gpu(N)) {
-            zmatrix_gpu_debug("leaky_relu_derivative", N);
-            gpu_leaky_relu_derivative(a, alpha, N);
-            return;
-        }
-        #endif
 
         #if HAS_OPENMP
         if (N > ZMATRIX_PARALLEL_THRESHOLD) {
@@ -1748,13 +1661,6 @@ struct ZTensor {
         ensure_host();
 #endif
         float * __restrict__ a = data.data();
-        #if defined(HAVE_CUDA)
-        if (zmatrix_should_use_gpu(N)) {
-            zmatrix_gpu_debug("exp", N);
-            gpu_exp(a, N);
-            return;
-        }
-        #endif
         #if HAS_OPENMP
         if (N > ZMATRIX_PARALLEL_THRESHOLD) {
            #pragma omp parallel for simd schedule(static)
