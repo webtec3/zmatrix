@@ -112,7 +112,8 @@ if ($do_cpu_compare) {
 
     // elementwise
     set_force_cpu(false);
-    $a_gpu = ZTensor::arr($baseA); $b_gpu = ZTensor::arr($baseB);
+    $a_gpu = ZTensor::arr($baseA);
+    $b_gpu = ZTensor::arr($baseB);
     [$g_avg, $g_min, $g_max] = bench("add", function() use ($a_gpu, $b_gpu) { $a_gpu->add($b_gpu); }, $iters);
     set_force_cpu(true);
     $a_cpu = ZTensor::arr($baseA); $b_cpu = ZTensor::arr($baseB);
