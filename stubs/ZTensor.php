@@ -98,19 +98,25 @@ final class ZTensor
     }
 
     /**
-     * Sums all elements of the tensor or along a specific axis.
+     * Sum of tensor elements.
      *
-     * - If `$axis` is `null`, returns a scalar tensor with the total sum of all elements.
-     * - If `$axis` is an integer, it sums along the specified axis and writes the result into `$other`.
+     * If axis is null, returns the global sum of all elements.
+     * If axis is provided, reduces the tensor along the given axis.
      *
-     * @param ZTensor|array<int|float> $other Output tensor for the result (requires a compatible shape if $axis is an integer).
-     * @param int|null $axis The axis to sum along, or null for a total sum.
-     * @return ZTensor A new tensor containing the total sum (or returns $this if summing by axis into an output tensor).
-     * @throws RuntimeException If shapes are incompatible or the axis is invalid.
+     * Negative axis values are supported (e.g., -1 = last axis).
+     *
+     * Examples:
+     *   $t->sum();        // global sum
+     *   $t->sum(0);       // sum along axis 0
+     *   $t->sum(-1);      // sum along last axis
+     *
+     * @param int|null $axis Axis to reduce, or null for global sum
+     * @return ZTensor
+     *
+     * @throws \TypeError   If axis is not int|null
+     * @throws \Exception  If axis is out of bounds or tensor is empty
      */
-    public function sum(ZTensor|array|null $other = null, int|null $axis = null): ZTensor
-    {
-    }
+    public function sum(?int $axis = null): ZTensor {}
 
     /**
      * Clips the tensor values within a specified range.

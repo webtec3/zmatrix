@@ -182,8 +182,7 @@ ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_static_clip_range, 0, 0, 3)
     ZEND_ARG_TYPE_INFO(0, max, IS_DOUBLE, 0)
 ZEND_END_ARG_INFO()
 
-ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_sum_flex, 0, 0, 1)
-    ZEND_ARG_INFO(0, other) // Ztensor ou array
+ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_sum_flex, 0, 0, 0)
     ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, axis, IS_LONG, 1, "null")
 ZEND_END_ARG_INFO()
 

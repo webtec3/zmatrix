@@ -29,6 +29,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <sstream>
+#include <unordered_set>
 #ifdef HAVE_CUDA
 #include <cuda_runtime.h>
 #endif
@@ -241,50 +242,52 @@ struct ZTensor {
     // Backward pass (reverse-mode autodiff)
     // Deve ser chamado apenas em tensores escalares
     void backward() {
-            // Validação: deve ser escalar
-            if (shape != std::vector<size_t>{1}) {
-                throw std::invalid_argument(
-                    "backward() can only be called on scalar tensors (shape={1})"
-                );
+        // 1) Deve ser escalar
+        if (shape != std::vector<size_t>{1}) {
+            throw std::invalid_argument(
+                "backward() can only be called on scalar tensors (shape={1})"
+            );
+        }
+
+        // 2) Gradiente inicial
+        ensureGrad();
+        grad->data[0] = 1.0f;
+
+        if (!grad_fn) return;
+
+        // 3) Ordenação topológica (DFS sem recursão profunda)
+        std::vector<std::shared_ptr<AutogradNode>> topo;
+        topo.reserve(128);
+
+        std::unordered_set<AutogradNode*> visited;
+        visited.reserve(128);
+
+        std::vector<std::shared_ptr<AutogradNode>> stack;
+        stack.push_back(grad_fn);
+
+        while (!stack.empty()) {
+            auto node = stack.back();
+            stack.pop_back();
+
+            if (!node || visited.count(node.get())) continue;
+            visited.insert(node.get());
+
+            topo.push_back(node);
+
+            for (auto* parent : node->parents_raw) {
+                if (parent && parent->grad_fn) {
+                    stack.push_back(parent->grad_fn);
+                }
             }
+        }
 
-            // Inicializa o gradiente deste tensor
-            ensureGrad();
-            grad->data[0] = 1.0f;
-
-            // Percorre o grafo em DFS, visitando cada nó uma única vez
-            std::set<std::shared_ptr<AutogradNode>> visited;
-            std::set<ZTensor*> processed_nodes;
-
-            std::function<void(std::shared_ptr<AutogradNode>, ZTensor*)> backward_recursive =
-                [&](std::shared_ptr<AutogradNode> node, ZTensor* result_tensor) {
-                    if (!node || visited.count(node)) return;
-                    visited.insert(node);
-
-                    // Armazena ponteiro ao tensor resultado para acesso rápido no backward_fn
-                    node->result_ptr_raw = result_tensor;
-
-                    // Executa backward_fn deste nó
-                    if (node->backward_fn) {
-                        try {
-                            node->backward_fn();
-                        } catch (const std::exception& e) {
-                            // Log mas continua
-                        }
-                    }
-
-                    // Recursivamente backward para pais
-                    for (const auto& parent_raw : node->parents_raw) {
-                        if (parent_raw && parent_raw->grad_fn) {
-                            backward_recursive(parent_raw->grad_fn, parent_raw);
-                        }
-                    }
-                };
-
-            // Inicia backward neste nó
-            if (grad_fn) {
-                backward_recursive(grad_fn, this);
+        // 4) Backward na ordem reversa
+        for (auto it = topo.rbegin(); it != topo.rend(); ++it) {
+            auto& node = *it;
+            if (node->backward_fn) {
+                node->backward_fn(); // exceção sobe
             }
+        }
     }
 
     std::vector<float> data; // <--- MUDANÇA: double para float

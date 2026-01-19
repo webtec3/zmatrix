@@ -1,12 +1,22 @@
 ## 🔬 Autograd (Diferenciação Automática) — Infraestrutura Experimental
 
-ZMatrix agora suporta a infraestrutura mínima para diferenciação automática (autograd), inspirada em PyTorch/Micrograd. Por padrão, não há overhead nem alteração de comportamento numérico.
+ZMatrix agora suporta a infraestrutura para diferenciação automática (autograd), inspirada em PyTorch/Micrograd. A implementação inclui:
+
+### Status de Implementação
+
+| Recurso | Status | Descrição |
+|---------|--------|-----------|
+| `requiresGrad()` / `isRequiresGrad()` | ✅ Implementado | Controla rastreamento de gradientes |
+| Métodos autograd (`*Autograd()`) | ✅ Implementado | `addAutograd()`, `subAutograd()`, `mulAutograd()`, `sumAutograd()` |
+| Campos de gradiente | ✅ Implementado | `.grad`, `ensureGrad()`, `getGrad()`, `zeroGrad()` |
+| **Grafo de computação** | ⚠️ Infraestrutura | Operações rastreadas, contexto preservado |
+| **Backward pass** | ⚠️ Infraestrutura | `backward()` preparado para futuras extensões |
 
 ### Ativando requiresGrad
 
 ```php
 $t = ZTensor::arr([[1,2],[3,4]])->requiresGrad(true);
-if ($t->requires_grad()) {
+if ($t->isRequiresGrad()) {
     echo "Este tensor irá rastrear gradientes.";
 }
 ```
@@ -15,14 +25,14 @@ if ($t->requires_grad()) {
 
 ```php
 $t = ZTensor::arr([[1,2],[3,4]]);
-if (!$t->requires_grad()) {
+if (!$t->isRequiresGrad()) {
     echo "Execução numérica pura, sem rastreamento de gradientes.";
 }
 ```
 
 ### Observação
 
-O grafo de operações e o backward ainda não estão implementados. Esta infraestrutura é compatível com futuras extensões para autograd/backpropagation.
+O grafo de operações é rastreado internamente quando se usa os métodos `*Autograd()`. O backward ainda não propaga gradientes de forma completa, mas a infraestrutura está em lugar para futuras extensões de backpropagation.
 
 ### Limitações atuais do autograd
 
@@ -31,7 +41,7 @@ O grafo de operações e o backward ainda não estão implementados. Esta infrae
   - Recomenda-se evitar mutações em tensores com `requires_grad=true` após o forward.
   - PyTorch e outros frameworks também alertam: operações inplace podem invalidar o grafo de autograd.
 - ⚠️ **Acumulação de gradiente:**
-  - O campo `.grad` existe e é inicializado sob demanda, mas o backward ainda não está implementado.
+  - O campo `.grad` existe e é inicializado sob demanda com `ensureGrad()`. Você pode usar `zeroGrad()` para limpar entre iterações.
 - ⚠️ **Propagação de requires_grad:**
   - O resultado de uma operação terá `requires_grad=true` se qualquer operando exigir, mas para operações inplace, o comportamento pode ser inconsistente.
 
@@ -1405,7 +1415,7 @@ print_r($max_result->toArray());
 
 ## 📚 Complete API Reference - Resumo de Todos os Métodos
 
-### Tabela Rápida de Todos os 62 Métodos
+### Tabela Rápida de Todos os 65 Métodos
 
 | Categoria | Método | Tipo | Descrição |
 |-----------|--------|------|-----------|
@@ -1464,13 +1474,16 @@ print_r($max_result->toArray());
 | | `reshape()` | Instance | Muda shape |
 | | `toArray()` | Instance | Converte para array PHP |
 | **Acesso** | `key()` | Instance | Acessa elemento por índices |
-| **Manipulação** | `broadcast()` | Instance | Broadcast com bias |
+| **Manipulação** | `fill()` | Instance | Preenche tensor com valor (inplace) |
+| | `broadcast()` | Instance | Broadcast com bias |
 | | `tile()` | Static | Repete tensor N vezes |
+| | `slice()` | Instance | Cria view (sem cópia) de um eixo |
 | **Autograd** | `requiresGrad()` | Instance | Ativa rastreamento gradiente |
 | | `isRequiresGrad()` | Instance | Verifica rastreamento |
 | | `ensureGrad()` | Instance | Aloca tensor de gradiente |
 | | `zeroGrad()` | Instance | Zera gradiente acumulado |
 | | `getGrad()` | Instance | Obtém tensor de gradiente |
+| | `backward()` | Instance | Backpropagação (infraestrutura) |
 | | `addAutograd()` | Static | Adição com autograd (exp) |
 | | `subAutograd()` | Static | Subtração com autograd (exp) |
 | | `mulAutograd()` | Static | Multiplicação com autograd (exp) |
