@@ -1679,6 +1679,214 @@ ZTensor column(size_t col_idx) const {
         return result;
     }
 
+    // --- Unique ---
+        ZTensor unique() const {
+    #ifdef HAVE_CUDA
+            // Garante que a versão mais recente está na RAM da CPU
+            const_cast<ZTensor*>(this)->ensure_host();
+    #endif
+            if (data.empty()) {
+                return ZTensor({0});
+            }
+
+            // Cópia profunda rápida
+            std::vector<float> temp = data;
+
+            // Ordena e remove duplicatas usando a STL (altamente otimizado no C++)
+            std::sort(temp.begin(), temp.end());
+            auto last = std::unique(temp.begin(), temp.end());
+            temp.erase(last, temp.end());
+
+            // Cria o tensor de resultado
+            ZTensor result({temp.size()});
+            result.data = std::move(temp); // Move sem copiar novamente
+
+            return result;
+        }
+    // --- Bincount ---
+        ZTensor bincount(size_t minlength = 0) const {
+    #ifdef HAVE_CUDA
+            const_cast<ZTensor*>(this)->ensure_host();
+    #endif
+            const size_t N = size();
+            if (N == 0) {
+                return ZTensor({minlength});
+            }
+
+            const float* p = data.data();
+            int max_val = -1;
+
+            // Verifica negativos e acha o max_val
+            for (size_t i = 0; i < N; ++i) {
+                if (p[i] < 0.0f) {
+                    throw std::invalid_argument("bincount: todos os elementos devem ser >= 0");
+                }
+                int val = static_cast<int>(p[i]);
+                if (val > max_val) max_val = val;
+            }
+
+            size_t out_size = std::max(minlength, static_cast<size_t>(max_val + 1));
+            ZTensor result({out_size}); // ZTensor zera a memória por padrão
+            float* res_p = result.data.data();
+
+    #if HAS_OPENMP
+            // O threshold aqui deve ser maior, pois operações atômicas podem causar contenção (false sharing)
+            if (N > ZMATRIX_PARALLEL_THRESHOLD * 2) {
+    #pragma omp parallel for schedule(static)
+                for (size_t i = 0; i < N; ++i) {
+                    int val = static_cast<int>(p[i]);
+    #pragma omp atomic
+                    res_p[val] += 1.0f;
+                }
+            } else {
+                for (size_t i = 0; i < N; ++i) {
+                    res_p[static_cast<int>(p[i])] += 1.0f;
+                }
+            }
+    #else
+            for (size_t i = 0; i < N; ++i) {
+                res_p[static_cast<int>(p[i])] += 1.0f;
+            }
+    #endif
+            return result;
+        }
+
+    // --- Argmax ---
+        size_t argmax() const {
+    #ifdef HAVE_CUDA
+            const_cast<ZTensor*>(this)->ensure_host();
+    #endif
+            const size_t N = size();
+            if (N == 0) {
+                throw std::runtime_error("argmax: não pode ser aplicado em tensor vazio");
+            }
+
+            const float* p = data.data();
+            size_t global_max_idx = 0;
+            float global_max_val = p[0];
+
+    #if HAS_OPENMP
+            if (N > ZMATRIX_PARALLEL_THRESHOLD) {
+    #pragma omp parallel
+                {
+                    // Variáveis locais para cada thread (evita concorrência)
+                    size_t local_max_idx = 0;
+                    float local_max_val = p[0];
+
+    #pragma omp for nowait
+                    for (size_t i = 0; i < N; ++i) {
+                        if (p[i] > local_max_val) {
+                            local_max_val = p[i];
+                            local_max_idx = i;
+                        }
+                    }
+
+                    // Junta os resultados locais na variável global de forma segura
+    #pragma omp critical
+                    {
+                        if (local_max_val > global_max_val ||
+                           (local_max_val == global_max_val && local_max_idx < global_max_idx)) {
+                            global_max_val = local_max_val;
+                            global_max_idx = local_max_idx;
+                        }
+                    }
+                }
+            } else {
+                for (size_t i = 1; i < N; ++i) {
+                    if (p[i] > global_max_val) {
+                        global_max_val = p[i];
+                        global_max_idx = i;
+                    }
+                }
+            }
+    #else
+            for (size_t i = 1; i < N; ++i) {
+                if (p[i] > global_max_val) {
+                    global_max_val = p[i];
+                    global_max_idx = i;
+                }
+            }
+    #endif
+            return global_max_idx;
+        }
+
+    // --- Concat (Estático) ---
+        static ZTensor concat(const std::vector<const ZTensor*>& tensors, int axis = 0) {
+            if (tensors.empty()) {
+                throw std::invalid_argument("concat: a lista de tensores está vazia");
+            }
+
+            size_t ndim = tensors[0]->shape.size();
+
+            // Suporta eixos negativos (ex: -1 é a última dimensão)
+            if (axis < 0) axis += static_cast<int>(ndim);
+            if (axis < 0 || axis >= static_cast<int>(ndim)) {
+                throw std::out_of_range("concat: eixo (axis) fora dos limites");
+            }
+
+            std::vector<size_t> out_shape = tensors[0]->shape;
+            size_t concat_dim_size = 0;
+
+            // 1. Validação estrutural de todos os tensores
+            for (const ZTensor* t : tensors) {
+    #ifdef HAVE_CUDA
+                const_cast<ZTensor*>(t)->ensure_host();
+    #endif
+                if (t->shape.size() != ndim) {
+                    throw std::invalid_argument("concat: todos os tensores devem ter o mesmo número de dimensões (ndim)");
+                }
+                for (size_t d = 0; d < ndim; ++d) {
+                    if (d != static_cast<size_t>(axis) && t->shape[d] != out_shape[d]) {
+                        throw std::invalid_argument("concat: tamanhos incompatíveis nos eixos não-concatenados");
+                    }
+                }
+                concat_dim_size += t->shape[axis];
+            }
+
+            out_shape[axis] = concat_dim_size;
+            ZTensor result(out_shape);
+            float* res_p = result.data.data();
+
+            // 2. Cálculos de tamanho de blocos para memcpy rápido
+            size_t outer_size = 1;
+            for (size_t d = 0; d < static_cast<size_t>(axis); ++d) outer_size *= out_shape[d];
+
+            size_t inner_size = 1;
+            for (size_t d = static_cast<size_t>(axis) + 1; d < ndim; ++d) inner_size *= out_shape[d];
+
+            // 3. Executa a cópia de blocos diretos na memória
+    #if HAS_OPENMP
+            if (outer_size * concat_dim_size * inner_size > ZMATRIX_PARALLEL_THRESHOLD) {
+    #pragma omp parallel for schedule(static)
+                for (size_t i = 0; i < outer_size; ++i) {
+                    size_t out_offset = i * concat_dim_size * inner_size;
+                    for (const ZTensor* t : tensors) {
+                        size_t chunk_size = t->shape[axis] * inner_size;
+                        size_t in_offset = i * chunk_size;
+
+                        std::memcpy(res_p + out_offset, t->data.data() + in_offset, chunk_size * sizeof(float));
+                        out_offset += chunk_size;
+                    }
+                }
+            } else {
+    #endif
+                for (size_t i = 0; i < outer_size; ++i) {
+                    size_t out_offset = i * concat_dim_size * inner_size;
+                    for (const ZTensor* t : tensors) {
+                        size_t chunk_size = t->shape[axis] * inner_size;
+                        size_t in_offset = i * chunk_size;
+
+                        std::memcpy(res_p + out_offset, t->data.data() + in_offset, chunk_size * sizeof(float));
+                        out_offset += chunk_size;
+                    }
+                }
+    #if HAS_OPENMP
+            }
+    #endif
+
+            return result;
+        }
+
     // --- abs (float) ---
      void abs()  {
          const size_t N = size();
@@ -3242,6 +3450,10 @@ static const zend_function_entry zmatrix_ztensor_methods[] = {
     PHP_ME(ZTensor, safe,             arginfo_ztensor_static_safe,      ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)
     PHP_ME(ZTensor, tile,             arginfo_ztensor_static_tile,      ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)
 
+    PHP_ME(ZTensor, unique,           arginfo_ztensor_unique,           ZEND_ACC_PUBLIC)
+    PHP_ME(ZTensor, bincount,         arginfo_ztensor_bincount,         ZEND_ACC_PUBLIC)
+    PHP_ME(ZTensor, argmax,           arginfo_ztensor_argmax,           ZEND_ACC_PUBLIC)
+    PHP_ME(ZTensor, concat,           arginfo_ztensor_static_concat,    ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)
     // Autograd methods
     PHP_ME(ZTensor, requiresGrad,     arginfo_class_ZMatrix_ZTensor_requiresGrad,      ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, isRequiresGrad,    arginfo_class_ZMatrix_ZTensor_isRequiresGrad,  ZEND_ACC_PUBLIC)

@@ -261,4 +261,18 @@ ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_where, 0, 0, 2)
     ZEND_ARG_TYPE_INFO(0, threshold, IS_DOUBLE, 0)
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_unique, 0, 0, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_bincount, 0, 0, 0)
+    ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, minlength, IS_LONG, 0, "0")
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_argmax, 0, 0, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_static_concat, 0, 0, 1)
+    ZEND_ARG_ARRAY_INFO(0, tensors, 0)
+    ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, axis, IS_LONG, 0, "0")
+ZEND_END_ARG_INFO()
 #endif /* ZMATRIX_ARGINFO_H */

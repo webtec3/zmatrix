@@ -763,6 +763,57 @@ final class ZTensor
     }
 
     /**
+     * Returns the unique values of the tensor.
+     *
+     * @return ZTensor A tensor containing only the unique values.
+     *
+     * @throws \Exception If the tensor is not initialized.
+     */
+    public function unique(): ZTensor
+    {
+    }
+
+    /**
+     * Counts the frequency of each non-negative integer value in the tensor.
+     *
+     * @param int $minlength Minimum length of the output tensor. Defaults to 0.
+     *
+     * @return ZTensor A tensor containing the occurrence count of each value.
+     *
+     * @throws \Exception If the tensor is not initialized.
+     * @throws \Exception If the tensor contains negative values.
+     */
+    public function bincount(int $minlength = 0): ZTensor
+    {
+    }
+
+    /**
+     * Returns the index of the maximum value in the tensor.
+     *
+     * @return int Index of the maximum value.
+     *
+     * @throws \Exception If the tensor is not initialized.
+     * @throws \Exception If the tensor is empty.
+     */
+    public function argmax(): int
+    {
+    }
+
+    /**
+     * Concatenates multiple tensors along the specified axis.
+     *
+     * @param array<ZTensor> $tensors List of tensors to concatenate.
+     * @param int $axis Axis along which the tensors will be concatenated.
+     *
+     * @return ZTensor A new concatenated tensor.
+     *
+     * @throws \Exception If the tensors are incompatible for concatenation.
+     */
+    public static function concat(array $tensors, int $axis = 0): ZTensor
+    {
+    }
+
+    /**
      * Repeats the tensor vertically (multiplies the number of rows).
      *
      * Example:

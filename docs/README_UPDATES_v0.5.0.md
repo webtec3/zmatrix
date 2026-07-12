@@ -826,6 +826,113 @@ Método estático que realiza a redução de soma registrando o nó de computaç
 $z = ZTensor::sumAutograd($x);
 
 ```
+## 10. Operações de Manipulação Estrutural e Contagem (Otimizadas para Árvores de Decisão)
+
+Esta seção documenta as primitivas de vetorização lógica essenciais para o desenvolvimento de ecossistemas ensemble (como `Random Forest`, `XGBoost`, `LightGBM`), focadas em ordenação rápida, histogramas de frequência e fusão densa de memória contígua.
+
+### `unique`
+Extrai e isola todos os elementos únicos contidos no tensor, aplicando ordenação ascendente automática. É executado inteiramente na camada nativa C++ através de algoritmos STL altamente otimizados antes de mover os ponteiros para um novo vetor 1D independente.
+* **Retorno:** `ZTensor` — Um novo tensor unidimensional contendo apenas os valores exclusivos ordenados.
+* **Exceções:** Lança `\Exception` caso a instância do tensor não tenha sido devidamente inicializada.
+
+```php
+use ZMatrix\ZTensor;
+
+$t = ZTensor::arr([4.0, 1.0, 1.0, 3.0, 4.0, 2.0]);
+$res =$t->unique();
+
+print_r($res->toArray());
+// Output: [1.0, 2.0, 3.0, 4.0]
+
+// Suporte nativo a tensores vazios
+$vazio = ZTensor::zeros([0]);
+echo $vazio->unique()->size(); // Output: 0
+```
+
+### bincount
+Calcula o histograma de frequências contando o número de ocorrências de cada valor inteiro não-negativo mapeado no tensor.
+
+Performance: Utiliza paralelismo dinâmico via OpenMP com cláusulas de sincronização atômica (#pragma omp atomic) para evitar concorrência desordenada de memória (race conditions) durante incrementos simultâneos efetuados por múltiplas threads da CPU.
+
+Parâmetros: * int $minlength (Opcional): Força um tamanho mínimo preenchido por zeros para o tensor de saída (útil para mapear classes ausentes em subconjuntos de árvores). O padrão é 0.
+
+Retorno: ZTensor — Um tensor unidimensional de contagem onde o índice representa o valor inteiro encontrado e o elemento contido representa a sua frequência acumulada.
+
+Exceções: Lança \Exception caso o tensor contenha números negativos ou não esteja inicializado.
+```php
+use ZMatrix\ZTensor;
+
+// Contagem clássica de frequência de classes (ex: labels de treino)
+$labels = ZTensor::arr([1, 2, 1, 1, 3, 2, 5]);
+$histograma =$labels->bincount();
+
+print_r($histograma->toArray());
+// O índice mapeia os valores de 0 a 5. Valores ausentes (como o 0 e o 4) recebem 0.0
+// Output: [0.0, 3.0, 2.0, 1.0, 0.0, 1.0]
+
+// Uso do minlength para forçar tamanho fixo de buckets
+$res_min = ZTensor::arr([1, 2])->bincount(10);
+echo $res_min->size(); // Output: 10
+```
+
+### argmax
+Varre linearmente toda a estrutura de dados do tensor e localiza a posição física contígua (flat index) do maior coeficiente escalar encontrado.
+
+Performance: Implementa um algoritmo híbrido de redução paralela. Cada thread do OpenMP calcula o máximo local de forma isolada (nowait) em registradores da CPU, fundindo as respostas em uma variável global protegida por região crítica (#pragma omp critical) apenas no final. Garante estabilidade matemática retornando estritamente a primeira ocorrência em caso de múltiplos máximos idênticos.
+
+Retorno: int — O índice achatado linear correspondente ao valor máximo absoluto.
+
+Exceções: Lança \Exception se o tensor estiver vazio ou não inicializado.
+
+```php
+use ZMatrix\ZTensor;
+
+// Localização em matriz bidimensional
+$matriz = ZTensor::arr([
+    [1.0, 2.0,  3.0], 
+    [4.0, 10.5, 2.0]
+]);
+
+$flat_index =$matriz->argmax();
+echo $flat_index; // Output: 4 (Referente ao valor 10.5 na posição linear [1, 1])
+
+// Estabilidade garantida (retorna o primeiro índice do empate)
+$empate = ZTensor::arr([1.0, 5.0, 3.0, 5.0]);
+echo $empate->argmax(); // Output: 1 (ignora a posição 3)
+
+```
+
+### concat
+Método estático que realiza a fusão estrutural de uma coleção de tensores ao longo de um eixo de coordenadas (axis) pré-determinado.
+
+Performance: Aplica a otimização Fast-Path por blocos contíguos. Se o eixo de concatenação for a dimensão externa dominante (axis = 0), a extensão ignora loops aninhados e transfere blocos inteiros de memória física diretamente via std::memcpy, atingindo velocidades próximas ao limite físico de leitura/escrita do barramento do sistema. Suporta indexação de eixos negativos (ex: -1 mapeia o último eixo).
+
+Parâmetros:
+
+array<ZTensor> $tensors: Uma lista contendo arrays PHP nativos ou instâncias do ZTensor que serão unificados.
+
+int $axis (Opcional): O eixo coordenado alvo da fusão espacial. O padrão é 0.
+
+Retorno: ZTensor — Um novo tensor denso e unificado contendo o shape expandido no eixo selecionado.
+
+Exceções: Lança \Exception se a lista estiver vazia ou se houver incompatibilidade dimensional de formato (shape mismatch) entre os tensores participantes.
+
+```php
+use ZMatrix\ZTensor;
+
+$t1 = ZTensor::arr([[1, 2], [3, 4]]); // [2x2]$t2 = ZTensor::arr([[5, 6]]);        // [1x2]
+
+// Concatenação vertical (Eixo 0 - Linhas)
+$vertical = ZTensor::concat([$t1,$t2], 0);
+print_r($vertical->shape()); // Output: [3, 2]
+echo $vertical->key([2, 1]); // Output: 6.0
+
+// Concatenação horizontal (Eixo 1 - Colunas)
+$t3 = ZTensor::arr([[10], [20]]); // [2x1]$horizontal = ZTensor::concat([$t1,$t3], 1);
+print_r($horizontal->shape()); // Output: [2, 3]
+
+```
+
 
 ---
 

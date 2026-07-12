@@ -2712,4 +2712,129 @@ PHP_METHOD(ZTensor, where)
         RETURN_THROWS();
     }
 }
+
+PHP_METHOD(ZTensor, argmax)
+{
+    ZEND_PARSE_PARAMETERS_NONE();
+    zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
+
+    try {
+        size_t max_idx = self_obj->tensor->argmax();
+        RETURN_LONG(static_cast<zend_long>(max_idx));
+    } catch (const std::exception &e) {
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+    }
+}
+// =========================================================================
+// PHP_METHOD: unique
+// =========================================================================
+PHP_METHOD(ZTensor, unique)
+{
+    ZEND_PARSE_PARAMETERS_NONE();
+
+    zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
+    if (!self_obj->tensor) {
+        zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0);
+        RETURN_THROWS();
+    }
+
+    try {
+        // Chama a matemática pura do C++
+        ZTensor result = self_obj->tensor->unique();
+
+        // Devolve o novo objeto ZTensor para o PHP
+        zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
+    } catch (const std::exception &e) {
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+        RETURN_THROWS();
+    }
+}
+
+
+// =========================================================================
+// PHP_METHOD: bincount
+// =========================================================================
+PHP_METHOD(ZTensor, bincount)
+{
+    zend_long minlength = 0;
+
+    ZEND_PARSE_PARAMETERS_START(0, 1)
+        Z_PARAM_OPTIONAL
+        Z_PARAM_LONG(minlength)
+    ZEND_PARSE_PARAMETERS_END();
+
+    zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
+    if (!self_obj->tensor) {
+        zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0);
+        RETURN_THROWS();
+    }
+
+    try {
+        // Validação básica do parâmetro vindo do PHP
+        size_t safe_minlength = minlength > 0 ? static_cast<size_t>(minlength) : 0;
+
+        // Chama a lógica de CPU/OpenMP do C++
+        ZTensor result = self_obj->tensor->bincount(safe_minlength);
+
+        // Retorna pro PHP
+        zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
+    } catch (const std::exception &e) {
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+        RETURN_THROWS();
+    }
+}
+
+
+// =========================================================================
+// PHP_METHOD: concat (Método Estático)
+// =========================================================================
+PHP_METHOD(ZTensor, concat)
+{
+    zval *tensors_zv;
+    zend_long axis = 0;
+
+    ZEND_PARSE_PARAMETERS_START(1, 2)
+        Z_PARAM_ARRAY(tensors_zv)
+        Z_PARAM_OPTIONAL
+        Z_PARAM_LONG(axis)
+    ZEND_PARSE_PARAMETERS_END();
+
+    HashTable *ht = Z_ARRVAL_P(tensors_zv);
+    size_t count = zend_hash_num_elements(ht);
+
+    if (count == 0) {
+        zend_throw_exception(zend_ce_exception, "A lista de tensores para concatenação não pode estar vazia.", 0);
+        RETURN_THROWS();
+    }
+
+    try {
+        std::vector<const ZTensor*> t_ptrs;
+        std::vector<ZTensor> t_tmps;
+        t_tmps.resize(count); // Evita realocação que invalidaria referências
+        t_ptrs.reserve(count);
+
+        zval *val;
+        size_t idx = 0;
+
+        // 1. Itera sobre o Array do PHP (HashTable) e extrai os ponteiros C++ de forma segura
+        ZEND_HASH_FOREACH_VAL(ht, val) {
+            ZTensor *ptr = nullptr;
+            // zmatrix_get_tensor_ptr lida tanto com instâncias de ZTensor quanto com conversão automática de arrays PHP on-the-fly
+            if (!zmatrix_get_tensor_ptr(val, ptr, t_tmps[idx], zmatrix_ce_ZTensor)) {
+                RETURN_THROWS();
+            }
+            t_ptrs.push_back(ptr);
+            idx++;
+        } ZEND_HASH_FOREACH_END();
+
+        // 2. Chama a matemática pura de cópia contígua (Fast Path memcpy)
+        ZTensor result = ZTensor::concat(t_ptrs, static_cast<int>(axis));
+
+        // 3. Devolve a nova matriz concatenada pro PHP
+        zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
+    } catch (const std::exception &e) {
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+        RETURN_THROWS();
+    }
+}
 #endif /* ZMATRIX_METHODS_H */

@@ -22,7 +22,7 @@ run_test() {
   # Executar o teste
   output=$(php -d extension=../modules/zmatrix.so -r "$php_code" 2>&1)
   status=$?
-  
+
   # Verificar se houve erro na execução
   if [ $status -ne 0 ]; then
     echo -e "${RED}✗${NC} $desc"
@@ -30,7 +30,7 @@ run_test() {
     ((FAILED++))
     return
   fi
-  
+
   # Verificar se a saída contém "OK"
   if echo "$output" | grep -q "^OK$"; then
     echo -e "${GREEN}✓${NC} $desc"
@@ -642,22 +642,128 @@ echo \$res->size() === 1 ? 'OK' : 'FAIL';
 "
 
 # =============================================================================
+# NOVOS MÉTODOS OTIMIZADOS (ÁRVORES E MANIPULAÇÃO)
+# =============================================================================
+echo -e "${YELLOW}=== TESTES: NOVOS MÉTODOS IMPLEMENTADOS ===${NC}"
+
+run_test "unique() - Filtragem e ordenação básica de elementos únicos" "
+use ZMatrix\ZTensor;
+\$t = ZTensor::arr([4.0, 1.0, 1.0, 3.0, 4.0, 2.0]);
+\$res = \$t->unique();
+\$arr = \$res->toArray();
+if (\$res->size() === 4 && \$arr[0] == 1.0 && \$arr[3] == 4.0) {
+    echo 'OK';
+} else {
+    echo 'FAIL: ' . json_encode(\$arr);
+}
+"
+
+run_test "unique() - Lidando com tensores vazios com segurança" "
+use ZMatrix\ZTensor;
+\$t = ZTensor::zeros([0]);
+\$res = \$t->unique();
+echo \$res->size() === 0 ? 'OK' : 'FAIL';
+"
+
+run_test "bincount() - Histograma de frequências e contagem (Gini/Árvores)" "
+use ZMatrix\ZTensor;
+\$t = ZTensor::arr([1, 2, 1, 1, 3, 2, 5]);
+\$res = \$t->bincount();
+\$arr = \$res->toArray();
+if (\$res->size() === 6 && \$arr[0] == 0 && \$arr[1] == 3 && \$arr[2] == 2 && \$arr[5] == 1) {
+    echo 'OK';
+} else {
+    echo 'FAIL: ' . json_encode(\$arr);
+}
+"
+
+run_test "bincount() - Parâmetro minlength de preenchimento mínimo" "
+use ZMatrix\ZTensor;
+\$t = ZTensor::arr([1, 2]);
+\$res = \$t->bincount(10);
+echo \$res->size() === 10 ? 'OK' : 'FAIL';
+"
+
+run_test "bincount() - Lançamento de exceção em valores negativos" "
+use ZMatrix\ZTensor;
+try {
+    \$t = ZTensor::arr([1, -2, 3]);
+    \$t->bincount();
+    echo 'FAIL (Não lançou exceção para valor negativo)';
+} catch (\\Throwable \$e) {
+    echo 'OK';
+}
+"
+
+run_test "argmax() - Localização do índice global do maior valor (Flat Index)" "
+use ZMatrix\ZTensor;
+\$t = ZTensor::arr([[1.0, 2.0, 3.0], [4.0, 10.5, 2.0]]);
+\$idx = \$t->argmax();
+echo \$idx === 4 ? 'OK' : 'FAIL: index returned ' . \$idx;
+"
+
+run_test "argmax() - Consistência e estabilidade em múltiplos máximos idênticos" "
+use ZMatrix\ZTensor;
+\$t = ZTensor::arr([1.0, 5.0, 3.0, 5.0]);
+\$idx = \$t->argmax();
+echo \$idx === 1 ? 'OK' : 'FAIL';
+"
+
+run_test "concat() - Concatenação estática densa no Eixo 0 (Linhas)" "
+use ZMatrix\ZTensor;
+\$t1 = ZTensor::arr([[1, 2], [3, 4]]);
+\$t2 = ZTensor::arr([[5, 6]]);
+\$res = ZTensor::concat([\$t1, \$t2], 0);
+\$shape = \$res->shape();
+if (\$shape[0] === 3 && \$shape[1] === 2 && \$res->key([2, 1]) == 6) {
+    echo 'OK';
+} else {
+    echo 'FAIL: shape ' . json_encode(\$shape);
+}
+"
+
+run_test "concat() - Concatenação estática densa no Eixo 1 (Colunas)" "
+use ZMatrix\ZTensor;
+\$t1 = ZTensor::arr([[1, 2], [3, 4]]);
+\$t2 = ZTensor::arr([[10], [20]]);
+\$res = ZTensor::concat([\$t1, \$t2], 1);
+\$shape = \$res->shape();
+if (\$shape[0] === 2 && \$shape[1] === 3 && \$res->key([1, 2]) == 20) {
+    echo 'OK';
+} else {
+    echo 'FAIL: shape ' . json_encode(\$shape);
+}
+"
+
+run_test "concat() - Validação e rejeição de shapes incompatíveis" "
+use ZMatrix\ZTensor;
+try {
+    \$t1 = ZTensor::arr([[1, 2]]);
+    \$t2 = ZTensor::arr([[1, 2, 3]]);
+    ZTensor::concat([\$t1, \$t2], 0);
+    echo 'FAIL (Mesclou dimensões inválidas sem erro)';
+} catch (\\Throwable \$e) {
+    echo 'OK';
+}
+"
+
+# =============================================================================
 # RESULTADO FINAL
 # =============================================================================
 echo
 echo -e "${BLUE}╔═══════════════════════════════════════════════════════════════╗${NC}"
-echo -e "║                       TEST SUMMARY                            ║${NC}"
+echo -e "${BLUE}║                       TEST SUMMARY                            ║${NC}"
 echo -e "${BLUE}╚═══════════════════════════════════════════════════════════════╝${NC}"
-echo -e "Total:  ${BLUE}${TOTAL}${NC} tests"
-echo -e "Passed: ${GREEN}${PASSED}${NC} tests"
-echo -e "Failed: ${RED}${FAILED}${NC} tests"
+echo -e "Total:  ${BLUE}${TOTAL}${NC} testes executados"
+echo -e "Passed: ${GREEN}${PASSED}${NC} válidos"
+echo -e "Failed: ${RED}${FAILED}${NC} falhas"
 
 if [ $FAILED -eq 0 ]; then
   echo
-  echo -e "${GREEN}✓ All tests passed! 100% Core API Covered.${NC}"
+  echo -e "${GREEN}✓ Engine está 100% pronta para a infraestrutura de Random Forest!${NC}"
   exit 0
 else
   echo
-  echo -e "${RED}✗ Some tests failed! Check output above.${NC}"
+  echo -e "${RED}✗ Correções são necessárias nos novos métodos C++.${NC}"
   exit 1
 fi
