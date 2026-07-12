@@ -1868,6 +1868,196 @@ ZTensor column(size_t col_idx) const {
             return global_min_idx;
         }
 
+        // --- sort: 1D ordena o vetor inteiro. 2D: axis=1 ordena cada LINHA,
+            // axis=0 ordena cada COLUNA (mesma semântica numpy usada em argsort).
+            ZTensor sort(size_t axis = 0) const {
+                if (shape.size() > 2) throw std::runtime_error("sort suporta apenas 1D ou 2D");
+        #ifdef HAVE_CUDA
+                ensure_host();
+        #endif
+                if (shape.size() == 1) {
+                    ZTensor result(shape);
+                    std::vector<float> tmp(data.begin(), data.end());
+                    std::sort(tmp.begin(), tmp.end());
+                    std::copy(tmp.begin(), tmp.end(), result.data.begin());
+                    return result;
+                }
+
+                if (axis != 0 && axis != 1) {
+                    throw std::out_of_range("sort: axis deve ser 0 ou 1 para tensor 2D");
+                }
+
+                const size_t rows = shape[0];
+                const size_t cols = shape[1];
+                ZTensor result(shape);
+                if (rows == 0 || cols == 0) return result;
+
+                const float* p_in = data.data();
+                float* p_out = result.data.data();
+
+                if (axis == 1) {
+        #if HAS_OPENMP
+                    if (rows > ZMATRIX_PARALLEL_THRESHOLD) {
+                        #pragma omp parallel for schedule(static)
+                        for (size_t r = 0; r < rows; ++r) {
+                            std::vector<float> row(p_in + r * cols, p_in + r * cols + cols);
+                            std::sort(row.begin(), row.end());
+                            std::copy(row.begin(), row.end(), p_out + r * cols);
+                        }
+                    } else
+        #endif
+                    {
+                        for (size_t r = 0; r < rows; ++r) {
+                            std::vector<float> row(p_in + r * cols, p_in + r * cols + cols);
+                            std::sort(row.begin(), row.end());
+                            std::copy(row.begin(), row.end(), p_out + r * cols);
+                        }
+                    }
+                    return result;
+                }
+
+                // axis == 0: cada coluna ordenada independentemente
+        #if HAS_OPENMP
+                if (cols > ZMATRIX_PARALLEL_THRESHOLD) {
+                    #pragma omp parallel for schedule(static)
+                    for (size_t c = 0; c < cols; ++c) {
+                        std::vector<float> col(rows);
+                        for (size_t r = 0; r < rows; ++r) col[r] = p_in[r * cols + c];
+                        std::sort(col.begin(), col.end());
+                        for (size_t r = 0; r < rows; ++r) p_out[r * cols + c] = col[r];
+                    }
+                } else
+        #endif
+                {
+                    for (size_t c = 0; c < cols; ++c) {
+                        std::vector<float> col(rows);
+                        for (size_t r = 0; r < rows; ++r) col[r] = p_in[r * cols + c];
+                        std::sort(col.begin(), col.end());
+                        for (size_t r = 0; r < rows; ++r) p_out[r * cols + c] = col[r];
+                    }
+                }
+                return result;
+            }
+
+            // --- isin: máscara 1.0/0.0 indicando se cada elemento está em test_values ---
+            ZTensor isin(const std::vector<float>& test_values) const {
+        #ifdef HAVE_CUDA
+                ensure_host();
+        #endif
+                const size_t N = size();
+                ZTensor result(shape);
+                if (N == 0) return result;
+
+                std::unordered_set<float> lookup(test_values.begin(), test_values.end());
+
+                const float* a = data.data();
+                float* r = result.data.data();
+
+        #if HAS_OPENMP
+                if (N > ZMATRIX_PARALLEL_THRESHOLD) {
+                    #pragma omp parallel for schedule(static)
+                    for (size_t i = 0; i < N; ++i) {
+                        r[i] = (lookup.count(a[i]) > 0) ? 1.0f : 0.0f;
+                    }
+                } else
+        #endif
+                {
+                    for (size_t i = 0; i < N; ++i) {
+                        r[i] = (lookup.count(a[i]) > 0) ? 1.0f : 0.0f;
+                    }
+                }
+                return result;
+            }
+
+            // --- cumsum: acumulador em double p/ evitar deriva de precisão em
+            // somas longas com float (mesmo padrão de sum()/mean()). axis<0 em 2D
+            // usa default axis=1 (cumsum por linha — o mais comum em gradient
+            // boosting / probabilidade cumulativa).
+            ZTensor cumsum(long axis = -1) const {
+        #ifdef HAVE_CUDA
+                ensure_host();
+        #endif
+                if (shape.size() == 1) {
+                    ZTensor result(shape);
+                    const size_t N = size();
+                    if (N == 0) return result;
+                    const float* a = data.data();
+                    float* r = result.data.data();
+                    double running = 0.0;
+                    for (size_t i = 0; i < N; ++i) {
+                        running += a[i];
+                        r[i] = static_cast<float>(running);
+                    }
+                    return result;
+                }
+
+                if (shape.size() != 2) {
+                    throw std::runtime_error("cumsum() suporta apenas tensores 1D ou 2D");
+                }
+
+                size_t ax = (axis < 0) ? 1 : static_cast<size_t>(axis);
+                if (ax != 0 && ax != 1) {
+                    throw std::out_of_range("cumsum: axis deve ser 0 ou 1 para tensor 2D");
+                }
+
+                const size_t rows = shape[0];
+                const size_t cols = shape[1];
+                ZTensor result(shape);
+                if (rows == 0 || cols == 0) return result;
+
+                const float* p_in = data.data();
+                float* p_out = result.data.data();
+
+                if (ax == 1) {
+        #if HAS_OPENMP
+                    if (rows > ZMATRIX_PARALLEL_THRESHOLD) {
+                        #pragma omp parallel for schedule(static)
+                        for (size_t r = 0; r < rows; ++r) {
+                            double running = 0.0;
+                            for (size_t c = 0; c < cols; ++c) {
+                                running += p_in[r * cols + c];
+                                p_out[r * cols + c] = static_cast<float>(running);
+                            }
+                        }
+                    } else
+        #endif
+                    {
+                        for (size_t r = 0; r < rows; ++r) {
+                            double running = 0.0;
+                            for (size_t c = 0; c < cols; ++c) {
+                                running += p_in[r * cols + c];
+                                p_out[r * cols + c] = static_cast<float>(running);
+                            }
+                        }
+                    }
+                    return result;
+                }
+
+        #if HAS_OPENMP
+                if (cols > ZMATRIX_PARALLEL_THRESHOLD) {
+                    #pragma omp parallel for schedule(static)
+                    for (size_t c = 0; c < cols; ++c) {
+                        double running = 0.0;
+                        for (size_t r = 0; r < rows; ++r) {
+                            running += p_in[r * cols + c];
+                            p_out[r * cols + c] = static_cast<float>(running);
+                        }
+                    }
+                } else
+        #endif
+                {
+                    for (size_t c = 0; c < cols; ++c) {
+                        double running = 0.0;
+                        for (size_t r = 0; r < rows; ++r) {
+                            running += p_in[r * cols + c];
+                            p_out[r * cols + c] = static_cast<float>(running);
+                        }
+                    }
+                }
+                return result;
+            }
+
+
     // --- Concat (Estático) ---
         static ZTensor concat(const std::vector<const ZTensor*>& tensors, int axis = 0) {
             if (tensors.empty()) {
@@ -3592,6 +3782,9 @@ static const zend_function_entry zmatrix_ztensor_methods[] = {
     PHP_ME(ZTensor, bincount,         arginfo_ztensor_bincount,         ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, argmax,           arginfo_ztensor_argmax,           ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, argmin,           arginfo_ztensor_argmin,           ZEND_ACC_PUBLIC)
+    PHP_ME(ZTensor, sort,             arginfo_ztensor_sort,             ZEND_ACC_PUBLIC)
+    PHP_ME(ZTensor, isin,             arginfo_ztensor_isin,             ZEND_ACC_PUBLIC)
+    PHP_ME(ZTensor, cumsum,           arginfo_ztensor_cumsum,           ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, concat,           arginfo_ztensor_static_concat,    ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)
     // Autograd methods
     PHP_ME(ZTensor, requiresGrad,     arginfo_class_ZMatrix_ZTensor_requiresGrad,      ZEND_ACC_PUBLIC)

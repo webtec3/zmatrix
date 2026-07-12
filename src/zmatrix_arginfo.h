@@ -282,4 +282,20 @@ ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_static_concat, 0, 0, 1)
     ZEND_ARG_ARRAY_INFO(0, tensors, 0)
     ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, axis, IS_LONG, 0, "0")
 ZEND_END_ARG_INFO()
+
+// sort(int $axis = 0): ZTensor
+ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_sort, 0, 0, 0)
+    ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, axis, IS_LONG, 0, "0")
+ZEND_END_ARG_INFO()
+
+// isin(ZTensor|array $values): ZTensor
+ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_isin, 0, 0, 1)
+    ZEND_ARG_INFO(0, values)
+ZEND_END_ARG_INFO()
+
+// cumsum(?int $axis = null): ZTensor
+ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_cumsum, 0, 0, 0)
+    ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, axis, IS_LONG, 1, "null")
+ZEND_END_ARG_INFO()
+
 #endif /* ZMATRIX_ARGINFO_H */

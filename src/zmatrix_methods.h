@@ -2909,4 +2909,108 @@ PHP_METHOD(ZTensor, concat)
         RETURN_THROWS();
     }
 }
+
+PHP_METHOD(ZTensor, sort)
+{
+    zend_long axis = 0;
+    ZEND_PARSE_PARAMETERS_START(0, 1)
+        Z_PARAM_OPTIONAL
+        Z_PARAM_LONG(axis)
+    ZEND_PARSE_PARAMETERS_END();
+
+    zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
+    if (!self_obj->tensor) {
+        zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0);
+        RETURN_THROWS();
+    }
+    try {
+        ZTensor result = self_obj->tensor->sort((size_t)axis);
+        zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
+    } catch (const std::exception& e) {
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+        RETURN_THROWS();
+    }
+}
+
+PHP_METHOD(ZTensor, isin)
+{
+    zval *values_zv;
+    ZEND_PARSE_PARAMETERS_START(1, 1)
+        Z_PARAM_ZVAL(values_zv)
+    ZEND_PARSE_PARAMETERS_END();
+
+    zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
+    if (!self_obj->tensor) {
+        zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0);
+        RETURN_THROWS();
+    }
+
+    std::vector<float> test_values;
+
+    if (Z_TYPE_P(values_zv) == IS_ARRAY) {
+        zval *entry;
+        ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(values_zv), entry) {
+            if (Z_TYPE_P(entry) != IS_LONG && Z_TYPE_P(entry) != IS_DOUBLE) {
+                zend_throw_exception(zend_ce_exception, "isin(): os valores devem ser numéricos", 0);
+                RETURN_THROWS();
+            }
+            test_values.push_back(static_cast<float>(zval_get_double(entry)));
+        } ZEND_HASH_FOREACH_END();
+    } else if (Z_TYPE_P(values_zv) == IS_OBJECT && instanceof_function(Z_OBJCE_P(values_zv), zmatrix_ce_ZTensor)) {
+        zmatrix_ztensor_object *obj = Z_MATRIX_ZTENSOR_P(values_zv);
+        if (!obj->tensor) {
+            zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0);
+            RETURN_THROWS();
+        }
+#ifdef HAVE_CUDA
+        obj->tensor->ensure_host();
+#endif
+        test_values.assign(obj->tensor->data.begin(), obj->tensor->data.end());
+    } else {
+        zend_throw_exception(zend_ce_exception, "isin(): argumento deve ser array ou ZTensor", 0);
+        RETURN_THROWS();
+    }
+
+    try {
+        ZTensor result = self_obj->tensor->isin(test_values);
+        zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
+    } catch (const std::exception& e) {
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+        RETURN_THROWS();
+    }
+}
+
+PHP_METHOD(ZTensor, cumsum)
+{
+    zval *axis_zv = nullptr;
+    ZEND_PARSE_PARAMETERS_START(0, 1)
+        Z_PARAM_OPTIONAL
+        Z_PARAM_ZVAL(axis_zv)
+    ZEND_PARSE_PARAMETERS_END();
+
+    zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
+    if (!self_obj->tensor) {
+        zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0);
+        RETURN_THROWS();
+    }
+
+    long axis = -1;
+    if (axis_zv != nullptr && Z_TYPE_P(axis_zv) != IS_NULL) {
+        if (Z_TYPE_P(axis_zv) != IS_LONG) {
+            zend_throw_exception_ex(zend_ce_type_error, 0,
+                "ZTensor::cumsum(): axis must be int|null, %s given",
+                zend_zval_type_name(axis_zv));
+            RETURN_THROWS();
+        }
+        axis = Z_LVAL_P(axis_zv);
+    }
+
+    try {
+        ZTensor result = self_obj->tensor->cumsum(axis);
+        zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
+    } catch (const std::exception& e) {
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+        RETURN_THROWS();
+    }
+}
 #endif /* ZMATRIX_METHODS_H */
