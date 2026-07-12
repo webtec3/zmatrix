@@ -74,8 +74,8 @@ foreach ($tests as $test) {
     // Create matrices with random values
     $mem_before = memory_get_usage(true);
 
-    $a = ZTensor::random([$size, $size], 0.0, 1.0);
-    $b = ZTensor::random([$size, $size], 0.0, 1.0);
+    $a = ZTensor::random([$size, $size], 0.0, 1.0)->toGpu();
+    $b = ZTensor::random([$size, $size], 0.0, 1.0)->toGpu();
     
     $mem_after_create = memory_get_usage(true);
     $mem_input = $mem_after_create - $mem_before;

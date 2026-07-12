@@ -1,219 +1,838 @@
-# README.md Updates for ZMatrix v0.5.0
+# 📊 ZMatrix - High-Performance Matrix and Tensor Operations for PHP
 
-**Date:** January 16, 2026  
-**Status:** ✅ Complete  
-**Documentation Coverage:** 100% (72/72 methods)
+ZMatrix é uma extensão nativa para PHP escrita em C++ de altíssima performance voltada para álgebra linear, computação científica e Machine Learning. Ela implementa a classe `ZMatrix\ZTensor`, encapsulando tensores n-dimensionais com paralelismo automático via **OpenMP** e aceleração de hardware via **BLAS (cblas_sgemm)** e **CUDA**.
 
-## Summary
-
-Complete documentation review and update of README.md to reflect ZMatrix v0.5.0 changes, with all 72 public API methods documented with practical examples.
-
-## Changes Implemented
-
-### 1. **sum() Method - Complete Refactor Documentation** ✅
-
-**Updated section:** "Sum - `sum()` (v0.5.0+)"
-
-**Changes:**
-- Removed old API documentation showing `$other` parameter
-- Added **4 separate examples**:
-  - Global sum: `$t->sum()` → scalar tensor
-  - Axis-specific: `$t->sum(0)`, `$t->sum(1)` → axis reduction
-  - Negative indexing: `$t->sum(-1)` → NumPy-style
-  - Error handling: Type checking and bounds validation
-
-**Key additions:**
-```php
-// Global Sum
-$total = $tensor->sum();  // Returns [21] as scalar tensor
-
-// Sum Along Axis
-$sum_axis_0 = $tensor->sum(0);  // [5, 7, 9]
-$sum_axis_1 = $tensor->sum(1);  // [6, 15]
-
-// NumPy-style negative indexing
-$sum_last = $tensor->sum(-1);  // [6, 15]
-```
-
-**Breaking change noted** with API version marker `(v0.5.0+)`
-
-### 2. **Autograd Infrastructure - Full Documentation** ✅
-
-**New section:** "Autograd & Gradient Operations (Experimental)"
-
-**10 methods now documented:**
-- `requiresGrad()` - Enable gradient tracking
-- `isRequiresGrad()` - Check gradient status
-- `ensureGrad()` - Allocate gradient tensor
-- `getGrad()` - Retrieve gradient
-- `zeroGrad()` - Zero accumulated gradients
-- `addAutograd()` - Addition with autograd
-- `subAutograd()` - Subtraction with autograd
-- `mulAutograd()` - Multiplication with autograd
-- `sumAutograd()` - Sum with autograd
-- `backward()` - Backward pass (experimental note added)
-
-**Each with practical code examples**
-
-### 3. **Complete API Reference Table** ✅
-
-**Updated table:** "Complete API Reference - Resumo de Todos os Métodos"
-
-**Now includes:**
-- All 72 public methods (increased from previous ~50)
-- Proper categorization (11 categories)
-- Type indicator (Static/Instance/Constructor)
-- v0.5.0 update notes
-
-**Table categories:**
-| Category | Count |
-|----------|-------|
-| Creation | 11 |
-| Sequences | 3 |
-| Arithmetic | 7 |
-| Linear Algebra | 3 |
-| Math Functions | 4 |
-| Activations | 10 |
-| Statistics | 6 |
-| Shape & Info | 5 |
-| Access | 1 |
-| Manipulation | 2 |
-| Autograd | 10 |
-| GPU | 4 |
-| String | 1 |
-
-### 4. **scalarDivide() Safety Documentation** ✅
-
-**Updated in:** "Scalar Division - `scalarDivide()`"
-
-**Added information:**
-- Division-by-zero protection (v0.5.0+)
-- Exception handling example
-- Safe usage patterns
-
-```php
-// v0.5.0: Division by zero is now caught
-try {
-    $tensor->scalarDivide(0.0);  // Throws exception
-} catch (Exception $e) {
-    echo "Error: " . $e->getMessage();  // "Cannot divide by zero"
-}
-```
-
-### 5. **Removed Deprecated References** ✅
-
-**Removed:**
-- Old `sum($other_tensor, $axis)` examples
-- References to `requires_grad()` (should be `isRequiresGrad()`)
-- Duplicate method table entries
-
-### 6. **Added Usage Categories** ✅
-
-**New section:** "Categorias de Uso"
-
-Guides users by their use case:
-- **Para iniciantes** - Basic tensor operations
-- **Para machine learning** - Neural network operations
-- **Para computação numérica** - Scientific computing
-- **Para processamento em lote** - Large-scale operations
-
-## Documentation Coverage Report
-
-### Before Updates
-```
-✅ Documented: 62/72 methods
-❌ Missing: 10 methods (Autograd)
-📈 Coverage: 86%
-```
-
-### After Updates
-```
-✅ Documented: 72/72 methods
-❌ Missing: 0 methods
-📈 Coverage: 100% ✅
-```
-
-### Methods Added/Updated
-
-**Newly documented (10):**
-- `isRequiresGrad()`
-- `ensureGrad()`
-- `zeroGrad()`
-- `getGrad()`
-- `backward()`
-- `addAutograd()`
-- `subAutograd()`
-- `mulAutograd()`
-- `sumAutograd()`
-- `__toString()`
-
-**Refactored (2):**
-- `sum()` - Complete API redesign with v0.5.0 updates
-- `scalarDivide()` - Added v0.5.0 safety features
-
-## File Statistics
-
-| Metric | Value |
-|--------|-------|
-| README.md file size | +500 lines (~40KB) |
-| New code examples | 20+ |
-| Updated tables | 1 |
-| New sections | 1 |
-| Total methods documented | 72 |
-| Documentation coverage | 100% |
-
-## Quality Checks ✅
-
-- [x] All 72 methods have documentation
-- [x] All methods have practical code examples
-- [x] Breaking changes clearly marked
-- [x] v0.5.0 features highlighted
-- [x] NumPy/PyTorch compatibility noted
-- [x] Experimental features labeled
-- [x] Error handling examples provided
-- [x] GPU methods documented
-- [x] Autograd infrastructure explained
-- [x] No duplicate entries
-- [x] No deprecated references
-- [x] Code examples are syntactically correct
-
-## Migration Guide Reference
-
-Users migrating from pre-v0.5.0 need only update one method:
-
-**OLD (no longer works):**
-```php
-$result = $t->sum($other_tensor, 0);
-```
-
-**NEW (required):**
-```php
-$result = $t->sum(0);  // Simpler, cleaner API
-```
-
-All other 71 methods remain backward compatible or are additive features.
-
-## Usage
-
-The updated README.md is ready for:
-- ✅ Public documentation
-- ✅ GitHub repository
-- ✅ Package distribution
-- ✅ API reference guide
-- ✅ Tutorial base for users
-
-## Verification
-
-Last verification run:
-```
-✅ TOTAL DE MÉTODOS DOCUMENTADOS: 72 de 72
-📈 COBERTURA: 100.0%
-```
-
-All methods verified to have documentation in README.md.
+Com o `ZMatrix`, o ecossistema PHP ganha um motor matemático robusto capaz de rodar Redes Neurais complexas e algoritmos baseados em árvores (`Random Forest`, `XGBoost`) localmente e nativamente, sem a necessidade de acoplar stacks externas em Python.
 
 ---
 
-**Release prepared by:** GitHub Copilot (Claude Haiku 4.5)  
-**QA Status:** ✅ Complete and verified  
-**Ready for:** Immediate deployment
+## 🚀 Instalação e Compilação
+
+Para compilar a extensão e ativá-la no seu ambiente local:
+
+```bash
+phpize
+./configure --enable-zmatrix
+make -j$(nproc)
+sudo make install
+
+```
+
+### Ativação com suporte a GPU (CUDA)
+
+```bash
+phpize
+./configure --with-cuda-path=/usr/local/cuda
+make clean
+make -j$(nproc)
+sudo make install
+
+```
+
+Adicione a linha abaixo ao seu arquivo `php.ini`:
+
+```ini
+extension=zmatrix.so
+
+```
+
+---
+
+## 📋 Índice da API do ZTensor
+
+1. [Construtores e Métodos de Criação](#1-construtores-e-métodos-de-criação)
+2. [Propriedades do Tensor](#2-propriedades-do-tensor)
+3. [Operações Aritméticas e Álgebra Linear](#3-operações-aritméticas-e-álgebra-linear)
+4. [Operações Matemáticas Elemento a Elemento](#4-operações-matemáticas-elemento-a-elemento)
+5. [Funções de Ativação e Derivadas](#5-funções-de-ativação-e-derivadas)
+6. [Estatística, Redução e Comparação](#6-estatística-redução-e-comparação)
+7. [Transformação, Fatiamento e Formato](#7-transformação-fatiamento-e-formato)
+8. [Gerenciamento de Dispositivos (CPU / GPU CUDA)](#8-gerenciamento-de-dispositivos-cpu--gpu-cuda)
+9. [Grafo de Computação e Autograd](#9-grafo-de-computação-e-autograd)
+
+---
+
+### Uso Básico
+
+```php
+use ZMatrix\ZTensor;
+
+```
+
+---
+
+## 1. Construtores e Métodos de Criação
+
+### `__construct`
+
+Instancia um novo objeto `ZTensor`. Pode receber um formato (`shape`), um array multidimensional PHP nativo ou nenhum argumento (criando um tensor vazio).
+
+```php
+// Criando por formato (inicializado com zeros)
+$t1 = new ZTensor([2, 3]);
+
+// Criando direto por dados
+$t2 = new ZTensor([[1, 2], [3, 4]]);
+
+```
+
+### `arr`
+
+Método estático de fábrica (*factory*) para converter um array PHP aninhado ou clonar outro `ZTensor`.
+
+```php
+$t = ZTensor::arr([[1.5, 2.3], [4.0, 5.1]]);
+
+```
+
+### `safe`
+
+Equivalente estático seguro ao método `arr()`. Garante a higienização dos tipos numéricos do PHP para o tipo `float` interno da engine C++.
+
+```php
+$t = ZTensor::safe([1, 2, 3, 4]);
+
+```
+
+### `zeros`
+
+Cria um tensor preenchido inteiramente com o valor padrão `0.0f` no formato especificado.
+
+```php
+$t = ZTensor::zeros([3, 3]);
+// [[0,0,0], [0,0,0], [0,0,0]]
+
+```
+
+### `ones`
+
+Cria um tensor preenchido inteiramente com o valor padrão `1.0f` no formato especificado.
+
+```php
+$t = ZTensor::ones([2, 5]);
+
+```
+
+### `full`
+
+Cria um tensor inicializado com um valor escalar constante customizado.
+
+```php
+$t = ZTensor::full([2, 2], 7.25);
+// [[7.25, 7.25], [7.25, 7.25]]
+
+```
+
+### `fill`
+
+Modifica e preenche o tensor atual com um valor escalar constante específico.
+
+```php
+$t = ZTensor::zeros([2, 2]);$t->fill(3.14);
+
+```
+
+### `identity`
+
+Gera uma matriz identidade quadrada de dimensão $N \times N$.
+
+```php
+$t = ZTensor::identity(3);
+// [[1,0,0], [0,1,0], [0,0,1]]
+
+```
+
+### `eye`
+
+Gera uma matriz diagonal com suporte a linhas ($N$), colunas ($M$) e deslocamento opcional de diagonal ($k$).
+
+```php
+$t = ZTensor::eye(3, 4, 1); // 3 linhas, 4 colunas, diagonal superior (+1)
+
+```
+
+### `arange`
+
+Gera uma sequência linear de dados no formato de vetor 1D com limites de início (*start*), fim (*stop*) e passo (*step*).
+
+```php
+$t = ZTensor::arange(0, 10, 2.5);
+// [0.0, 2.5, 5.0, 7.5]
+
+```
+
+### `linspace`
+
+Gera um número específico de valores uniformemente espaçados dentro de um intervalo definido.
+
+```php
+$t = ZTensor::linspace(0, 1, 5);
+// [0.0, 0.25, 0.5, 0.75, 1.0]
+
+```
+
+### `logspace`
+
+Gera uma sequência espaçada logaritmicamente entre duas potências com uma base definida (padrão é 10).
+
+```php
+$t = ZTensor::logspace(1, 3, 3); // 10^1 a 10^3 com 3 amostras
+// [10.0, 100.0, 1000.0]
+
+```
+
+### `random`
+
+Gera uma matriz com distribuição aleatória uniforme contida entre os intervalos `min` e `max`.
+
+```php
+$t = ZTensor::random([2, 3], -1.0, 1.0);
+
+```
+
+### `randn`
+
+Gera uma matriz baseada em uma distribuição normal estável (Gaussiana) parametrizada por média (`mean`) e desvio padrão (`std_dev`).
+
+```php
+$t = ZTensor::randn([3, 3], 0.0, 1.0); // Distribuição normal padrão
+
+```
+
+---
+
+## 2. Propriedades do Tensor
+
+### `shape`
+
+Retorna um array PHP indexado contendo as dimensões atuais da estrutura do tensor.
+
+```php
+$t = ZTensor::zeros([3, 5]);
+print_r($t->shape()); // Out: [3, 5]
+
+```
+
+### `size`
+
+Retorna a contagem linear acumulada contendo o número total de elementos alocados na memória do tensor.
+
+```php
+$t = ZTensor::zeros([2, 3, 4]);
+echo $t->size(); // Out: 24
+
+```
+
+### `ndim`
+
+Retorna a dimensionalidade (número de eixos coordenados) do tensor.
+
+```php
+$t = ZTensor::arr([1, 2, 3]);
+echo $t->ndim(); // Out: 1
+
+```
+
+### `isEmpty`
+
+Retorna um valor booleano indicando se o tensor está vazio (sem eixos ou tamanho zero).
+
+```php
+$t = new ZTensor();
+var_dump($t->isEmpty()); // Out: true
+
+```
+
+### `toArray`
+
+Exporta a estrutura binária contígua do tensor C++ de volta para uma estrutura nativa de arrays aninhados do PHP.
+
+```php
+$t = ZTensor::ones([2, 2]);
+$arr =$t->toArray();
+
+```
+
+---
+
+## 3. Operações Aritméticas e Álgebra Linear
+
+*Nota: As operações aritméticas básicas oferecem suporte nativo a **Broadcasting** automático entre tensores 2D e 1D.*
+
+### `add`
+
+Soma elemento a elemento outro tensor, array PHP ou adiciona um valor escalar de forma in-place.
+
+```php
+$a = ZTensor::arr([1, 2, 3]);
+$a->add([1, 1, 1]); //$a vira [2, 3, 4]
+
+```
+
+### `sub`
+
+Subtrai elemento a elemento outro tensor, array PHP ou valor escalar de forma in-place.
+
+```php
+$a = ZTensor::arr([5, 5, 5]);
+$a->sub(2); //$a vira [3, 3, 3]
+
+```
+
+### `mul`
+
+Aplica a multiplicação elemento a elemento de Hadamard (não confundir com multiplicação matricial). Suporta escalares.
+
+```php
+$a = ZTensor::arr([2, 3]);
+$a->mul([2, 4]); //$a vira [4, 12]
+
+```
+
+### `divide`
+
+Aplica a divisão elemento a elemento de forma in-place. Dispara uma exceção caso detecte divisão por zero.
+
+```php
+$a = ZTensor::arr([10, 20]);
+$a->divide([2, 4]); //$a vira [5, 5]
+
+```
+
+### `scalarMultiply`
+
+Multiplica de forma otimizada todos os índices do tensor por um valor escalar fracionário.
+
+```php
+$t = ZTensor::ones([2, 2]);$t->scalarMultiply(5.5);
+
+```
+
+### `scalarDivide`
+
+Divide de forma otimizada todos os índices do tensor por um valor escalar estável.
+
+```php
+$t = ZTensor::full([2, 2], 10.0);$t->scalarDivide(2.0);
+
+```
+
+### `matmul`
+
+Multiplicação de Matrizes Pura (Aplica o algoritmo otimizado `cblas_sgemm` do BLAS). Requer tensores bidimensionais compatíveis com a regra $(M \times K) \cdot (K \times N)$.
+
+```php
+$a = ZTensor::arr([[1, 2], [3, 4]]); // [2x2]
+$b = ZTensor::arr([[5], [6]]);       // [2x1]$c = $a->matmul($b);                 // Resultado [2x1]
+
+```
+
+### `dot`
+
+Produto escalar genérico. Se os inputs forem vetores 1D, calcula o produto interno clássico. Se forem matrizes 2D/1D, aplica a multiplicação correspondente.
+
+```php
+$v1 = ZTensor::arr([1, 2]);$v2 = ZTensor::arr([3, 4]);
+echo $v1->dot($v2); // Out: 11.0 (1*3 + 2*4)
+
+```
+
+---
+
+## 4. Operações Matemáticas Elemento a Elemento
+
+### `abs`
+
+Aplica o cálculo do valor absoluto (módulo) in-place para remover sinais negativos de todos os coeficientes.
+
+```php
+$t = ZMatrix\ZTensor::arr([-5, 2, -10]);$t->abs(); // [5, 2, 10]
+
+```
+
+### `exp`
+
+Aplica a função exponencial de base natural $e^x$ in-place em todos os componentes.
+
+```php
+$t = ZTensor::arr([0, 1]);$t->exp(); // [1.0, 2.71828...]
+
+```
+
+### `log`
+
+Aplica o logaritmo natural ($\ln x$) in-place. Lança exceções caso encontre valores menores ou iguais a zero.
+
+```php
+$t = ZTensor::arr([1, 2.718282]);$t->log(); // [0.0, 1.0]
+
+```
+
+### `sqrt`
+
+Calcula e aplica a raiz quadrada ($\sqrt{x}$) de forma in-place. Lança exceções caso existam números negativos.
+
+```php
+$t = ZTensor::arr([4, 16]);$t->sqrt(); // [2.0, 4.0]
+
+```
+
+### `pow`
+
+Eleva cada elemento contido na matriz à potência exponencial do argumento escalar passado.
+
+```php
+$t = ZTensor::arr([2, 3]);$t->pow(3); // [8.0, 27.0]
+
+```
+
+---
+
+## 5. Funções de Ativação e Derivadas
+
+### `sigmoid`
+
+Aplica a curva logística de ativação Sigmoid in-place: $f(x) = \frac{1}{1 + e^{-x}}$.
+
+```php
+$t = ZTensor::arr([0.0]);$t->sigmoid(); // [0.5]
+
+```
+
+### `sigmoidDerivative`
+
+Calcula a derivada da Sigmoid sobre os valores locais estabilizados do tensor: $f'(x) = f(x) \cdot (1 - f(x))$.
+
+```php
+$t->sigmoidDerivative();
+
+```
+
+### `relu`
+
+Aplica a retificação linear clássica (ReLU) in-place: $f(x) = \max(0, x)$.
+
+```php
+$t = ZTensor::arr([-5, 2]);$t->relu(); // [0.0, 2.0]
+
+```
+
+### `reluDerivative`
+
+Calcula o gradiente descendente da ReLU substituindo os eixos por valores booleanos normalizados ($1.0$ se $x > 0$, caso contrário $0.0$).
+
+```php
+$t->reluDerivative();
+
+```
+
+### `leakyRelu`
+
+Aplica a retificação linear com vazamento controlado por um coeficiente constante multiplicador (`alpha`).
+
+```php
+$t = ZTensor::arr([-2, 4]);$t->leakyRelu(0.01); // [-0.02, 4.0]
+
+```
+
+### `leakyReluDerivative`
+
+Gera a derivada correspondente da função Leaky ReLU ($1.0$ se $x > 0$, caso contrário `alpha`).
+
+```php
+$t->leakyReluDerivative(0.01);
+
+```
+
+### `tanh`
+
+Aplica a tangente hiperbólica in-place limitando as coordenadas lógicas entre os intervalos de $[-1.0, 1.0]$.
+
+```php
+$t = ZTensor::arr([0.0]);$t->tanh(); // [0.0]
+
+```
+
+### `tanhDerivative`
+
+Mapeia o cálculo derivativo da tangente hiperbólica: $f'(x) = 1 - \tanh^2(x)$.
+
+```php
+$t->tanhDerivative();
+
+```
+
+### `softmax`
+
+Calcula e distribui a exponencial probabilística Softmax ao longo das linhas do tensor (usado para classificação multiclasse).
+
+```php
+$t = ZTensor::arr([[1.0, 2.0, 3.0]]);$t->softmax(); // Converte em probabilidades que somam 1.0
+
+```
+
+### `softmaxDerivative`
+
+Calcula e extrai os componentes da matriz Jacobiana correspondentes ao gradiente da ativação Softmax.
+
+```php
+$t->softmaxDerivative();
+
+```
+
+---
+
+## 6. Estatística, Redução e Comparação
+
+### `sumtotal`
+
+Soma de forma global e irrestrita todos os componentes contidos na memória do tensor, retornando um valor `double`.
+
+```php
+$t = ZTensor::arr([[1, 2], [3, 4]]);
+echo $t->sumtotal(); // Out: 10.0
+
+```
+
+### `mean`
+
+Calcula a média aritmética simples de todos os elementos contidos no objeto.
+
+```php
+$t = ZTensor::arr([1, 2, 3, 4]);
+echo $t->mean(); // Out: 2.5
+
+```
+
+### `min`
+
+Retorna o menor coeficiente escalar mapeado dentro da estrutura do tensor.
+
+```php
+$t = ZTensor::arr([4, -1, 3]);
+echo $t->min(); // Out: -1.0
+
+```
+
+### `max`
+
+Retorna o maior coeficiente escalar mapeado dentro da estrutura do tensor.
+
+```php
+$t = ZTensor::arr([4, -1, 3]);
+echo $t->max(); // Out: 4.0
+
+```
+
+### `std`
+
+Retorna o desvio padrão amostral corrigido de todos os elementos alocados no tensor.
+
+```php
+$t = ZTensor::arr([1, 2, 3, 4]);
+echo $t->std();
+
+```
+
+### `sum`
+
+Redução focada por eixos lógicos (`axis`). O resultado acumulado é injetado diretamente em um tensor de saída previamente alocado com a dimensionalidade reduzida correspondente.
+
+```php
+$t = ZTensor::arr([[1, 2], [3, 4]]);
+$out = ZTensor::zeros([2]);$t->sum($out, 1); // Soma ao longo do eixo das colunas (eixo 1) //$out vira [3, 7]
+
+```
+
+### `greater`
+
+Compara elemento a elemento se o tensor atual é maior que outra matriz ou array, retornando um tensor binário ($1.0$ onde for verdadeiro, $0.0$ onde for falso).
+
+```php
+$a = ZTensor::arr([1, 5]);
+$b =$a->greater([2, 2]); // [0.0, 1.0]
+
+```
+
+### `clip`
+
+Método estático utilitário que restringe e intercepta todos os coeficientes do tensor de entrada dentro das fronteiras lineares especificadas por `min` e `max`.
+
+```php
+$t = ZTensor::arr([-5, 5, 20]);
+$clipped = ZTensor::clip($t, 0.0, 10.0); // [0.0, 5.0, 10.0]
+
+```
+
+### `minimum`
+
+Método estático utilitário que gera um novo tensor contendo a comparação mínima elemento a elemento entre uma matriz e um valor escalar constante.
+
+```php
+$t = ZTensor::arr([1, 5, 2]);
+$res = ZTensor::minimum($t, 3.0); // [1.0, 3.0, 2.0]
+
+```
+
+### `maximum`
+
+Método estático utilitário que gera um novo tensor contendo a comparação máxima elemento a elemento entre uma matriz e um valor escalar constante.
+
+```php
+$t = ZTensor::arr([1, 5, 2]);
+$res = ZTensor::maximum($t, 3.0); // [3.0, 5.0, 3.0]
+
+```
+
+---
+
+## 7. Transformação, Fatiamento e Formato
+
+### `reshape`
+
+Modifica os eixos lógicos do tensor sem alterar a ordem física dos dados alocados na memória contígua.
+
+```php
+$t = ZTensor::arr([1, 2, 3, 4]); // 1D
+$matrix =$t->reshape([2, 2]);   // Transforma em 2D de formato [2x2]
+
+```
+
+### `transpose`
+
+Inverte os eixos de uma matriz bidimensional trocando o posicionamento original de linhas por colunas.
+
+```php
+$t = ZTensor::arr([[1, 2, 3], [4, 5, 6]]);
+$transposta =$t->transpose(); // Transforma o formato de [2x3] para [3x2]
+
+```
+
+### `slice`
+
+Recorta uma janela ou bloco bidimensional contíguo especificando os eixos coordenados de início e a janela de deslocamento final.
+
+```php
+$t = ZTensor::arr([[1,2,3], [4,5,6], [7,8,9]]);
+$subMatriz =$t->slice(0, 0, 2); // Fatia sub-regiões estruturadas
+
+```
+
+### `broadcast`
+
+Expande e propaga de forma matemática um viés ou vetor unidimensional (`bias`) através das linhas correspondentes de uma matriz bidimensional dominante.
+
+```php
+$matrix = ZTensor::zeros([3, 2]);
+$bias = ZTensor::arr([10, 20]);$res = $matrix->broadcast($bias); // Adiciona [10, 20] a todas as 3 linhas
+
+```
+
+### `copy`
+
+Realiza uma cópia profunda (*deep copy*) realocando novos ponteiros e isolando completamente a memória do novo tensor em relação ao original.
+
+```php
+$t = ZTensor::arr([1, 2]);
+$dublo =$t->copy();
+
+```
+
+### `key`
+
+Acessa de forma pontual o valor real de um escalar diretamente através das suas coordenadas multidimensionais indexadas.
+
+```php
+$t = ZTensor::arr([[1, 2], [3, 4]]);
+echo $t->key([1, 0]); // Acessa Linha 1, Coluna 0. Out: 3.0
+
+```
+
+### `tile`
+
+Método estático para repetir e empilhar verticalmente uma matriz um número determinado de vezes.
+
+```php
+$t = ZTensor::arr([[1, 2]]);
+$tiled = ZTensor::tile($t, 3); // Empilha a linha 3 vezes. Formato vira [3x2]
+
+```
+
+### `column`
+
+Extrai de forma isolada uma coluna específica de uma matriz bidimensional, retornando um novo tensor coluna.
+
+```php
+$t = ZTensor::arr([[1, 2], [3, 4]]);
+$col =$t->column(0); // Extrai a primeira coluna: [1, 3]
+
+```
+
+### `argsort`
+
+Retorna os índices que ordenariam o tensor ao longo do eixo selecionado. Essencial para algoritmos de busca e árvores.
+
+```php
+$t = ZTensor::arr([30, 10, 20]);
+$idx =$t->argsort(0); // [1, 2, 0] (posições dos valores ordenados: 10, 20, 30)
+
+```
+
+### `where`
+
+Varre uma coluna específica avaliando se os valores atendem a um limiar numérico informado, retornando uma máscara de índices compatíveis.
+
+```php
+$t = ZTensor::arr([[1, 10], [4, 20]]);
+$mask =$t->where(0, 2.0); // Varre a coluna 0 buscando valores maiores que 2.0
+
+```
+
+---
+
+## 8. Gerenciamento de Dispositivos (CPU / GPU CUDA)
+
+### `toGpu`
+
+Transfere de forma síncrona o mapeamento de memória do array contíguo da memória RAM da CPU direto para os núcleos de processamento paralelo da VRAM da GPU (via **CUDA**).
+
+```php
+$t = ZTensor::random([1000, 1000]);
+$gpuTensor =$t->toGpu(); // Pronto para aceleração por hardware massiva
+
+```
+
+### `toCpu`
+
+Realiza a operação inversa, trazendo os dados processados e armazenados na VRAM da placa de vídeo de volta para a memória RAM controlada pela CPU.
+
+```php
+$cpuTensor =$gpuTensor->toCpu();
+
+```
+
+### `isOnGpu`
+
+Retorna um sinalizador booleano indicando se a instância do tensor reside atualmente na memória da GPU.
+
+```php
+if ($t->isOnGpu()) {
+    // Código otimizado para GPU
+}
+
+```
+
+### `freeDevice`
+
+Libera explicitamente os blocos de memória e os ponteiros alocados na GPU associados ao tensor, evitando vazamentos de memória na VRAM (*VRAM Memory Leaks*).
+
+```php
+$gpuTensor->freeDevice();
+
+```
+
+---
+
+## 9. Grafo de Computação e Autograd
+
+O mecanismo de **Autograd** monitora e constrói de forma implícita o grafo de computação dinâmica de operações matemáticas, permitindo a execução automática da retropropagação (*backpropagation*) de gradientes.
+
+### `requiresGrad`
+
+Ativa ou desativa o monitoramento de rastreamento do grafo de computação e acumulação de gradientes para o tensor selecionado.
+
+```php
+$x = ZTensor::arr([2.0])->requiresGrad(true);
+
+```
+
+### `isRequiresGrad`
+
+Retorna o estado booleano atual indicando se o tensor está configurado para registrar informações de gradiente.
+
+```php
+echo $x->isRequiresGrad() ? 'Sim' : 'Não';
+
+```
+
+### `ensureGrad`
+
+Garante que a alocação de memória reservada para os gradientes internos do tensor esteja instanciada e pronta para receber os passos do otimizador.
+
+```php
+$x->ensureGrad();
+
+```
+
+### `getGrad`
+
+Retorna um novo objeto `ZTensor` contendo os gradientes acumulados gerados após a execução de um passo de retropropagação.
+
+```php
+$gradientes =$x->getGrad();
+
+```
+
+### `zeroGrad`
+
+Zera os gradientes acumulados na instância do tensor. Crucial para limpar o histórico de gradientes a cada nova época de treinamento.
+
+```php
+$weights->zeroGrad();
+
+```
+
+### `backward`
+
+Dispara de forma recursiva a retropropagação da regra da cadeia a partir do nó de saída atual, calculando e distribuindo os gradientes de todas as variáveis dependentes no grafo.
+
+```php
+$loss->backward(); // Calcula dW e dB para a rede automaticamente
+
+```
+
+### `addAutograd`
+
+Método estático que realiza a operação de soma registrando o nó de computação correspondente no grafo para o Autograd.
+
+```php
+$z = ZTensor::addAutograd($x,$y);
+
+```
+
+### `subAutograd`
+
+Método estático que realiza a operação de subtração registrando o nó de computação correspondente no grafo para o Autograd.
+
+```php
+$z = ZTensor::subAutograd($x,$y);
+
+```
+
+### `mulAutograd`
+
+Método estático que realiza a operação de multiplicação de Hadamard registrando o nó de computação correspondente no grafo para o Autograd.
+
+```php
+$z = ZTensor::mulAutograd($x,$y);
+
+```
+
+### `sumAutograd`
+
+Método estático que realiza a redução de soma registrando o nó de computação correspondente no grafo para o Autograd.
+
+```php
+$z = ZTensor::sumAutograd($x);
+
+```
+
+---
+
+## 📄 Licença
+
+Este projeto está licenciado sob a licença MIT. Veja o arquivo `LICENSE` para mais detalhes.
+
+```
+
+```

@@ -240,4 +240,25 @@ ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_fill, 0, 0, 1)
     ZEND_ARG_TYPE_INFO(0, value, IS_DOUBLE, 0)
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_column, 0, 0, 1)
+    ZEND_ARG_TYPE_INFO(0, col_idx, IS_LONG, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_row, 0, 0, 1)
+    ZEND_ARG_TYPE_INFO(0, row_idx, IS_LONG, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_gather, 0, 0, 1)
+    ZEND_ARG_TYPE_INFO(0, indices, IS_ARRAY, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_argsort, 0, 0, 0)
+    ZEND_ARG_TYPE_INFO(0, axis, IS_LONG, 1)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_where, 0, 0, 2)
+    ZEND_ARG_TYPE_INFO(0, feature_index, IS_LONG, 0)
+    ZEND_ARG_TYPE_INFO(0, threshold, IS_DOUBLE, 0)
+ZEND_END_ARG_INFO()
+
 #endif /* ZMATRIX_ARGINFO_H */

@@ -116,7 +116,9 @@ final class ZTensor
      * @throws \TypeError   If axis is not int|null
      * @throws \Exception  If axis is out of bounds or tensor is empty
      */
-    public function sum(?int $axis = null): ZTensor {}
+    public function sum(?int $axis = null): ZTensor
+    {
+    }
 
     /**
      * Clips the tensor values within a specified range.
@@ -413,10 +415,10 @@ final class ZTensor
 
     /**
      * Extrai uma fatia (subarray) do tensor sem copiar dados
-     * 
+     *
      * Cria uma VIEW do mesmo buffer com offset e shape ajustados.
      * Operação de custo O(1) - sem cópia de dados.
-     * 
+     *
      * @param int $axis Eixo ao longo do qual fazer slice
      * @param int $start Índice inicial (inclusivo)
      * @param int $end Índice final (exclusivo)
@@ -885,6 +887,89 @@ final class ZTensor
      * ```
      */
     public function freeDevice(): void
+    {
+    }
+
+    /**
+     * Returns a column from the tensor.
+     *
+     * @param int $col_idx Zero-based column index.
+     *
+     * @return ZTensor A new tensor containing the selected column.
+     *
+     * @throws \Exception If the tensor is not initialized.
+     * @throws \Exception If the column index is invalid or out of range.
+     */
+    public function column(int $col_idx): ZTensor
+    {
+    }
+
+    /**
+     * Returns a row from the tensor.
+     *
+     * Extracts the specified row and returns it as a new tensor.
+     *
+     * @param int $row_idx Zero-based row index.
+     *
+     * @return ZTensor A new tensor containing the selected row.
+     *
+     * @throws \Exception If the tensor is not initialized.
+     * @throws \Exception If the row index is negative.
+     * @throws \Exception If the row index is out of range.
+     */
+    public function row(int $row_idx): ZTensor
+    {
+    }
+
+    /**
+     * Returns a new tensor containing the elements at the specified indices.
+     *
+     * Gathers elements from the tensor according to the provided index list.
+     *
+     * @param array<int> $indices List of zero-based indices to gather.
+     *
+     * @return ZTensor A new tensor containing the gathered elements.
+     *
+     * @throws \Exception If the tensor is not initialized.
+     * @throws \Exception If any index is invalid or out of range.
+     * @throws \Exception If the array contains non-integer values.
+     */
+    public function gather(array $indices): ZTensor
+    {
+    }
+
+    /**
+     * Returns the indices that would sort the tensor along the specified axis.
+     *
+     * Computes the indices that sort the tensor in ascending order along the
+     * given axis.
+     *
+     * @param int|null $axis Axis along which to sort. Defaults to 0.
+     *
+     * @return ZTensor A tensor containing the sorted indices.
+     *
+     * @throws \Exception If the tensor is not initialized.
+     * @throws \Exception If the axis is invalid.
+     */
+    public function argsort(?int $axis = 0): ZTensor
+    {
+    }
+
+    /**
+     * Returns a boolean mask indicating which values satisfy the condition.
+     *
+     * Compares the values of the specified feature (column) against the given
+     * threshold and returns a tensor containing the resulting mask.
+     *
+     * @param int $feature_index Zero-based feature (column) index.
+     * @param float $threshold Threshold value used for the comparison.
+     *
+     * @return ZTensor A tensor containing the boolean mask.
+     *
+     * @throws \Exception If the tensor is not initialized.
+     * @throws \Exception If the feature index is invalid or out of range.
+     */
+    public function where(int $feature_index, float $threshold): ZTensor
     {
     }
 

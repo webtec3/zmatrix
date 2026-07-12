@@ -1857,7 +1857,6 @@ PHP_METHOD(ZTensor, greater)
         Z_PARAM_ZVAL(other_zv)
     ZEND_PARSE_PARAMETERS_END();
 
-    // Converte $this
     zmatrix_ztensor_object *intern = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
     if (!intern->tensor) {
         zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0);
@@ -1865,41 +1864,145 @@ PHP_METHOD(ZTensor, greater)
     }
     ZTensor &A = *intern->tensor;
 
-    // Converte o argumento para ZTensor*
+#ifdef HAVE_CUDA
+    // FIX: greater() lia data.data() direto sem sincronizar — mesmo bug que já
+    // corrigimos em transpose(). Sincroniza A com o host antes de qualquer acesso.
+    A.ensure_host();
+#endif
+
+    // FIX: greater() antes exigia same_shape() sempre, sem nenhum dos caminhos de
+    // broadcast que add/sub/mul/divide já têm (escalar direto, vetor 1D de tamanho
+    // 1, broadcast 2D×1D). Isso quebrava exatamente o uso real da classe Metric
+    // ($pred->greater([0.5]) com $pred de shape (N,1)), que sempre caía em
+    // shape-mismatch.
+
+    // 1) Escalar (int ou float) direto: $t->greater(0.5)
+    if (Z_TYPE_P(other_zv) == IS_LONG || Z_TYPE_P(other_zv) == IS_DOUBLE) {
+        float scalar = (Z_TYPE_P(other_zv) == IS_LONG)
+            ? (float)Z_LVAL_P(other_zv)
+            : (float)Z_DVAL_P(other_zv);
+
+        size_t N = A.size();
+        ZTensor result(A.shape);
+        float *r_data = result.data.data();
+        const float *a_data = A.data.data();
+
+        #if HAS_OPENMP
+        if (N > ZMATRIX_PARALLEL_THRESHOLD) {
+            #pragma omp parallel for simd schedule(static)
+            for (size_t i = 0; i < N; ++i) {
+                r_data[i] = (a_data[i] > scalar) ? 1.0f : 0.0f;
+            }
+        } else
+        #endif
+        {
+            for (size_t i = 0; i < N; ++i) {
+                r_data[i] = (a_data[i] > scalar) ? 1.0f : 0.0f;
+            }
+        }
+
+        zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
+        return;
+    }
+
+    // Converte o argumento (array ou ZTensor) para ZTensor*
     ZTensor tmp_other, *B_ptr = nullptr;
     if (!zmatrix_get_tensor_ptr(other_zv, B_ptr, tmp_other, zmatrix_ce_ZTensor)) {
         RETURN_THROWS();
     }
     ZTensor &B = *B_ptr;
 
-    // Shape-mismatch → RuntimeException
-    if (!A.same_shape(B)) {
-        zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_SHAPE_MISMATCH, 0);
-        RETURN_THROWS();
-    }
+#ifdef HAVE_CUDA
+    B.ensure_host();
+#endif
 
     try {
-        size_t N = A.size();
-        ZTensor result(A.shape);
-        float *r_data = result.data.data();
-        const float *a_data = A.data.data();
-        const float *b_data = B.data.data();
+        // 2) Vetor 1D de tamanho 1 → escalar: $t->greater([0.5])
+        if (B.shape.size() == 1 && B.shape[0] == 1) {
+            float scalar = B.data.data()[0];
+            size_t N = A.size();
+            ZTensor result(A.shape);
+            float *r_data = result.data.data();
+            const float *a_data = A.data.data();
 
-        #if HAS_OPENMP
-        if (N > ZMATRIX_PARALLEL_THRESHOLD) {
-#pragma omp parallel for simd schedule(static)
-            for (size_t i = 0; i < N; ++i) {
-                r_data[i] = (a_data[i] > b_data[i]) ? 1.0f : 0.0f;
+            #if HAS_OPENMP
+            if (N > ZMATRIX_PARALLEL_THRESHOLD) {
+                #pragma omp parallel for simd schedule(static)
+                for (size_t i = 0; i < N; ++i) {
+                    r_data[i] = (a_data[i] > scalar) ? 1.0f : 0.0f;
+                }
+            } else
+            #endif
+            {
+                for (size_t i = 0; i < N; ++i) {
+                    r_data[i] = (a_data[i] > scalar) ? 1.0f : 0.0f;
+                }
             }
-        } else
-        #endif
-        {
-            for (size_t i = 0; i < N; ++i) {
-                r_data[i] = (a_data[i] > b_data[i]) ? 1.0f : 0.0f;
-            }
+
+            zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
+            return;
         }
 
-        zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
+        // 3) Mesmo shape → element-wise direto (comportamento original preservado)
+        if (A.same_shape(B)) {
+            size_t N = A.size();
+            ZTensor result(A.shape);
+            float *r_data = result.data.data();
+            const float *a_data = A.data.data();
+            const float *b_data = B.data.data();
+
+            #if HAS_OPENMP
+            if (N > ZMATRIX_PARALLEL_THRESHOLD) {
+                #pragma omp parallel for simd schedule(static)
+                for (size_t i = 0; i < N; ++i) {
+                    r_data[i] = (a_data[i] > b_data[i]) ? 1.0f : 0.0f;
+                }
+            } else
+            #endif
+            {
+                for (size_t i = 0; i < N; ++i) {
+                    r_data[i] = (a_data[i] > b_data[i]) ? 1.0f : 0.0f;
+                }
+            }
+
+            zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
+            return;
+        }
+
+        // 4) Broadcast 2D×1D: A [M×N], B [N] (mesmo padrão de add/sub/mul/divide)
+        if (A.shape.size() == 2 && B.shape.size() == 1 && B.shape[0] == A.shape[1]) {
+            size_t M = A.shape[0], N = A.shape[1];
+            size_t total = M * N;
+            ZTensor result(A.shape);
+            float *r_data = result.data.data();
+            const float *a_data = A.data.data();
+            const float *b_data = B.data.data();
+
+            #if HAS_OPENMP
+            if (total > ZMATRIX_PARALLEL_THRESHOLD) {
+                #pragma omp parallel for schedule(static)
+                for (size_t i = 0; i < M; ++i) {
+                    for (size_t j = 0; j < N; ++j) {
+                        r_data[i * N + j] = (a_data[i * N + j] > b_data[j]) ? 1.0f : 0.0f;
+                    }
+                }
+            } else
+            #endif
+            {
+                for (size_t i = 0; i < M; ++i) {
+                    for (size_t j = 0; j < N; ++j) {
+                        r_data[i * N + j] = (a_data[i * N + j] > b_data[j]) ? 1.0f : 0.0f;
+                    }
+                }
+            }
+
+            zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
+            return;
+        }
+
+        // 5) Outros casos incompatíveis
+        zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_SHAPE_MISMATCH, 0);
+        RETURN_THROWS();
     }
     catch (const std::exception &e) {
         zend_throw_exception(zend_ce_exception, e.what(), 0);
@@ -2427,8 +2530,6 @@ PHP_METHOD(ZTensor, freeDevice)
     }
 }
 
-
-
 PHP_METHOD(ZTensor, slice)
 {
     zend_long axis, start, end;
@@ -2471,4 +2572,144 @@ PHP_METHOD(ZTensor, slice)
     }
 }
 
+PHP_METHOD(ZTensor, column)
+{
+    zend_long col_idx;
+
+    ZEND_PARSE_PARAMETERS_START(1, 1)
+        Z_PARAM_LONG(col_idx)
+    ZEND_PARSE_PARAMETERS_END();
+
+    zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
+    if (!self_obj->tensor) {
+        zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0);
+        RETURN_THROWS();
+    }
+
+    if (col_idx < 0) {
+        zend_throw_exception(zend_ce_exception, "Índice da coluna não pode ser negativo", 0);
+        RETURN_THROWS();
+    }
+
+    try {
+        ZTensor result = self_obj->tensor->column((size_t)col_idx);
+        zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
+    } catch (const std::exception& e) {
+        // Converte runtime_error e out_of_range em Exceptions do PHP nativas e limpas
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+        RETURN_THROWS();
+    }
+}
+
+PHP_METHOD(ZTensor, row)
+{
+    zend_long row_idx;
+
+    ZEND_PARSE_PARAMETERS_START(1, 1)
+        Z_PARAM_LONG(row_idx)
+    ZEND_PARSE_PARAMETERS_END();
+
+    // Segue o mesmo padrão de segurança que você usou no column()
+    zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
+    if (!self_obj->tensor) {
+        zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0);
+        RETURN_THROWS();
+    }
+
+    if (row_idx < 0) {
+        zend_throw_exception(zend_ce_exception, "Índice da linha não pode ser negativo", 0);
+        RETURN_THROWS();
+    }
+
+    try {
+        // Chama a lógica que colocamos na struct ZTensor
+        ZTensor result = self_obj->tensor->row((size_t)row_idx);
+
+        // Usa o helper de retorno que você já utiliza no projeto
+        zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
+    } catch (const std::exception& e) {
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+        RETURN_THROWS();
+    }
+}
+
+PHP_METHOD(ZTensor, gather)
+{
+    zval *indices_array;
+
+    ZEND_PARSE_PARAMETERS_START(1, 1)
+        Z_PARAM_ARRAY(indices_array)
+    ZEND_PARSE_PARAMETERS_END();
+
+    // 1. Converter array PHP em std::vector<size_t>
+    std::vector<size_t> indices;
+    zval *entry;
+    ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(indices_array), entry) {
+        if (Z_TYPE_P(entry) != IS_LONG) {
+            zend_throw_exception(zend_ce_exception, "Os índices devem ser inteiros", 0);
+            RETURN_THROWS();
+        }
+        indices.push_back((size_t)Z_LVAL_P(entry));
+    } ZEND_HASH_FOREACH_END();
+
+    // 2. Chamar o método da ZTensor
+    zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
+    if (!self_obj->tensor) {
+        zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0);
+        RETURN_THROWS();
+    }
+
+    try {
+        ZTensor result = self_obj->tensor->gather(indices);
+        zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
+    } catch (const std::exception& e) {
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+        RETURN_THROWS();
+    }
+}
+
+PHP_METHOD(ZTensor, argsort)
+{
+    zend_long axis = 0; // Padrão axis=0
+
+    ZEND_PARSE_PARAMETERS_START(0, 1)
+        Z_PARAM_OPTIONAL
+        Z_PARAM_LONG(axis)
+    ZEND_PARSE_PARAMETERS_END();
+
+    zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
+    try {
+        ZTensor result = self_obj->tensor->argsort((size_t)axis);
+        zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
+    } catch (const std::exception& e) {
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+        RETURN_THROWS();
+    }
+}
+
+PHP_METHOD(ZTensor, where)
+{
+    zend_long feature_index;
+    double threshold;
+
+    ZEND_PARSE_PARAMETERS_START(2, 2)
+        Z_PARAM_LONG(feature_index)
+        Z_PARAM_DOUBLE(threshold)
+    ZEND_PARSE_PARAMETERS_END();
+
+    zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
+    if (!self_obj->tensor) {
+        zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0);
+        RETURN_THROWS();
+    }
+
+    try {
+        // Assume-se que o método where existe na struct ZTensor e retorna uma máscara ZTensor
+        ZTensor result = self_obj->tensor->where((size_t)feature_index, (float)threshold);
+        zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
+    } catch (const std::exception& e) {
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+        RETURN_THROWS();
+    }
+}
 #endif /* ZMATRIX_METHODS_H */

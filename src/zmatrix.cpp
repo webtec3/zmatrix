@@ -212,9 +212,19 @@ struct ZTensor {
             throw std::invalid_argument("Gradient shape mismatch in accumulate_grad");
         }
 
+#ifdef HAVE_CUDA
+        // FIX: garante que o gradiente de entrada esteja sincronizado com o host
+        // antes de somá-lo. Antes, esta função lia grad_in.data.data() direto,
+        // o que corrompia o resultado se grad_in estivesse residente na GPU.
+        grad_in.ensure_host();
+#endif
+
         std::lock_guard<std::mutex> lock(grad_mutex);
 
         ZTensor& g = ensureGrad();
+#ifdef HAVE_CUDA
+        g.ensure_host();
+#endif
         const size_t N = size();
         if (N == 0) return;
 
@@ -237,6 +247,10 @@ struct ZTensor {
             g_data[i] += gin_data[i];
         }
 #endif
+
+#ifdef HAVE_CUDA
+        g.mark_host_modified();
+#endif
     }
 
     // Backward pass (reverse-mode autodiff)
@@ -255,33 +269,48 @@ struct ZTensor {
 
         if (!grad_fn) return;
 
-        // 3) Ordenação topológica (DFS sem recursão profunda)
+        // 3) Ordenação topológica pós-ordem (DFS sem recursão profunda)
         std::vector<std::shared_ptr<AutogradNode>> topo;
         topo.reserve(128);
 
         std::unordered_set<AutogradNode*> visited;
         visited.reserve(128);
+        std::unordered_set<AutogradNode*> expanded;
+        expanded.reserve(128);
 
         std::vector<std::shared_ptr<AutogradNode>> stack;
         stack.push_back(grad_fn);
 
         while (!stack.empty()) {
             auto node = stack.back();
-            stack.pop_back();
+            if (!node) {
+                stack.pop_back();
+                continue;
+            }
 
-            if (!node || visited.count(node.get())) continue;
-            visited.insert(node.get());
+            if (visited.count(node.get())) {
+                stack.pop_back();
+                continue;
+            }
 
-            topo.push_back(node);
-
-            for (auto* parent : node->parents_raw) {
-                if (parent && parent->grad_fn) {
-                    stack.push_back(parent->grad_fn);
+            if (expanded.count(node.get())) {
+                visited.insert(node.get());
+                topo.push_back(node);
+                stack.pop_back();
+            } else {
+                expanded.insert(node.get());
+                // Insere os nós pais na pilha para que sejam processados antes
+                for (auto* parent : node->parents_raw) {
+                    if (parent && parent->grad_fn) {
+                        if (visited.count(parent->grad_fn.get()) == 0) {
+                            stack.push_back(parent->grad_fn);
+                        }
+                    }
                 }
             }
         }
 
-        // 4) Backward na ordem reversa
+        // 4) Backward na ordem reversa da ordenação topológica (pós-ordem reversa)
         for (auto it = topo.rbegin(); it != topo.rend(); ++it) {
             auto& node = *it;
             if (node->backward_fn) {
@@ -300,6 +329,7 @@ struct ZTensor {
     mutable size_t d_capacity = 0;
     mutable bool device_valid = false;
     mutable bool host_valid = true;
+    mutable std::mutex device_mutex; // FIX: protege d_data/device_valid/host_valid contra corrida de dados
 #endif
 
 
@@ -352,12 +382,30 @@ struct ZTensor {
           owns_data(other.owns_data)
     {
 #ifdef HAVE_CUDA
-        other.ensure_host();
-        data = other.data;
         d_data = nullptr;
         d_capacity = 0;
         device_valid = false;
-        host_valid = true;
+        host_valid = other.host_valid;
+
+        if (other.device_valid) {
+            const size_t n = other.size();
+            if (n == 0) {
+                device_valid = true;
+            } else if (other.d_data) {
+                try {
+                    cuda_check(cudaMalloc(reinterpret_cast<void**>(&d_data), n * sizeof(float)), "cudaMalloc");
+                    cuda_check(cudaMemcpy(d_data, other.d_data, n * sizeof(float), cudaMemcpyDeviceToDevice), "cudaMemcpy D2D");
+                    d_capacity = n;
+                    device_valid = true;
+                } catch (...) {
+                    // FIX: evita vazamento de VRAM se cudaMemcpy D2D falhar após cudaMalloc ter sucesso.
+                    if (d_data) { cudaFree(d_data); d_data = nullptr; }
+                    d_capacity = 0;
+                    device_valid = false;
+                    throw;
+                }
+            }
+        }
 #endif
         // Copia gradiente se existir
         if (other.grad) {
@@ -368,7 +416,6 @@ struct ZTensor {
     ZTensor& operator=(const ZTensor& other) {
         if (this == &other) return *this;
 #ifdef HAVE_CUDA
-        other.ensure_host();
         free_device();
         // Copia gradiente se existir
         if (other.grad) {
@@ -386,7 +433,27 @@ struct ZTensor {
         d_data = nullptr;
         d_capacity = 0;
         device_valid = false;
-        host_valid = true;
+        host_valid = other.host_valid;
+
+        if (other.device_valid) {
+            const size_t n = other.size();
+            if (n == 0) {
+                device_valid = true;
+            } else if (other.d_data) {
+                try {
+                    cuda_check(cudaMalloc(reinterpret_cast<void**>(&d_data), n * sizeof(float)), "cudaMalloc");
+                    cuda_check(cudaMemcpy(d_data, other.d_data, n * sizeof(float), cudaMemcpyDeviceToDevice), "cudaMemcpy D2D");
+                    d_capacity = n;
+                    device_valid = true;
+                } catch (...) {
+                    // FIX: evita vazamento de VRAM se cudaMemcpy D2D falhar após cudaMalloc ter sucesso.
+                    if (d_data) { cudaFree(d_data); d_data = nullptr; }
+                    d_capacity = 0;
+                    device_valid = false;
+                    throw;
+                }
+            }
+        }
 #endif
         return *this;
     }
@@ -423,6 +490,13 @@ struct ZTensor {
         strides = std::move(other.strides);
         offset = other.offset;
         owns_data = other.owns_data;
+        // FIX: a move assignment não movia o estado de autograd (requires_grad,
+        // grad_fn, grad), causando perda silenciosa do grafo computacional e
+        // do gradiente acumulado sempre que "a = std::move(b)" era usado.
+        requires_grad = other.requires_grad;
+        grad_fn = std::move(other.grad_fn);
+        grad = std::move(other.grad);
+        other.requires_grad = false;
 #ifdef HAVE_CUDA
         d_data = other.d_data;
         d_capacity = other.d_capacity;
@@ -450,6 +524,7 @@ struct ZTensor {
     }
 
     void ensure_device() const {
+            std::lock_guard<std::mutex> lock(device_mutex); // FIX: thread-safety
             if (device_valid) return;
             size_t n = size();
             if (n == 0) {
@@ -463,11 +538,10 @@ struct ZTensor {
                 if (!d_data || d_capacity < n) {
                     if (d_data) {
                         cudaError_t err = cudaFree(d_data);
+                        d_data = nullptr; // Clear pointer regardless of free result
                         if (err != cudaSuccess) {
-                            d_data = nullptr;
                             throw std::runtime_error(std::string("cudaFree failed: ") + cudaGetErrorString(err));
                         }
-                        d_data = nullptr; // Clear pointer on successful free
                     }
                     cuda_check(cudaMalloc(reinterpret_cast<void**>(&d_data), n * sizeof(float)), "cudaMalloc");
                     d_capacity = n;
@@ -475,7 +549,12 @@ struct ZTensor {
                 cuda_check(cudaMemcpy(d_data, data.data(), n * sizeof(float), cudaMemcpyHostToDevice), "cudaMemcpy H2D");
                 device_valid = true;
             } catch (const std::exception&) {
-                d_data = nullptr;
+                // FIX: libera a memória alocada antes de descartar o ponteiro,
+                // evitando vazamento de VRAM quando cudaMemcpy falha após cudaMalloc ter sucesso.
+                if (d_data) {
+                    cudaFree(d_data);
+                    d_data = nullptr;
+                }
                 d_capacity = 0;
                 device_valid = false;
                 throw;
@@ -483,6 +562,7 @@ struct ZTensor {
     }
 
     void ensure_host() const {
+        std::lock_guard<std::mutex> lock(device_mutex); // FIX: thread-safety
         if (host_valid) return;
         size_t n = size();
         if (n == 0) {
@@ -497,16 +577,19 @@ struct ZTensor {
     }
 
     void mark_host_modified() {
+        std::lock_guard<std::mutex> lock(device_mutex); // FIX: thread-safety
         host_valid = true;
         device_valid = false;
     }
 
     void mark_device_modified() const {
+        std::lock_guard<std::mutex> lock(device_mutex); // FIX: thread-safety
         device_valid = true;
         host_valid = false;
     }
 
     void free_device() {
+        std::lock_guard<std::mutex> lock(device_mutex); // FIX: thread-safety
         if (d_data) {
             cudaFree(d_data);
             d_data = nullptr;
@@ -634,7 +717,10 @@ struct ZTensor {
            if (N == 0) return;
 
 #ifdef HAVE_CUDA
-           if (device_valid) {
+           // FIX: antes só considerava device_valid de 'this'; se 'other' estivesse
+           // na GPU e 'this' não, a operação inteira caía para CPU desnecessariamente,
+           // forçando um download evitável de 'other'.
+           if (device_valid || other.device_valid) {
                ensure_device();
                other.ensure_device();
                gpu_add_device(d_data, other.d_data, N);
@@ -767,7 +853,8 @@ struct ZTensor {
         const size_t N = size();
         if (N == 0) return;
 #ifdef HAVE_CUDA
-        if (device_valid) {
+        // FIX: considerar também other.device_valid (ver add()).
+        if (device_valid || other.device_valid) {
             ensure_device();
             other.ensure_device();
             gpu_sub_device(d_data, other.d_data, N);
@@ -815,7 +902,8 @@ struct ZTensor {
         const size_t N = size();
         if (N == 0) return;
 #ifdef HAVE_CUDA
-        if (device_valid) {
+        // FIX: considerar também other.device_valid (ver add()).
+        if (device_valid || other.device_valid) {
             ensure_device();
             other.ensure_device();
             gpu_mul_device(d_data, other.d_data, N);
@@ -1042,9 +1130,9 @@ struct ZTensor {
         #ifdef HAVE_CUDA
         ensure_host();
         #endif
-        // IMPORTANTE: std::vector copy é rasa (shallow) e compartilha os dados
-        // Ambos result e this->data apontam para o mesmo buffer de memória
-        // Isto implementa uma "view" eficiente, não uma cópia de dados
+        // NOTA: std::vector::operator= faz cópia profunda (não é uma view
+        // compartilhada). O comentário anterior alegando compartilhamento
+        // de buffer estava incorreto — esta é uma cópia real dos dados.
         result.data = this->data;
 
         // 4. Calcular strides para o novo shape
@@ -1075,10 +1163,22 @@ struct ZTensor {
          ZTensor result({M, N});
          if (M == 0 || N == 0 || K == 0) return result;  // Caso degenerado
 
-         #ifdef HAVE_CUDA
+#ifdef HAVE_CUDA
+         const size_t output_elements = M * N;
+         const bool use_gpu = device_valid || other.device_valid || zmatrix_should_use_gpu(output_elements);
+         if (use_gpu) {
+             zmatrix_gpu_debug("matmul", output_elements);
+             ensure_device();
+             other.ensure_device();
+             result.ensure_device();
+             gpu_matmul_device(d_data, other.d_data, result.d_data, M, K, N);
+             result.mark_device_modified();
+             return result;
+         }
+
          ensure_host();
          other.ensure_host();
-         #endif
+#endif
          const float* A_ptr = this->data.data();
          const float* B_ptr = other.data.data();
                float* C_ptr = result.data.data();
@@ -1106,15 +1206,22 @@ struct ZTensor {
          return result;
      }
 
-    // --- Slice (Zero-copy View) ---
+    // --- Slice (cópia densa correta) ---
     /**
-     * Extrai uma fatia (subarray) do tensor sem copiar dados
-     * Cria uma VIEW do mesmo buffer com offset e shape ajustados
+     * Extrai uma fatia (subarray) do tensor ao longo de um eixo.
+     *
+     * NOTA DE CORREÇÃO: a versão anterior desta função alegava ser uma
+     * "view" zero-copy compartilhando o buffer via `offset`, mas `offset`
+     * nunca era de fato usado em get_linear_index()/at() — então o
+     * resultado ficava INCORRETO sempre que start > 0 (retornava os
+     * primeiros elementos do array completo, não a fatia real a partir
+     * de `start`). Esta versão faz uma cópia densa e correta dos dados,
+     * com um atalho rápido (memcpy) quando axis == 0.
      *
      * @param axis Eixo ao longo do qual fazer slice
      * @param start Índice inicial (inclusivo)
      * @param end Índice final (exclusivo)
-     * @return ZTensor com mesmos dados mas offset/shape ajustados (zero-copy)
+     * @return ZTensor novo e independente contendo apenas a fatia solicitada
      * @throws std::out_of_range Se axis >= ndim
      * @throws std::invalid_argument Se start >= end ou end > shape[axis]
      */
@@ -1134,18 +1241,49 @@ struct ZTensor {
                                        std::to_string(axis));
         }
 
-        // Criar resultado (VIEW, não cópia)
-        ZTensor result;
-        result.shape = shape;  // Copia shape
-        result.shape[axis] = end - start;  // Ajusta dimensão sliceada
-        result.strides = strides;  // Copia strides (mesmos passos)
-        result.offset = offset + start * strides[axis];  // Novo offset
-        result.data = data;  // Compartilha buffer
-        result.owns_data = false;  // NÃO é dono dos dados
+#ifdef HAVE_CUDA
+        ensure_host();
+#endif
+
+        std::vector<size_t> new_shape = shape;
+        new_shape[axis] = end - start;
+
+        ZTensor result(new_shape);
 
         // Copia estado de autograd
         result.requires_grad = requires_grad;
-        result.grad_fn = grad_fn;  // Mesmo computation node (backward irá processar)
+        result.grad_fn = grad_fn;
+
+        if (result.size() == 0) {
+            return result;
+        }
+
+        // Fast path: slice ao longo do eixo mais externo (axis 0) é um
+        // bloco contíguo em row-major — pode ser copiado com memcpy.
+        if (axis == 0) {
+            size_t block = 1;
+            for (size_t i = 1; i < shape.size(); ++i) block *= shape[i];
+            const float* src = this->data.data() + start * block;
+            std::memcpy(result.data.data(), src, (end - start) * block * sizeof(float));
+            return result;
+        }
+
+        // Caminho genérico: decompõe índice linear e recompõe por eixo.
+        std::vector<size_t> dst_idx(shape.size(), 0);
+        std::vector<size_t> src_idx(shape.size(), 0);
+        const size_t total_out = result.size();
+
+        for (size_t linear = 0; linear < total_out; ++linear) {
+            size_t tmp = linear;
+            for (int d = static_cast<int>(new_shape.size()) - 1; d >= 0; --d) {
+                dst_idx[d] = tmp % new_shape[d];
+                tmp /= new_shape[d];
+            }
+            src_idx = dst_idx;
+            src_idx[axis] = dst_idx[axis] + start;
+
+            result.at(dst_idx) = this->at(src_idx);
+        }
 
         return result;
     }
@@ -1167,6 +1305,14 @@ struct ZTensor {
         if (rows == 0 || cols == 0 || empty()) {
             return ZTensor({cols, rows});
         }
+
+#ifdef HAVE_CUDA
+        // FIX: transpose() lia data.data() diretamente sem sincronizar;
+        // se o tensor estivesse residente só na GPU, lia memória de host
+        // desatualizada. Todas as outras operações já faziam ensure_host()
+        // antes de acessar os dados; esta foi a exceção corrigida aqui.
+        ensure_host();
+#endif
 
         ZTensor result({cols, rows});
         const float* p_in = this->data.data();
@@ -1201,6 +1347,337 @@ struct ZTensor {
         return result;
     }
 
+ZTensor column(size_t col_idx) const {
+        if (shape.size() != 2) {
+            throw std::runtime_error("column() requer um tensor 2D");
+        }
+        if (col_idx >= shape[1]) {
+            throw std::out_of_range("Índice da coluna fora dos limites");
+        }
+
+        // FIX: este método marcava result.requires_grad = requires_grad sem
+        // criar um AutogradNode/grad_fn correspondente. Isso fazia o tensor
+        // resultante virar um nó-folha: um backward() que passasse por
+        // column() nunca devolvia gradiente ao tensor original — perda
+        // silenciosa. Até existir uma implementação real de autograd (com
+        // "scatter" do gradiente de volta às posições originais), bloqueamos
+        // o uso em tensores rastreados.
+        if (this->requires_grad) {
+            throw std::logic_error(
+                "column() ainda não suporta autograd (requires_grad=true). "
+                "Use em tensores com requires_grad=false."
+            );
+        }
+
+#ifdef HAVE_CUDA
+        ensure_host();
+#endif
+
+        const size_t rows = shape[0];
+        const size_t cols = shape[1];
+
+        ZTensor result({rows});
+        if (rows == 0) return result;
+
+        const float* p_in = this->data.data();
+        float* p_out = result.data.data();
+
+#if HAS_OPENMP
+        if (rows > ZMATRIX_PARALLEL_THRESHOLD) {
+            #pragma omp parallel for schedule(static)
+            for (size_t i = 0; i < rows; ++i) {
+                p_out[i] = p_in[i * cols + col_idx];
+            }
+        } else {
+            for (size_t i = 0; i < rows; ++i) {
+                p_out[i] = p_in[i * cols + col_idx];
+            }
+        }
+#else
+        for (size_t i = 0; i < rows; ++i) {
+            p_out[i] = p_in[i * cols + col_idx];
+        }
+#endif
+
+        return result;
+    }
+
+    ZTensor row(size_t row_idx) const {
+        if (shape.size() != 2) {
+            throw std::runtime_error("row() requer um tensor 2D");
+        }
+        if (row_idx >= shape[0]) {
+            throw std::out_of_range("Índice da linha fora dos limites");
+        }
+
+        // FIX: ver nota em column() sobre requires_grad sem grad_fn.
+        if (this->requires_grad) {
+            throw std::logic_error(
+                "row() ainda não suporta autograd (requires_grad=true). "
+                "Use em tensores com requires_grad=false."
+            );
+        }
+
+#ifdef HAVE_CUDA
+        ensure_host();
+#endif
+
+        const size_t cols = shape[1];
+
+        ZTensor result({cols});
+        if (cols == 0) return result;
+
+        const float* p_in = this->data.data();
+        float* p_out = result.data.data();
+
+        const float* row_ptr = p_in + (row_idx * cols);
+
+#if HAS_OPENMP
+        if (cols > ZMATRIX_PARALLEL_THRESHOLD) {
+            #pragma omp parallel for schedule(static)
+            for (size_t i = 0; i < cols; ++i) {
+                p_out[i] = row_ptr[i];
+            }
+        } else {
+            std::memcpy(p_out, row_ptr, cols * sizeof(float));
+        }
+#else
+        std::memcpy(p_out, row_ptr, cols * sizeof(float));
+#endif
+
+        return result;
+    }
+
+    ZTensor gather(const std::vector<size_t>& indices) const {
+        if (shape.size() != 2) {
+            throw std::runtime_error("gather() requer um tensor 2D");
+        }
+
+        // FIX: ver nota em column() sobre requires_grad sem grad_fn.
+        if (this->requires_grad) {
+            throw std::logic_error(
+                "gather() ainda não suporta autograd (requires_grad=true). "
+                "Use em tensores com requires_grad=false."
+            );
+        }
+
+#ifdef HAVE_CUDA
+        ensure_host();
+#endif
+
+        const size_t num_indices = indices.size();
+        const size_t cols = shape[1];
+        const size_t rows_limit = shape[0];
+
+        // Validação antecipada: fora da região paralela, para não lançar
+        // exceção dentro de um #pragma omp parallel for (comportamento
+        // indefinido / abort do OpenMP).
+        for (size_t idx : indices) {
+            if (idx >= rows_limit) {
+                throw std::out_of_range("Índice na lista de gather fora dos limites");
+            }
+        }
+
+        ZTensor result({num_indices, cols});
+        if (num_indices == 0 || cols == 0) return result;
+
+        const float* p_in = this->data.data();
+        float* p_out = result.data.data();
+
+        // FIX: antes paralelizava sem checar ZMATRIX_PARALLEL_THRESHOLD,
+        // diferente da convenção usada no resto do arquivo (OpenMP fica mais
+        // lento que sequencial abaixo do threshold, por isso o projeto o
+        // desabilita nesses casos).
+#if HAS_OPENMP
+        if (num_indices > ZMATRIX_PARALLEL_THRESHOLD) {
+            #pragma omp parallel for schedule(static)
+            for (size_t i = 0; i < num_indices; ++i) {
+                size_t row_idx = indices[i];
+                std::memcpy(p_out + (i * cols), p_in + (row_idx * cols), cols * sizeof(float));
+            }
+        } else {
+            for (size_t i = 0; i < num_indices; ++i) {
+                size_t row_idx = indices[i];
+                std::memcpy(p_out + (i * cols), p_in + (row_idx * cols), cols * sizeof(float));
+            }
+        }
+#else
+        for (size_t i = 0; i < num_indices; ++i) {
+            size_t row_idx = indices[i];
+            std::memcpy(p_out + (i * cols), p_in + (row_idx * cols), cols * sizeof(float));
+        }
+#endif
+
+        return result;
+    }
+
+    ZTensor where(size_t feature_index, float threshold) const {
+        if (shape.size() != 2) {
+            throw std::runtime_error("where() requer um tensor 2D");
+        }
+        if (feature_index >= shape[1]) {
+            throw std::out_of_range("Índice da coluna fora dos limites");
+        }
+
+#ifdef HAVE_CUDA
+        ensure_host();
+#endif
+
+        const size_t rows = shape[0];
+        const size_t cols = shape[1];
+
+        ZTensor result({rows});
+        float* p_out = result.data.data();
+        const float* p_in = this->data.data();
+
+        // FIX: antes paralelizava sem checar ZMATRIX_PARALLEL_THRESHOLD (ver gather()).
+#if HAS_OPENMP
+        if (rows > ZMATRIX_PARALLEL_THRESHOLD) {
+            #pragma omp parallel for schedule(static)
+            for (size_t i = 0; i < rows; ++i) {
+                float val = p_in[i * cols + feature_index];
+                p_out[i] = (val <= threshold) ? 1.0f : 0.0f;
+            }
+        } else {
+            for (size_t i = 0; i < rows; ++i) {
+                float val = p_in[i * cols + feature_index];
+                p_out[i] = (val <= threshold) ? 1.0f : 0.0f;
+            }
+        }
+#else
+        for (size_t i = 0; i < rows; ++i) {
+            float val = p_in[i * cols + feature_index];
+            p_out[i] = (val <= threshold) ? 1.0f : 0.0f;
+        }
+#endif
+
+        return result;
+    }
+
+    /**
+     * argsort com semântica numpy:
+     *  - 1D: retorna vetor {N} com os índices que ordenam o vetor.
+     *  - 2D axis=1: cada LINHA é ordenada independentemente (shape preservado).
+     *  - 2D axis=0: cada COLUNA é ordenada independentemente (shape preservado).
+     *
+     * FIX (versão anterior):
+     *  1) O ramo "axis=0" criava o resultado com o shape COMPLETO do tensor
+     *     original ({rows, cols}) mas só preenchia os primeiros `rows`
+     *     elementos do buffer plano — o resto ficava zerado.
+     *  2) O comparador usado nesse ramo olhava só a coluna 0
+     *     (`p_data[i1 * cols] < p_data[i2 * cols]`), então nem sequer
+     *     implementava "ordenar por eixo 0" — ordenava tudo pela primeira
+     *     coluna, ignorando as demais.
+     *  3) `rows` era calculado com um ternário cujos dois ramos eram
+     *     idênticos (dead code).
+     */
+    ZTensor argsort(size_t axis = 0) const {
+        if (shape.size() > 2) throw std::runtime_error("argsort suporta apenas 1D ou 2D");
+
+#ifdef HAVE_CUDA
+        ensure_host();
+#endif
+
+        // --- Caso 1D: só existe um eixo, axis é ignorado ---
+        if (shape.size() == 1) {
+            const size_t N = shape[0];
+            ZTensor result({N});
+            if (N == 0) return result;
+
+            std::vector<size_t> indices(N);
+            std::iota(indices.begin(), indices.end(), 0);
+
+            const float* p_data = this->data.data();
+            std::sort(indices.begin(), indices.end(), [&](size_t i1, size_t i2) {
+                return p_data[i1] < p_data[i2];
+            });
+
+            float* p_out = result.data.data();
+            for (size_t i = 0; i < N; ++i) {
+                p_out[i] = static_cast<float>(indices[i]);
+            }
+            return result;
+        }
+
+        // --- Caso 2D ---
+        if (axis != 0 && axis != 1) {
+            throw std::out_of_range("argsort: axis deve ser 0 ou 1 para tensor 2D");
+        }
+
+        const size_t rows = shape[0];
+        const size_t cols = shape[1];
+
+        ZTensor result({rows, cols});
+        if (rows == 0 || cols == 0) return result;
+
+        const float* p_in = this->data.data();
+        float* p_out = result.data.data();
+
+        if (axis == 1) {
+            // Cada LINHA ordenada independentemente (semântica numpy axis=1)
+#if HAS_OPENMP
+            if (rows > ZMATRIX_PARALLEL_THRESHOLD) {
+                #pragma omp parallel for schedule(static)
+                for (size_t r = 0; r < rows; ++r) {
+                    std::vector<size_t> indices(cols);
+                    std::iota(indices.begin(), indices.end(), 0);
+                    const float* row_ptr = p_in + (r * cols);
+                    std::sort(indices.begin(), indices.end(), [&](size_t i1, size_t i2) {
+                        return row_ptr[i1] < row_ptr[i2];
+                    });
+                    for (size_t c = 0; c < cols; ++c) {
+                        p_out[r * cols + c] = static_cast<float>(indices[c]);
+                    }
+                }
+            } else
+#endif
+            {
+                for (size_t r = 0; r < rows; ++r) {
+                    std::vector<size_t> indices(cols);
+                    std::iota(indices.begin(), indices.end(), 0);
+                    const float* row_ptr = p_in + (r * cols);
+                    std::sort(indices.begin(), indices.end(), [&](size_t i1, size_t i2) {
+                        return row_ptr[i1] < row_ptr[i2];
+                    });
+                    for (size_t c = 0; c < cols; ++c) {
+                        p_out[r * cols + c] = static_cast<float>(indices[c]);
+                    }
+                }
+            }
+            return result;
+        }
+
+        // axis == 0: cada COLUNA ordenada independentemente (semântica numpy axis=0)
+#if HAS_OPENMP
+        if (cols > ZMATRIX_PARALLEL_THRESHOLD) {
+            #pragma omp parallel for schedule(static)
+            for (size_t c = 0; c < cols; ++c) {
+                std::vector<size_t> indices(rows);
+                std::iota(indices.begin(), indices.end(), 0);
+                std::sort(indices.begin(), indices.end(), [&](size_t i1, size_t i2) {
+                    return p_in[i1 * cols + c] < p_in[i2 * cols + c];
+                });
+                for (size_t r = 0; r < rows; ++r) {
+                    p_out[r * cols + c] = static_cast<float>(indices[r]);
+                }
+            }
+        } else
+#endif
+        {
+            for (size_t c = 0; c < cols; ++c) {
+                std::vector<size_t> indices(rows);
+                std::iota(indices.begin(), indices.end(), 0);
+                std::sort(indices.begin(), indices.end(), [&](size_t i1, size_t i2) {
+                    return p_in[i1 * cols + c] < p_in[i2 * cols + c];
+                });
+                for (size_t r = 0; r < rows; ++r) {
+                    p_out[r * cols + c] = static_cast<float>(indices[r]);
+                }
+            }
+        }
+
+        return result;
+    }
 
     // --- abs (float) ---
      void abs()  {
@@ -2117,6 +2594,16 @@ struct ZTensor {
             throw std::invalid_argument(ZMATRIX_ERR_SHAPE_MISMATCH);
         }
 
+#ifdef HAVE_CUDA
+        // FIX: as operações de autograd não sincronizavam com a GPU; se 'a'
+        // ou 'b' estivessem residentes só no device, o cálculo lia memória
+        // de host desatualizada e corrompia o resultado (e o grafo de
+        // gradiente) silenciosamente. Aqui garantimos consistência antes
+        // de qualquer leitura de a.data/b.data.
+        a.ensure_host();
+        b.ensure_host();
+#endif
+
         ZTensor result(a.shape);
         const size_t N = a.size();
 
@@ -2200,6 +2687,12 @@ struct ZTensor {
         if (a.shape != b.shape) {
             throw std::invalid_argument(ZMATRIX_ERR_SHAPE_MISMATCH);
         }
+
+#ifdef HAVE_CUDA
+        // FIX: sincroniza com o host antes de ler os dados (ver add_autograd).
+        a.ensure_host();
+        b.ensure_host();
+#endif
 
         ZTensor result(a.shape);
         const size_t N = a.size();
@@ -2290,6 +2783,12 @@ struct ZTensor {
         if (a.shape != b.shape) {
             throw std::invalid_argument(ZMATRIX_ERR_SHAPE_MISMATCH);
         }
+
+#ifdef HAVE_CUDA
+        // FIX: sincroniza com o host antes de ler os dados (ver add_autograd).
+        a.ensure_host();
+        b.ensure_host();
+#endif
 
         ZTensor result(a.shape);
         const size_t N = a.size();
@@ -2392,6 +2891,11 @@ struct ZTensor {
      * Backward: grad_input[i] = grad_output[0] para cada elemento i
      */
     static ZTensor sum_autograd(const ZTensor& t) {
+#ifdef HAVE_CUDA
+        // FIX: sincroniza com o host antes de ler os dados (ver add_autograd).
+        t.ensure_host();
+#endif
+
         const size_t N = t.size();
         double total = 0.0;
 
@@ -2637,6 +3141,16 @@ static void zmatrix_return_tensor_obj(
         // Não há tensor antigo para deletar (porque intern foi recém-criado)
         intern->tensor = new ZTensor(result_tensor);
         // Não precisa de owns_data
+
+        // FIX (autograd): addAutograd/subAutograd/mulAutograd/sumAutograd criavam
+        // um weak_ptr para uma cópia LOCAL que morria ao fim da função *_autograd,
+        // e nunca preenchiam result_ptr_raw. No backward(), node->backward_fn()
+        // encontrava a referência morta e retornava sem chamar accumulate_grad() —
+        // getGrad() ficava null silenciosamente. Este é o único ponto que conhece
+        // o objeto C++ definitivo exposto ao PHP.
+        if (intern->tensor->grad_fn) {
+            intern->tensor->grad_fn->result_ptr_raw = intern->tensor;
+        }
     }
     catch (const std::bad_alloc& e) {
         zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_ALLOC_FAILED, 0);
@@ -2702,6 +3216,11 @@ static const zend_function_entry zmatrix_ztensor_methods[] = {
     PHP_ME(ZTensor, sqrt,             arginfo_ztensor_sqrt,               ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, reshape,          arginfo_ztensor_reshape,            ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, slice,            arginfo_ztensor_slice,              ZEND_ACC_PUBLIC)
+    PHP_ME(ZTensor, column,           arginfo_ztensor_column,             ZEND_ACC_PUBLIC)
+    PHP_ME(ZTensor, row,              arginfo_ztensor_row,                ZEND_ACC_PUBLIC)
+    PHP_ME(ZTensor, gather,           arginfo_ztensor_gather,             ZEND_ACC_PUBLIC)
+    PHP_ME(ZTensor, argsort,          arginfo_ztensor_argsort,            ZEND_ACC_PUBLIC)
+    PHP_ME(ZTensor, where,            arginfo_ztensor_where,              ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, arr,              arginfo_ztensor_static_arr,         ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)
     PHP_ME(ZTensor, fill,             arginfo_ztensor_fill,               ZEND_ACC_PUBLIC)
     // Métodos Estáticos de Criação Adicionais
