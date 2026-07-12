@@ -1886,6 +1886,86 @@ ZTensor column(size_t col_idx) const {
 
             return result;
         }
+    ZTensor arg_reduce_axis(int axis, bool find_max) const {
+            if (shape.empty()) throw std::runtime_error(ZMATRIX_ERR_EMPTY_MATRIX);
+            if (axis < 0 || static_cast<size_t>(axis) >= shape.size()) {
+                throw std::out_of_range("axis fora dos limites para argmax/argmin");
+            }
+
+    #ifdef HAVE_CUDA
+            ensure_host();
+    #endif
+
+            std::vector<size_t> out_shape = shape;
+            out_shape.erase(out_shape.begin() + axis);
+
+            ZTensor result(out_shape);
+            const size_t axis_dim = shape[axis];
+            const size_t out_size = result.size();
+            if (out_size == 0) return result;
+
+            float* out_data = result.data.data();
+
+            // FIX: faltava paralelização aqui. Cada iteração já usa seu próprio
+            // 'idx' local (declarado dentro do loop), sem estado compartilhado
+            // mutável — mesmo padrão de soma(), que já usa este exato threshold.
+    #if HAS_OPENMP
+            if (out_size > ZMATRIX_PARALLEL_THRESHOLD) {
+                #pragma omp parallel for schedule(static)
+                for (size_t i = 0; i < out_size; ++i) {
+                    std::vector<size_t> idx(shape.size(), 0);
+                    size_t tmp = i;
+                    for (int d = (int)shape.size() - 1, j = (int)out_shape.size() - 1; d >= 0; --d) {
+                        if ((size_t)d == (size_t)axis) {
+                            idx[d] = 0;
+                        } else {
+                            idx[d] = tmp % out_shape[j];
+                            tmp /= out_shape[j];
+                            --j;
+                        }
+                    }
+                    float best_val = 0.0f;
+                    size_t best_idx = 0;
+                    for (size_t k = 0; k < axis_dim; ++k) {
+                        idx[axis] = k;
+                        float v = at(idx);
+                        if (k == 0 || (find_max ? (v > best_val) : (v < best_val))) {
+                            best_val = v;
+                            best_idx = k;
+                        }
+                    }
+                    out_data[i] = static_cast<float>(best_idx);
+                }
+            } else
+    #endif
+            {
+                for (size_t i = 0; i < out_size; ++i) {
+                    std::vector<size_t> idx(shape.size(), 0);
+                    size_t tmp = i;
+                    for (int d = (int)shape.size() - 1, j = (int)out_shape.size() - 1; d >= 0; --d) {
+                        if ((size_t)d == (size_t)axis) {
+                            idx[d] = 0;
+                        } else {
+                            idx[d] = tmp % out_shape[j];
+                            tmp /= out_shape[j];
+                            --j;
+                        }
+                    }
+                    float best_val = 0.0f;
+                    size_t best_idx = 0;
+                    for (size_t k = 0; k < axis_dim; ++k) {
+                        idx[axis] = k;
+                        float v = at(idx);
+                        if (k == 0 || (find_max ? (v > best_val) : (v < best_val))) {
+                            best_val = v;
+                            best_idx = k;
+                        }
+                    }
+                    out_data[i] = static_cast<float>(best_idx);
+                }
+            }
+            return result;
+        }
 
     // --- abs (float) ---
      void abs()  {
