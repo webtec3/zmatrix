@@ -1809,6 +1809,64 @@ ZTensor column(size_t col_idx) const {
     #endif
             return global_max_idx;
         }
+    size_t argmin() const {
+    #ifdef HAVE_CUDA
+            // NOTA: ensure_host() já é 'const' (opera sobre os campos mutable
+            // d_data/device_valid/host_valid), então o const_cast usado em
+            // argmax() não é necessário aqui — chamada direta é suficiente.
+            ensure_host();
+    #endif
+            const size_t N = size();
+            if (N == 0) {
+                throw std::runtime_error("argmin: não pode ser aplicado em tensor vazio");
+            }
+
+            const float* p = data.data();
+            size_t global_min_idx = 0;
+            float global_min_val = p[0];
+
+    #if HAS_OPENMP
+            if (N > ZMATRIX_PARALLEL_THRESHOLD) {
+    #pragma omp parallel
+                {
+                    size_t local_min_idx = 0;
+                    float local_min_val = p[0];
+
+    #pragma omp for nowait
+                    for (size_t i = 0; i < N; ++i) {
+                        if (p[i] < local_min_val) {
+                            local_min_val = p[i];
+                            local_min_idx = i;
+                        }
+                    }
+
+    #pragma omp critical
+                    {
+                        if (local_min_val < global_min_val ||
+                           (local_min_val == global_min_val && local_min_idx < global_min_idx)) {
+                            global_min_val = local_min_val;
+                            global_min_idx = local_min_idx;
+                        }
+                    }
+                }
+            } else {
+                for (size_t i = 1; i < N; ++i) {
+                    if (p[i] < global_min_val) {
+                        global_min_val = p[i];
+                        global_min_idx = i;
+                    }
+                }
+            }
+    #else
+            for (size_t i = 1; i < N; ++i) {
+                if (p[i] < global_min_val) {
+                    global_min_val = p[i];
+                    global_min_idx = i;
+                }
+            }
+    #endif
+            return global_min_idx;
+        }
 
     // --- Concat (Estático) ---
         static ZTensor concat(const std::vector<const ZTensor*>& tensors, int axis = 0) {
@@ -3533,6 +3591,7 @@ static const zend_function_entry zmatrix_ztensor_methods[] = {
     PHP_ME(ZTensor, unique,           arginfo_ztensor_unique,           ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, bincount,         arginfo_ztensor_bincount,         ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, argmax,           arginfo_ztensor_argmax,           ZEND_ACC_PUBLIC)
+    PHP_ME(ZTensor, argmin,           arginfo_ztensor_argmin,           ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, concat,           arginfo_ztensor_static_concat,    ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)
     // Autograd methods
     PHP_ME(ZTensor, requiresGrad,     arginfo_class_ZMatrix_ZTensor_requiresGrad,      ZEND_ACC_PUBLIC)

@@ -268,7 +268,14 @@ ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_bincount, 0, 0, 0)
     ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, minlength, IS_LONG, 0, "0")
 ZEND_END_ARG_INFO()
 
+// argmax(?int $axis = null): int|ZTensor
 ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_argmax, 0, 0, 0)
+    ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, axis, IS_LONG, 1, "null")
+ZEND_END_ARG_INFO()
+
+// argmin(?int $axis = null): int|ZTensor
+ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_argmin, 0, 0, 0)
+    ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, axis, IS_LONG, 1, "null")
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_static_concat, 0, 0, 1)

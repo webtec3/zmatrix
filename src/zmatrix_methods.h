@@ -2755,6 +2755,48 @@ PHP_METHOD(ZTensor, argmax)
     }
 }
 
+PHP_METHOD(ZTensor, argmin)
+{
+    zval *axis_zv = nullptr;
+    ZEND_PARSE_PARAMETERS_START(0, 1)
+        Z_PARAM_OPTIONAL
+        Z_PARAM_ZVAL(axis_zv)
+    ZEND_PARSE_PARAMETERS_END();
+
+    zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
+    if (!self_obj->tensor) {
+        zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0);
+        RETURN_THROWS();
+    }
+
+    try {
+        if (axis_zv == nullptr || Z_TYPE_P(axis_zv) == IS_NULL) {
+            RETURN_LONG((zend_long)self_obj->tensor->argmin());
+        }
+
+        if (Z_TYPE_P(axis_zv) != IS_LONG) {
+            zend_throw_exception_ex(zend_ce_type_error, 0,
+                "ZTensor::argmin(): axis must be int|null, %s given",
+                zend_zval_type_name(axis_zv));
+            RETURN_THROWS();
+        }
+
+        zend_long axis = Z_LVAL_P(axis_zv);
+        size_t ndim = self_obj->tensor->shape.size();
+        if (axis < 0) axis = (zend_long)ndim + axis;
+        if (axis < 0 || (size_t)axis >= ndim) {
+            zend_throw_exception(zend_ce_exception, "axis fora dos limites para argmin", 0);
+            RETURN_THROWS();
+        }
+
+        ZTensor result = self_obj->tensor->arg_reduce_axis((int)axis, false);
+        zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
+    } catch (const std::exception& e) {
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+        RETURN_THROWS();
+    }
+}
+
 // =========================================================================
 // PHP_METHOD: unique
 // =========================================================================
