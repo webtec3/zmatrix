@@ -1554,6 +1554,82 @@ ZTensor column(size_t col_idx) const {
         return result;
     }
 
+    // Retorna um tensor contendo APENAS os índices que atendem à condição (val <= threshold)
+        ZTensor find_indices_where(size_t feature_index, float threshold) const {
+            if (shape.size() != 2) throw std::runtime_error("requer tensor 2D");
+
+            const size_t rows = shape[0];
+            const size_t cols = shape[1];
+            const float* p_in = this->data.data();
+
+            // 1. Primeiro passamos contando quantos elementos atendem (passada rápida)
+            size_t count = 0;
+            for (size_t i = 0; i < rows; ++i) {
+                if (p_in[i * cols + feature_index] <= threshold) count++;
+            }
+
+            // 2. Alocamos o tensor de índices exatamente do tamanho necessário
+            ZTensor result({count});
+            float* p_out = result.data.data();
+
+            // 3. Preenchemos os índices
+            size_t k = 0;
+            for (size_t i = 0; i < rows; ++i) {
+                if (p_in[i * cols + feature_index] <= threshold) {
+                    p_out[k++] = static_cast<float>(i);
+                }
+            }
+            return result;
+        }
+
+    float calculate_split_gini(size_t feature_index, float threshold, const ZTensor& y) const {
+        if (shape.size() != 2) throw std::runtime_error("X deve ser 2D");
+        if (feature_index >= shape[1]) throw std::out_of_range("Coluna fora dos limites");
+        if (shape[0] != y.size()) throw std::invalid_argument("X e y devem ter o mesmo número de linhas");
+
+        const size_t rows = shape[0];
+        const size_t cols = shape[1];
+        const float* p_X = this->data.data();
+        const float* p_y = y.data.data();
+
+        // 1. Acha o maior label para dimensionar o vetor de contagem
+        int max_label = 0;
+        for(size_t i = 0; i < rows; ++i) {
+            if (p_y[i] > max_label) max_label = (int)p_y[i];
+        }
+
+        std::vector<int> left_counts(max_label + 1, 0);
+        std::vector<int> right_counts(max_label + 1, 0);
+        int left_total = 0, right_total = 0;
+
+        // 2. Passada única para contar
+        for (size_t i = 0; i < rows; ++i) {
+            int label = (int)p_y[i];
+            if (p_X[i * cols + feature_index] <= threshold) {
+                left_counts[label]++;
+                left_total++;
+            } else {
+                right_counts[label]++;
+                right_total++;
+            }
+        }
+
+        if (left_total == 0 || right_total == 0) return 1.0f;
+
+        // 3. Cálculo do Gini
+        auto calc_gini = [&](const std::vector<int>& counts, int total) {
+            float sum_sq = 0.0f;
+            for (int c : counts) {
+                float p = (float)c / (float)total;
+                sum_sq += (p * p);
+            }
+            return 1.0f - sum_sq;
+        };
+
+        return ((float)left_total / rows) * calc_gini(left_counts, left_total) +
+               ((float)right_total / rows) * calc_gini(right_counts, right_total);
+    }
+
     /**
      * argsort com semântica numpy:
      *  - 1D: retorna vetor {N} com os índices que ordenam o vetor.
@@ -3962,6 +4038,8 @@ static const zend_function_entry zmatrix_ztensor_methods[] = {
     PHP_ME(ZTensor, gather,           arginfo_ztensor_gather,             ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, argsort,          arginfo_ztensor_argsort,            ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, where,            arginfo_ztensor_where,              ZEND_ACC_PUBLIC)
+    PHP_ME(ZTensor, findIndicesWhere, arginfo_ztensor_find_indices_where, ZEND_ACC_PUBLIC)
+    PHP_ME(ZTensor, calculate_split_gini, arginfo_ztensor_calculate_split_gini, ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, arr,              arginfo_ztensor_static_arr,         ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)
     PHP_ME(ZTensor, fill,             arginfo_ztensor_fill,               ZEND_ACC_PUBLIC)
     // Métodos Estáticos de Criação Adicionais

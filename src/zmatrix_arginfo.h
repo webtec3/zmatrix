@@ -319,4 +319,16 @@ ZEND_END_ARG_INFO()
 ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_histogram, 0, 0, 0)
     ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, bins, IS_LONG, 0, "10")
 ZEND_END_ARG_INFO()
+
+// --- ARG_INFO para findIndicesWhere ---
+ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_find_indices_where, 0, 0, 2)
+    ZEND_ARG_TYPE_INFO(0, feature_index, IS_LONG, 0)
+    ZEND_ARG_TYPE_INFO(0, threshold, IS_DOUBLE, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_calculate_split_gini, 0, 0, 3)
+    ZEND_ARG_TYPE_INFO(0, feature_index, IS_LONG, 0)
+    ZEND_ARG_TYPE_INFO(0, threshold, IS_DOUBLE, 0)
+    ZEND_ARG_OBJ_INFO(0, y, ZMatrix\\ZTensor, 0)
+ZEND_END_ARG_INFO()
 #endif /* ZMATRIX_ARGINFO_H */

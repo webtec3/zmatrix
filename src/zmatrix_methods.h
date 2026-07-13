@@ -3174,5 +3174,55 @@ PHP_METHOD(ZTensor, histogram) {
         zend_throw_exception(zend_ce_exception, e.what(), 0);
     }
 }
+PHP_METHOD(ZTensor, findIndicesWhere)
+{
+    zend_long feature_index;
+    double threshold;
+    ZEND_PARSE_PARAMETERS_START(2, 2)
+        Z_PARAM_LONG(feature_index)
+        Z_PARAM_DOUBLE(threshold)
+    ZEND_PARSE_PARAMETERS_END();
 
+    zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
+    try {
+        ZTensor result = self_obj->tensor->find_indices_where((size_t)feature_index, (float)threshold);
+        zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
+    } catch (const std::exception& e) {
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+        RETURN_THROWS();
+    }
+}
+
+PHP_METHOD(ZTensor, calculate_split_gini)
+{
+    zend_long feature_index;
+    double threshold;
+    zval *y_zv;
+
+    ZEND_PARSE_PARAMETERS_START(3, 3)
+        Z_PARAM_LONG(feature_index)
+        Z_PARAM_DOUBLE(threshold)
+        Z_PARAM_OBJECT_OF_CLASS(y_zv, zmatrix_ce_ZTensor)
+    ZEND_PARSE_PARAMETERS_END();
+
+    zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
+    zmatrix_ztensor_object *y_obj = Z_MATRIX_ZTENSOR_P(y_zv);
+
+    if (!self_obj->tensor || !y_obj->tensor) {
+        zend_throw_exception(zend_ce_exception, "Tensores não inicializados", 0);
+        RETURN_THROWS();
+    }
+
+    try {
+        float gini = self_obj->tensor->calculate_split_gini(
+            (size_t)feature_index,
+            (float)threshold,
+            *y_obj->tensor
+        );
+        RETURN_DOUBLE((double)gini);
+    } catch (const std::exception& e) {
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+        RETURN_THROWS();
+    }
+}
 #endif /* ZMATRIX_METHODS_H */

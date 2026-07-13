@@ -1245,6 +1245,38 @@ final class ZTensor
     }
 
     /**
+     * Retorna os índices das linhas onde a feature especificada é <= threshold.
+     *
+     * @param int $feature_index Índice da coluna (feature).
+     * @param float $threshold Valor de corte.
+     * @return ZTensor Tensor 1D contendo os índices das linhas correspondentes.
+     */
+    public function findIndicesWhere(int $feature_index, float $threshold): ZTensor
+    {
+    }
+
+    /**
+     * Calculates the Gini impurity for a potential dataset split.
+     *
+     * Splits the samples according to the specified feature index and threshold,
+     * then calculates the weighted Gini impurity using the target tensor.
+     *
+     * @param int $feature_index Zero-based index of the feature used for splitting.
+     * @param float $threshold Threshold value used to divide the samples.
+     * @param ZTensor $y Target tensor containing the class labels.
+     *
+     * @return float Weighted Gini impurity of the resulting split.
+     *
+     * @throws \Exception If the tensor is not initialized.
+     * @throws \Exception If the feature index is invalid or out of range.
+     * @throws \Exception If the input tensors have incompatible dimensions.
+     */
+    public function calculateSplitGini(
+        int $feature_index,
+        float $threshold,
+        ZTensor $y
+    ): float {}
+    /**
      * Enables or disables automatic differentiation for this tensor.
      *
      * When requires_grad is set to true, all operations on this tensor
