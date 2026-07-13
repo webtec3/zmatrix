@@ -2828,11 +2828,10 @@ PHP_METHOD(ZTensor, unique)
 // =========================================================================
 PHP_METHOD(ZTensor, bincount)
 {
-    zend_long minlength = 0;
-
+    zval *weights_zv = nullptr;
     ZEND_PARSE_PARAMETERS_START(0, 1)
         Z_PARAM_OPTIONAL
-        Z_PARAM_LONG(minlength)
+        Z_PARAM_ZVAL(weights_zv)
     ZEND_PARSE_PARAMETERS_END();
 
     zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
@@ -2841,16 +2840,18 @@ PHP_METHOD(ZTensor, bincount)
         RETURN_THROWS();
     }
 
+    ZTensor *weights_ptr = nullptr;
+    ZTensor tmp_weights;
+    if (weights_zv != nullptr && Z_TYPE_P(weights_zv) != IS_NULL) {
+        if (!zmatrix_get_tensor_ptr(weights_zv, weights_ptr, tmp_weights, zmatrix_ce_ZTensor)) {
+            RETURN_THROWS();
+        }
+    }
+
     try {
-        // Validação básica do parâmetro vindo do PHP
-        size_t safe_minlength = minlength > 0 ? static_cast<size_t>(minlength) : 0;
-
-        // Chama a lógica de CPU/OpenMP do C++
-        ZTensor result = self_obj->tensor->bincount(safe_minlength);
-
-        // Retorna pro PHP
+        ZTensor result = self_obj->tensor->bincount(weights_ptr);
         zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
-    } catch (const std::exception &e) {
+    } catch (const std::exception& e) {
         zend_throw_exception(zend_ce_exception, e.what(), 0);
         RETURN_THROWS();
     }
@@ -3007,6 +3008,84 @@ PHP_METHOD(ZTensor, cumsum)
 
     try {
         ZTensor result = self_obj->tensor->cumsum(axis);
+        zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
+    } catch (const std::exception& e) {
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+        RETURN_THROWS();
+    }
+}
+
+PHP_METHOD(ZTensor, uniqueCounts)
+{
+    ZEND_PARSE_PARAMETERS_NONE();
+    zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
+    if (!self_obj->tensor) {
+        zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0);
+        RETURN_THROWS();
+    }
+
+    try {
+        std::vector<float> values;
+        std::vector<long> counts;
+        self_obj->tensor->unique_counts(values, counts);
+
+        ZTensor values_tensor(std::vector<size_t>{values.size()});
+        ZTensor counts_tensor(std::vector<size_t>{counts.size()});
+        for (size_t i = 0; i < values.size(); ++i) {
+            values_tensor.data[i] = values[i];
+            counts_tensor.data[i] = static_cast<float>(counts[i]);
+        }
+
+        array_init(return_value);
+        zval values_zv, counts_zv;
+        zmatrix_return_tensor_obj(values_tensor, &values_zv, zmatrix_ce_ZTensor);
+        zmatrix_return_tensor_obj(counts_tensor, &counts_zv, zmatrix_ce_ZTensor);
+        add_assoc_zval(return_value, "values", &values_zv);
+        add_assoc_zval(return_value, "counts", &counts_zv);
+    } catch (const std::exception& e) {
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+        RETURN_THROWS();
+    }
+}
+
+PHP_METHOD(ZTensor, stack)
+{
+    zval *tensors_zv;
+    ZEND_PARSE_PARAMETERS_START(1, 1)
+        Z_PARAM_ARRAY(tensors_zv)
+    ZEND_PARSE_PARAMETERS_END();
+
+    std::vector<ZTensor*> tensors;
+    std::vector<ZTensor> temp_storage;
+    // Reserva ANTES do loop: push_back em temp_storage não pode realocar,
+    // ou os ponteiros guardados em 'tensors' ficariam pendurados.
+    temp_storage.reserve(zend_hash_num_elements(Z_ARRVAL_P(tensors_zv)));
+
+    zval *entry;
+    ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(tensors_zv), entry) {
+        if (Z_TYPE_P(entry) == IS_OBJECT && instanceof_function(Z_OBJCE_P(entry), zmatrix_ce_ZTensor)) {
+            zmatrix_ztensor_object *obj = Z_MATRIX_ZTENSOR_P(entry);
+            if (!obj->tensor) {
+                zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0);
+                RETURN_THROWS();
+            }
+            tensors.push_back(obj->tensor);
+        } else if (Z_TYPE_P(entry) == IS_ARRAY) {
+            try {
+                temp_storage.push_back(php_array_to_tensor(entry));
+            } catch (const std::exception& e) {
+                zend_throw_exception(zend_ce_exception, e.what(), 0);
+                RETURN_THROWS();
+            }
+            tensors.push_back(&temp_storage.back());
+        } else {
+            zend_throw_exception(zend_ce_exception, "stack(): cada elemento deve ser array ou ZTensor", 0);
+            RETURN_THROWS();
+        }
+    } ZEND_HASH_FOREACH_END();
+
+    try {
+        ZTensor result = ZTensor::stack(tensors);
         zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
     } catch (const std::exception& e) {
         zend_throw_exception(zend_ce_exception, e.what(), 0);

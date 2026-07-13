@@ -265,7 +265,7 @@ ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_unique, 0, 0, 0)
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_bincount, 0, 0, 0)
-    ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, minlength, IS_LONG, 0, "0")
+    ZEND_ARG_INFO_WITH_DEFAULT_VALUE(0, weights, "null")
 ZEND_END_ARG_INFO()
 
 // argmax(?int $axis = null): int|ZTensor
@@ -298,4 +298,10 @@ ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_cumsum, 0, 0, 0)
     ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, axis, IS_LONG, 1, "null")
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_ztensor_uniqueCounts, 0, 0, IS_ARRAY, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_static_stack, 0, 0, 1)
+    ZEND_ARG_TYPE_INFO(0, tensors, IS_ARRAY, 0)
+ZEND_END_ARG_INFO()
 #endif /* ZMATRIX_ARGINFO_H */

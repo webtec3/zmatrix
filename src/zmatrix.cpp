@@ -1704,52 +1704,43 @@ ZTensor column(size_t col_idx) const {
             return result;
         }
     // --- Bincount ---
-        ZTensor bincount(size_t minlength = 0) const {
-    #ifdef HAVE_CUDA
-            const_cast<ZTensor*>(this)->ensure_host();
-    #endif
-            const size_t N = size();
-            if (N == 0) {
-                return ZTensor({minlength});
-            }
-
-            const float* p = data.data();
-            int max_val = -1;
-
-            // Verifica negativos e acha o max_val
-            for (size_t i = 0; i < N; ++i) {
-                if (p[i] < 0.0f) {
-                    throw std::invalid_argument("bincount: todos os elementos devem ser >= 0");
+        ZTensor bincount(const ZTensor* weights = nullptr) const {
+                if (shape.size() != 1) throw std::runtime_error("bincount() requer tensor 1D");
+        #ifdef HAVE_CUDA
+                ensure_host();
+        #endif
+                const size_t N = size();
+                if (weights && weights->size() != N) {
+                    throw std::invalid_argument("bincount(): weights deve ter o mesmo tamanho do tensor de índices");
                 }
-                int val = static_cast<int>(p[i]);
-                if (val > max_val) max_val = val;
-            }
+        #ifdef HAVE_CUDA
+                if (weights) weights->ensure_host();
+        #endif
 
-            size_t out_size = std::max(minlength, static_cast<size_t>(max_val + 1));
-            ZTensor result({out_size}); // ZTensor zera a memória por padrão
-            float* res_p = result.data.data();
-
-    #if HAS_OPENMP
-            // O threshold aqui deve ser maior, pois operações atômicas podem causar contenção (false sharing)
-            if (N > ZMATRIX_PARALLEL_THRESHOLD * 2) {
-    #pragma omp parallel for schedule(static)
+                long max_val = -1;
                 for (size_t i = 0; i < N; ++i) {
-                    int val = static_cast<int>(p[i]);
-    #pragma omp atomic
-                    res_p[val] += 1.0f;
+                    float v = data[i];
+                    if (v < 0.0f || std::floor(v) != v) {
+                        throw std::invalid_argument("bincount(): valores devem ser inteiros não negativos");
+                    }
+                    long iv = static_cast<long>(v);
+                    if (iv > max_val) max_val = iv;
                 }
-            } else {
+
+                size_t out_size = (max_val < 0) ? 0 : static_cast<size_t>(max_val + 1);
+                ZTensor result(std::vector<size_t>{out_size});
+                if (out_size == 0) return result;
+
+                float* out_data = result.data.data();
+                const float* w = weights ? weights->data.data() : nullptr;
+
                 for (size_t i = 0; i < N; ++i) {
-                    res_p[static_cast<int>(p[i])] += 1.0f;
+                    size_t bin = static_cast<size_t>(data[i]);
+                    out_data[bin] += w ? w[i] : 1.0f;
                 }
+
+                return result;
             }
-    #else
-            for (size_t i = 0; i < N; ++i) {
-                res_p[static_cast<int>(p[i])] += 1.0f;
-            }
-    #endif
-            return result;
-        }
 
     // --- Argmax ---
         size_t argmax() const {
@@ -2057,6 +2048,68 @@ ZTensor column(size_t col_idx) const {
                 return result;
             }
 
+        void unique_counts(std::vector<float>& out_values, std::vector<long>& out_counts) const {
+                if (shape.size() != 1) throw std::runtime_error("uniqueCounts() requer tensor 1D");
+        #ifdef HAVE_CUDA
+                ensure_host();
+        #endif
+                std::vector<float> sorted(data.begin(), data.end());
+                std::sort(sorted.begin(), sorted.end());
+
+                out_values.clear();
+                out_counts.clear();
+                for (size_t i = 0; i < sorted.size(); ++i) {
+                    if (i == 0 || sorted[i] != sorted[i - 1]) {
+                        out_values.push_back(sorted[i]);
+                        out_counts.push_back(1);
+                    } else {
+                        out_counts.back()++;
+                    }
+                }
+            }
+
+            // --- stack: empilha N tensores de mesmo shape em um novo eixo 0 ---
+            // Paralelizado: cada thread copia um bloco disjunto de 'dst' (tensors[i]
+            // -> dst + i*block), sem overlap entre threads.
+            static ZTensor stack(const std::vector<ZTensor*>& tensors) {
+                if (tensors.empty()) throw std::runtime_error("stack(): a lista de tensores não pode ser vazia");
+
+                const std::vector<size_t>& first_shape = tensors[0]->shape;
+                for (size_t i = 1; i < tensors.size(); ++i) {
+                    if (tensors[i]->shape != first_shape) {
+                        throw std::invalid_argument("stack(): todos os tensores devem ter o mesmo shape");
+                    }
+                }
+
+        #ifdef HAVE_CUDA
+                for (auto* t : tensors) t->ensure_host();
+        #endif
+
+                std::vector<size_t> out_shape;
+                out_shape.push_back(tensors.size());
+                out_shape.insert(out_shape.end(), first_shape.begin(), first_shape.end());
+
+                ZTensor result(out_shape);
+                if (result.size() == 0) return result;
+
+                const size_t block = tensors[0]->size();
+                float* dst = result.data.data();
+
+        #if HAS_OPENMP
+                if (result.size() > ZMATRIX_PARALLEL_THRESHOLD) {
+                    #pragma omp parallel for schedule(static)
+                    for (size_t i = 0; i < tensors.size(); ++i) {
+                        std::memcpy(dst + i * block, tensors[i]->data.data(), block * sizeof(float));
+                    }
+                } else
+        #endif
+                {
+                    for (size_t i = 0; i < tensors.size(); ++i) {
+                        std::memcpy(dst + i * block, tensors[i]->data.data(), block * sizeof(float));
+                    }
+                }
+                return result;
+            }
 
     // --- Concat (Estático) ---
         static ZTensor concat(const std::vector<const ZTensor*>& tensors, int axis = 0) {
@@ -3786,6 +3839,8 @@ static const zend_function_entry zmatrix_ztensor_methods[] = {
     PHP_ME(ZTensor, isin,             arginfo_ztensor_isin,             ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, cumsum,           arginfo_ztensor_cumsum,           ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, concat,           arginfo_ztensor_static_concat,    ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)
+    PHP_ME(ZTensor, uniqueCounts,     arginfo_ztensor_uniqueCounts,     ZEND_ACC_PUBLIC)
+    PHP_ME(ZTensor, stack,            arginfo_ztensor_static_stack,     ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)
     // Autograd methods
     PHP_ME(ZTensor, requiresGrad,     arginfo_class_ZMatrix_ZTensor_requiresGrad,      ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, isRequiresGrad,    arginfo_class_ZMatrix_ZTensor_isRequiresGrad,  ZEND_ACC_PUBLIC)

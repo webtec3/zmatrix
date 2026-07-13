@@ -774,30 +774,96 @@ final class ZTensor
     }
 
     /**
-     * Counts the frequency of each non-negative integer value in the tensor.
+     * Counts the frequency of each non-negative integer value.
      *
-     * @param int $minlength Minimum length of the output tensor. Defaults to 0.
+     * @param int $minlength Minimum length of the output tensor.
      *
      * @return ZTensor A tensor containing the occurrence count of each value.
      *
-     * @throws \Exception If the tensor is not initialized.
-     * @throws \Exception If the tensor contains negative values.
+     * @throws \Exception
      */
-    public function bincount(int $minlength = 0): ZTensor
-    {
-    }
+    public function bincount(int $minlength = 0): ZTensor {}
 
     /**
-     * Returns the index of the maximum value in the tensor.
+     * Returns the index of the maximum value or the indices of the maximum values
+     * along the specified axis.
      *
-     * @return int Index of the maximum value.
+     * @param int|null $axis Axis to reduce. If null, returns a scalar index.
      *
-     * @throws \Exception If the tensor is not initialized.
-     * @throws \Exception If the tensor is empty.
+     * @return int|ZTensor
+     *
+     * @throws \Exception
      */
-    public function argmax(): int
-    {
-    }
+    public function argmax(?int $axis = null): int|ZTensor {}
+
+    /**
+     * Returns the index of the minimum value or the indices of the minimum values
+     * along the specified axis.
+     *
+     * @param int|null $axis Axis to reduce. If null, returns a scalar index.
+     *
+     * @return int|ZTensor
+     *
+     * @throws \Exception
+     */
+    public function argmin(?int $axis = null): int|ZTensor {}
+
+    /**
+     * Returns a sorted copy of the tensor.
+     *
+     * @param int $axis Axis along which to sort.
+     *
+     * @return ZTensor
+     *
+     * @throws \Exception
+     */
+    public function sort(int $axis = 0): ZTensor {}
+
+    /**
+     * Returns the cumulative sum of the tensor.
+     *
+     * @param int|null $axis Axis along which the cumulative sum is computed.
+     *                       If null, the tensor is flattened first.
+     *
+     * @return ZTensor
+     *
+     * @throws \Exception
+     */
+    public function cumsum(?int $axis = null): ZTensor {}
+
+    /**
+     * Returns the unique values and their occurrence counts.
+     *
+     * @return array{
+     *     unique: ZTensor,
+     *     counts: ZTensor
+     * }
+     *
+     * @throws \Exception
+     */
+    public function uniqueCounts(): array {}
+
+    /**
+     * Tests whether each element of the tensor is contained in the given values.
+     *
+     * @param ZTensor|array $values Values to test against.
+     *
+     * @return ZTensor A boolean mask tensor.
+     *
+     * @throws \Exception
+     */
+    public function isin(ZTensor|array $values): ZTensor {}
+
+    /**
+     * Stacks multiple tensors into a new tensor.
+     *
+     * @param list<ZTensor> $tensors
+     *
+     * @return ZTensor
+     *
+     * @throws \Exception
+     */
+    public static function stack(array $tensors): ZTensor {}
 
     /**
      * Concatenates multiple tensors along the specified axis.
