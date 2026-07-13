@@ -304,4 +304,19 @@ ZEND_END_ARG_INFO()
 ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_static_stack, 0, 0, 1)
     ZEND_ARG_TYPE_INFO(0, tensors, IS_ARRAY, 0)
 ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_variance, 0, 0, 0)
+    ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, ddof, IS_LONG, 0, "0")
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_median, 0, 0, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_percentile, 0, 0, 1)
+    ZEND_ARG_TYPE_INFO(0, q, IS_DOUBLE, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_histogram, 0, 0, 0)
+    ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, bins, IS_LONG, 0, "10")
+ZEND_END_ARG_INFO()
 #endif /* ZMATRIX_ARGINFO_H */

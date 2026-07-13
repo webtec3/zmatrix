@@ -3092,4 +3092,87 @@ PHP_METHOD(ZTensor, stack)
         RETURN_THROWS();
     }
 }
+
+// =========================================================================
+// VARIANCE (Variância)
+// =========================================================================
+PHP_METHOD(ZTensor, variance) {
+    zend_long ddof = 0;
+    ZEND_PARSE_PARAMETERS_START(0, 1)
+        Z_PARAM_OPTIONAL
+        Z_PARAM_LONG(ddof)
+    ZEND_PARSE_PARAMETERS_END();
+
+    zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
+    try {
+        float var = self_obj->tensor->variance(static_cast<int>(ddof));
+        RETURN_DOUBLE(static_cast<double>(var));
+    } catch (const std::exception &e) {
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+    }
+}
+
+// =========================================================================
+// MEDIAN (Mediana)
+// =========================================================================
+PHP_METHOD(ZTensor, median) {
+    ZEND_PARSE_PARAMETERS_NONE();
+    zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
+    try {
+        float med = self_obj->tensor->median();
+        RETURN_DOUBLE(static_cast<double>(med));
+    } catch (const std::exception &e) {
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+    }
+}
+
+// =========================================================================
+// PERCENTILE (Percentil)
+// =========================================================================
+PHP_METHOD(ZTensor, percentile) {
+    double q;
+    ZEND_PARSE_PARAMETERS_START(1, 1)
+        Z_PARAM_DOUBLE(q)
+    ZEND_PARSE_PARAMETERS_END();
+
+    zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
+    try {
+        float perc = self_obj->tensor->percentile(static_cast<float>(q));
+        RETURN_DOUBLE(static_cast<double>(perc));
+    } catch (const std::exception &e) {
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+    }
+}
+
+// =========================================================================
+// HISTOGRAM (Histograma)
+// =========================================================================
+PHP_METHOD(ZTensor, histogram) {
+    zend_long bins = 10;
+    ZEND_PARSE_PARAMETERS_START(0, 1)
+        Z_PARAM_OPTIONAL
+        Z_PARAM_LONG(bins)
+    ZEND_PARSE_PARAMETERS_END();
+
+    zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
+    try {
+        auto [counts, edges] = self_obj->tensor->histogram(static_cast<int>(bins));
+
+        array_init(return_value);
+
+        // 0: [counts] - Quantidade em cada bin
+        zval zv_counts;
+        zmatrix_return_tensor_obj(counts, &zv_counts, zmatrix_ce_ZTensor);
+        add_next_index_zval(return_value, &zv_counts);
+
+        // 1: [bin_edges] - Os limites de cada bin
+        zval zv_edges;
+        zmatrix_return_tensor_obj(edges, &zv_edges, zmatrix_ce_ZTensor);
+        add_next_index_zval(return_value, &zv_edges);
+
+    } catch (const std::exception &e) {
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+    }
+}
+
 #endif /* ZMATRIX_METHODS_H */

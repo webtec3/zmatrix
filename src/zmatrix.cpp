@@ -2111,6 +2111,158 @@ ZTensor column(size_t col_idx) const {
                 return result;
             }
 
+        // === Variance ===
+            // Calcula a variância global. (ddof = 1 para variância amostral, 0 para populacional)
+            float variance(int ddof = 0) const {
+        #ifdef HAVE_CUDA
+                const_cast<ZTensor*>(this)->ensure_host();
+        #endif
+                const size_t N = size();
+                if (N <= static_cast<size_t>(ddof)) {
+                    throw std::invalid_argument("variance: tamanho do tensor insuficiente para os graus de liberdade (ddof).");
+                }
+
+                float m = mean(); // Aproveita o método otimizado de média
+                float sum_sq = 0.0f;
+                const float* p = data.data();
+
+        #if HAS_OPENMP
+                if (N > ZMATRIX_PARALLEL_THRESHOLD) {
+        #pragma omp parallel for reduction(+:sum_sq) schedule(static)
+                    for (size_t i = 0; i < N; ++i) {
+                        float diff = p[i] - m;
+                        sum_sq += diff * diff;
+                    }
+                } else
+        #endif
+                {
+                    for (size_t i = 0; i < N; ++i) {
+                        float diff = p[i] - m;
+                        sum_sq += diff * diff;
+                    }
+                }
+                return sum_sq / static_cast<float>(N - ddof);
+            }
+
+            // === Median (Mediana) ===
+            // Usa std::nth_element (O(N) de complexidade) em vez de ordenação total.
+            float median() const {
+        #ifdef HAVE_CUDA
+                const_cast<ZTensor*>(this)->ensure_host();
+        #endif
+                const size_t N = size();
+                if (N == 0) throw std::runtime_error("median: tensor vazio.");
+
+                std::vector<float> temp = data; // Cópia pois nth_element altera a ordem
+                size_t mid = N / 2;
+
+                // Coloca o elemento do meio no lugar certo e particiona o resto
+                std::nth_element(temp.begin(), temp.begin() + mid, temp.end());
+
+                if (N % 2 != 0) {
+                    return temp[mid]; // Tamanho ímpar, o elemento do meio é a mediana exata
+                } else {
+                    // Tamanho par: precisamos da média do elemento do meio com o maior da partição à esquerda
+                    auto max_left_it = std::max_element(temp.begin(), temp.begin() + mid);
+                    return (*max_left_it + temp[mid]) / 2.0f;
+                }
+            }
+
+            // === Percentile ===
+            // q = valor entre 0 e 100. Usa interpolação linear (igual numpy.percentile).
+            float percentile(float q) const {
+        #ifdef HAVE_CUDA
+                const_cast<ZTensor*>(this)->ensure_host();
+        #endif
+                const size_t N = size();
+                if (N == 0) throw std::runtime_error("percentile: tensor vazio.");
+                if (q < 0.0f || q > 100.0f) throw std::invalid_argument("percentile: q deve estar entre 0 e 100.");
+                if (N == 1) return data[0];
+
+                std::vector<float> temp = data;
+
+                // Calcula a posição (fracionária)
+                float pos = static_cast<float>(N - 1) * (q / 100.0f);
+                size_t idx = static_cast<size_t>(std::floor(pos));
+                float frac = pos - static_cast<float>(idx);
+
+                // Particiona até o índice 'idx' (O(N))
+                std::nth_element(temp.begin(), temp.begin() + idx, temp.end());
+                float lower = temp[idx];
+
+                if (frac > 0.0f && idx + 1 < N) {
+                    // Encontra o exato próximo valor sem ter que ordenar o resto
+                    auto next_it = std::min_element(temp.begin() + idx + 1, temp.end());
+                    float upper = *next_it;
+                    // Interpolação linear entre o valor abaixo e o valor acima
+                    return lower + frac * (upper - lower);
+                }
+
+                return lower;
+            }
+
+            // === Histogram (Para LightGBM e Density) ===
+            // Retorna uma tupla com as contagens (counts) e as bordas (bin_edges).
+            std::pair<ZTensor, ZTensor> histogram(int bins = 10) const {
+        #ifdef HAVE_CUDA
+                const_cast<ZTensor*>(this)->ensure_host();
+        #endif
+                const size_t N = size();
+                if (N == 0) throw std::runtime_error("histogram: tensor vazio.");
+                if (bins <= 0) throw std::invalid_argument("histogram: o número de bins deve ser > 0.");
+
+                // 1. Achar min e max manualmente para evitar varrer o array duas vezes
+                float min_val = data[0];
+                float max_val = data[0];
+                const float* p = data.data();
+
+                for (size_t i = 1; i < N; ++i) {
+                    if (p[i] < min_val) min_val = p[i];
+                    if (p[i] > max_val) max_val = p[i];
+                }
+
+                if (min_val == max_val) {
+                    max_val = min_val + 1.0f; // Evitar divisão por zero caso seja tensor constante
+                }
+
+                float bin_width = (max_val - min_val) / static_cast<float>(bins);
+
+                ZTensor t_counts({static_cast<size_t>(bins)}); // Inicia zerado
+                ZTensor t_edges({static_cast<size_t>(bins + 1)});
+
+                float* p_counts = t_counts.data.data();
+                float* p_edges = t_edges.data.data();
+
+                // 2. Preencher os limites das bordas (bin edges)
+                for (int i = 0; i <= bins; ++i) {
+                    p_edges[i] = min_val + static_cast<float>(i) * bin_width;
+                }
+
+                // 3. Contagem em paralelo atômico
+        #if HAS_OPENMP
+                if (N > ZMATRIX_PARALLEL_THRESHOLD) {
+        #pragma omp parallel for schedule(static)
+                    for (size_t i = 0; i < N; ++i) {
+                        int b = static_cast<int>((p[i] - min_val) / bin_width);
+                        if (b >= bins) b = bins - 1; // Elemento que é exatamente igual ao valor máximo vai no último bin
+                        if (b < 0) b = 0;
+        #pragma omp atomic
+                        p_counts[b] += 1.0f;
+                    }
+                } else
+        #endif
+                {
+                    for (size_t i = 0; i < N; ++i) {
+                        int b = static_cast<int>((p[i] - min_val) / bin_width);
+                        if (b >= bins) b = bins - 1;
+                        if (b < 0) b = 0;
+                        p_counts[b] += 1.0f;
+                    }
+                }
+
+                return {t_counts, t_edges};
+            }
+
     // --- Concat (Estático) ---
         static ZTensor concat(const std::vector<const ZTensor*>& tensors, int axis = 0) {
             if (tensors.empty()) {
@@ -3841,6 +3993,11 @@ static const zend_function_entry zmatrix_ztensor_methods[] = {
     PHP_ME(ZTensor, concat,           arginfo_ztensor_static_concat,    ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)
     PHP_ME(ZTensor, uniqueCounts,     arginfo_ztensor_uniqueCounts,     ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, stack,            arginfo_ztensor_static_stack,     ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)
+    PHP_ME(ZTensor, variance,         arginfo_ztensor_variance,         ZEND_ACC_PUBLIC)
+    PHP_ME(ZTensor, median,           arginfo_ztensor_median,           ZEND_ACC_PUBLIC)
+    PHP_ME(ZTensor, percentile,       arginfo_ztensor_percentile,       ZEND_ACC_PUBLIC)
+    PHP_ME(ZTensor, histogram,        arginfo_ztensor_histogram,        ZEND_ACC_PUBLIC)
+
     // Autograd methods
     PHP_ME(ZTensor, requiresGrad,     arginfo_class_ZMatrix_ZTensor_requiresGrad,      ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, isRequiresGrad,    arginfo_class_ZMatrix_ZTensor_isRequiresGrad,  ZEND_ACC_PUBLIC)

@@ -62,6 +62,340 @@ final class ZTensor
     }
 
     /**
+     * Clips the tensor values within a specified range.
+     *
+     * This static method receives a `ZTensor` or a multidimensional PHP array,
+     * and returns a new `ZTensor` object with all values limited to the range
+     * defined by `$min` and `$max`. All values less than `$min` will be converted to `$min`,
+     * and all values greater than `$max` will be converted to `$max`.
+     *
+     * Example:
+     * ```php
+     * $t = ZTensor::arr([[1, 5, 10], [-2, 0, 15]]);
+     * $clipped = ZTensor::clip($t, 0, 10);
+     * print_r($clipped->toArray());
+     * // Result:
+     * // [
+     * //   [1.0, 5.0, 10.0],
+     * //   [0.0, 0.0, 10.0]
+     * // ]
+     * ```
+     *
+     * @param ZTensor|array $array Input tensor (ZTensor object or multidimensional numeric array)
+     * @param float $min Minimum allowed value for each element
+     * @param float $max Maximum allowed value for each element
+     * @return ZTensor Returns a new ZTensor object with clipped values
+     * @throws RuntimeException If arguments are invalid or shapes are incompatible
+     */
+    public static function clip(ZTensor|array $array, float $min, float $max): ZTensor
+    {
+    }
+
+    /**
+     * Computes the element-wise minimum of a tensor and a scalar.
+     *
+     * @param ZTensor|array<int|float> $a The input tensor.
+     * @param float $b The scalar value.
+     * @return ZTensor A new tensor with the element-wise minimum.
+     * @throws RuntimeException If an internal error occurs.
+     */
+    public static function minimum(array|ZTensor $a, float $b): ZTensor
+    {
+    }
+
+    /**
+     * Computes the element-wise maximum of a tensor and a scalar.
+     *
+     * @param ZTensor|array<int|float> $a The input tensor.
+     * @param float $b The scalar value.
+     * @return ZTensor A new tensor with the element-wise maximum.
+     * @throws RuntimeException If an internal error occurs.
+     */
+    public static function maximum(array|ZTensor $a, float $b): ZTensor
+    {
+    }
+
+    /**
+     * Creates a new tensor filled with zeros, with the specified shape.
+     *
+     * @param array<int> $shape An array of integers defining the dimensions of the new tensor.
+     * The dimensions must be non-negative.
+     * @return ZTensor The new tensor filled with zeros.
+     * @throws InvalidArgumentException If the shape is not an array or contains invalid values (ZMATRIX_ERR_INVALID_SHAPE).
+     * @throws RuntimeException If allocation fails or another error occurs.
+     */
+    public static function zeros(array $shape): ZTensor
+    {
+    }
+
+    /**
+     * Creates a new tensor filled with ones, with the specified shape.
+     *
+     * @param array<int> $shape An array of integers defining the dimensions of the new tensor.
+     * The dimensions must be non-negative.
+     * @return ZTensor The new tensor filled with ones.
+     * @throws InvalidArgumentException If the shape is not an array or contains invalid values (ZMATRIX_ERR_INVALID_SHAPE).
+     * @throws RuntimeException If allocation fails or another error occurs.
+     */
+    public static function ones(array $shape): ZTensor
+    {
+    }
+
+    /**
+     * Creates a new tensor filled with a constant scalar value, with the specified shape.
+     *
+     * @param array<int> $shape An array of integers defining the dimensions of the new tensor.
+     * The dimensions must be non-negative.
+     * @param float $value The scalar value to be used to fill the tensor.
+     * @return ZTensor The new tensor filled with the constant value.
+     * @throws InvalidArgumentException If the shape is not an array or contains invalid values (ZMATRIX_ERR_INVALID_SHAPE).
+     * @throws RuntimeException If allocation fails or another error occurs.
+     */
+    public static function full(array $shape, float $value): ZTensor
+    {
+    }
+
+    /**
+     * Creates a 2D identity matrix (rank-2 tensor).
+     *
+     * Returns a square matrix of size $size x $size with 1s on the main diagonal and 0s elsewhere.
+     *
+     * @param int $size The size of the identity matrix (number of rows and columns). Must be positive.
+     * @return ZTensor The identity matrix.
+     * @throws InvalidArgumentException If $size is not positive.
+     * @throws RuntimeException If allocation fails or another error occurs.
+     */
+    public static function identity(int $size): ZTensor
+    {
+    }
+
+    /**
+     * Creates a new tensor with uniformly distributed random values.
+     *
+     * The values are generated in the interval [$min, $max).
+     *
+     * @param array<int> $shape An array of integers defining the dimensions of the new tensor.
+     * The dimensions must be non-negative (dimension 0 is allowed).
+     * @param float $min The lower bound (inclusive) of the generation interval (default: 0.0).
+     * @param float $max The upper bound (exclusive) of the generation interval (default: 1.0).
+     * @return ZTensor The new tensor filled with random values.
+     * @throws InvalidArgumentException If the shape is invalid (ZMATRIX_ERR_INVALID_SHAPE) or if $min > $max.
+     * @throws RuntimeException If allocation fails or another error occurs.
+     */
+    public static function random(array $shape, float $min = 0.0, float $max = 1.0): ZTensor
+    {
+    }
+
+    /**
+     * Creates a new tensor with random values from a normal (Gaussian) distribution.
+     *
+     * @param array<int> $shape The shape of the tensor to be created.
+     * @param float $mean The mean of the normal distribution (default: 0.0).
+     * @param float $std_dev The standard deviation of the normal distribution (default: 1.0). Must be non-negative.
+     * @return ZTensor The new tensor with normally distributed random values.
+     * @throws InvalidArgumentException If the shape is invalid or std_dev is negative.
+     * @throws RuntimeException If allocation fails.
+     */
+    public static function randn(array $shape, float $mean = 0.0, float $std_dev = 1.0): ZTensor
+    {
+    }
+
+    /**
+     * Creates a new 1D tensor with evenly spaced values within a given interval.
+     *
+     * Values are generated within the half-open interval [start, stop) (stop is not included).
+     * Use cases:
+     * - arange(stop): Values from 0 up to stop-1 with step 1.
+     * - arange(start, stop): Values from start up to stop-1 with step 1.
+     * - arange(start, stop, step): Values from start with increment step while < stop (or > stop if step is negative).
+     *
+     * @param float $start_or_stop If $stop is null, this is the 'stop' value and 'start' is 0. Otherwise, this is the 'start' value.
+     * @param ?float $stop The end of the interval (exclusive). If null, $start_or_stop is used as stop.
+     * @param float $step The spacing between values (default: 1.0). Cannot be zero.
+     * @return ZTensor The new 1D tensor.
+     * @throws InvalidArgumentException If $step is zero or the parameters result in an invalid interval.
+     * @throws RuntimeException If allocation fails.
+     */
+    public static function arange(float $start_or_stop, ?float $stop = null, float $step = 1.0): ZTensor
+    {
+    }
+
+    /**
+     * Creates a new 1D tensor with N evenly spaced values between start and stop.
+     *
+     * @param float $start The starting value of the sequence.
+     * @param float $stop The final value of the sequence.
+     * @param int $num The number of samples to generate (default: 50). Must be non-negative.
+     * @param bool $endpoint If true (default), 'stop' is the last value. Otherwise, it is not included.
+     * @return ZTensor The new 1D tensor.
+     * @throws InvalidArgumentException If $num is negative.
+     * @throws RuntimeException If allocation fails.
+     */
+    public static function linspace(float $start, float $stop, int $num = 50, bool $endpoint = true): ZTensor
+    {
+    }
+
+    /**
+     * Creates a new 1D tensor with N logarithmically spaced values.
+     *
+     * The values are base^start to base^stop.
+     *
+     * @param float $start The starting exponent (base^start).
+     * @param float $stop The final exponent (base^stop).
+     * @param int $num The number of samples to generate (default: 50). Must be non-negative.
+     * @param bool $endpoint If true (default), base^stop is the last value.
+     * @param float $base The base of the logarithm (default: 10.0).
+     * @return ZTensor The new 1D tensor.
+     * @throws InvalidArgumentException If $num is negative.
+     * @throws RuntimeException If allocation fails.
+     */
+    public static function logspace(float $start, float $stop, int $num = 50, bool $endpoint = true, float $base = 10.0): ZTensor
+    {
+    }
+
+    /**
+     * Creates a matrix (2D tensor) with ones on the k-th diagonal and zeros elsewhere.
+     *
+     * @param int $N Number of rows.
+     * @param ?int $M Number of columns. If null, M = N (square matrix). (Default: null)
+     * @param int $k Diagonal index: 0 for the main (default), positive for above, negative for below.
+     * @return ZTensor The resulting matrix.
+     * @throws InvalidArgumentException If N or M are negative.
+     * @throws RuntimeException If allocation fails.
+     */
+    public static function eye(int $N, ?int $M = null, int $k = 0): ZTensor
+    {
+    }
+
+    /**
+     * Stacks multiple tensors into a new tensor.
+     *
+     * @param list<ZTensor> $tensors
+     *
+     * @return ZTensor
+     *
+     * @throws \Exception
+     */
+    public static function stack(array $tensors): ZTensor
+    {
+    }
+
+    /**
+     * Concatenates multiple tensors along the specified axis.
+     *
+     * @param array<ZTensor> $tensors List of tensors to concatenate.
+     * @param int $axis Axis along which the tensors will be concatenated.
+     *
+     * @return ZTensor A new concatenated tensor.
+     *
+     * @throws \Exception If the tensors are incompatible for concatenation.
+     */
+    public static function concat(array $tensors, int $axis = 0): ZTensor
+    {
+    }
+
+    /**
+     * Repeats the tensor vertically (multiplies the number of rows).
+     *
+     * Example:
+     * ```
+     * $a = Ztensor::arr([[1, 2], [3, 4]]);
+     * Ztensor::tile($a, 3);
+     * // → [[1,2],[3,4],[1,2],[3,4],[1,2],[3,4]]
+     * ```
+     *
+     * @param ZTensor $tensor The tensor to be repeated.
+     * @param int $times How many times to repeat (must be >= 1).
+     * @return ZTensor A new tensor resulting from the repetition.
+     */
+    public static function tile(ZTensor $tensor, int $times): ZTensor
+    {
+    }
+
+    /**
+     * Static method: Element-wise addition with autograd support
+     *
+     * Adds two tensors and tracks the operation for backpropagation if either
+     * tensor has requires_grad=true.
+     *
+     * @param ZTensor $a First tensor
+     * @param ZTensor $b Second tensor
+     * @return ZTensor Result tensor with computation graph information
+     * @throws RuntimeException If shapes don't match
+     *
+     * @example
+     * ```php
+     * $x = ZTensor::ones([2, 2])->requiresGrad(true);
+     * $y = ZTensor::ones([2, 2])->requiresGrad(true);
+     * $z = ZTensor::addAutograd($x, $y);
+     * ```
+     */
+    public static function addAutograd(ZTensor $a, ZTensor $b): ZTensor
+    {
+    }
+
+    /**
+     * Static method: Element-wise subtraction with autograd support
+     *
+     * Subtracts b from a and tracks the operation for backpropagation.
+     *
+     * @param ZTensor $a First tensor (minuend)
+     * @param ZTensor $b Second tensor (subtrahend)
+     * @return ZTensor Result tensor with computation graph information
+     * @throws RuntimeException If shapes don't match
+     *
+     * @example
+     * ```php
+     * $x = ZTensor::ones([2, 2])->requiresGrad(true);
+     * $y = ZTensor::ones([2, 2])->requiresGrad(true);
+     * $z = ZTensor::subAutograd($x, $y);
+     * ```
+     */
+    public static function subAutograd(ZTensor $a, ZTensor $b): ZTensor
+    {
+    }
+
+    /**
+     * Static method: Element-wise multiplication with autograd support
+     *
+     * Multiplies two tensors element-wise and tracks the operation for backpropagation.
+     *
+     * @param ZTensor $a First tensor
+     * @param ZTensor $b Second tensor
+     * @return ZTensor Result tensor with computation graph information
+     * @throws RuntimeException If shapes don't match
+     *
+     * @example
+     * ```php
+     * $x = ZTensor::ones([2, 2])->requiresGrad(true);
+     * $y = ZTensor::ones([2, 2])->requiresGrad(true);
+     * $z = ZTensor::mulAutograd($x, $y);
+     * ```
+     */
+    public static function mulAutograd(ZTensor $a, ZTensor $b): ZTensor
+    {
+    }
+
+    /**
+     * Static method: Sum reduction with autograd support
+     *
+     * Sums all elements of a tensor and returns a scalar (shape [1]) with
+     * computation graph tracking.
+     *
+     * @param ZTensor $tensor Tensor to sum
+     * @return ZTensor Scalar result tensor
+     *
+     * @example
+     * ```php
+     * $x = ZTensor::ones([2, 3])->requiresGrad(true);
+     * $sum = ZTensor::sumAutograd($x);  // Result shape [1]
+     * ```
+     */
+    public static function sumAutograd(ZTensor $tensor): ZTensor
+    {
+    }
+
+    /**
      * Creates a deep copy of the current tensor.
      * @return ZTensor A new ZTensor instance that is a copy of the original.
      */
@@ -117,36 +451,6 @@ final class ZTensor
      * @throws \Exception  If axis is out of bounds or tensor is empty
      */
     public function sum(?int $axis = null): ZTensor
-    {
-    }
-
-    /**
-     * Clips the tensor values within a specified range.
-     *
-     * This static method receives a `ZTensor` or a multidimensional PHP array,
-     * and returns a new `ZTensor` object with all values limited to the range
-     * defined by `$min` and `$max`. All values less than `$min` will be converted to `$min`,
-     * and all values greater than `$max` will be converted to `$max`.
-     *
-     * Example:
-     * ```php
-     * $t = ZTensor::arr([[1, 5, 10], [-2, 0, 15]]);
-     * $clipped = ZTensor::clip($t, 0, 10);
-     * print_r($clipped->toArray());
-     * // Result:
-     * // [
-     * //   [1.0, 5.0, 10.0],
-     * //   [0.0, 0.0, 10.0]
-     * // ]
-     * ```
-     *
-     * @param ZTensor|array $array Input tensor (ZTensor object or multidimensional numeric array)
-     * @param float $min Minimum allowed value for each element
-     * @param float $max Maximum allowed value for each element
-     * @return ZTensor Returns a new ZTensor object with clipped values
-     * @throws RuntimeException If arguments are invalid or shapes are incompatible
-     */
-    public static function clip(ZTensor|array $array, float $min, float $max): ZTensor
     {
     }
 
@@ -357,30 +661,6 @@ final class ZTensor
     }
 
     /**
-     * Computes the element-wise minimum of a tensor and a scalar.
-     *
-     * @param ZTensor|array<int|float> $a The input tensor.
-     * @param float $b The scalar value.
-     * @return ZTensor A new tensor with the element-wise minimum.
-     * @throws RuntimeException If an internal error occurs.
-     */
-    public static function minimum(array|ZTensor $a, float $b): ZTensor
-    {
-    }
-
-    /**
-     * Computes the element-wise maximum of a tensor and a scalar.
-     *
-     * @param ZTensor|array<int|float> $a The input tensor.
-     * @param float $b The scalar value.
-     * @return ZTensor A new tensor with the element-wise maximum.
-     * @throws RuntimeException If an internal error occurs.
-     */
-    public static function maximum(array|ZTensor $a, float $b): ZTensor
-    {
-    }
-
-    /**
      * Calculates the sample standard deviation (N-1) of all elements in the tensor.
      *
      * @return float The sample standard deviation. Returns NAN if the tensor has fewer than 2 elements or is empty.
@@ -429,7 +709,6 @@ final class ZTensor
     {
     }
 
-
     /**
      * Returns the number of dimensions of the tensor (ndim).
      *
@@ -475,46 +754,6 @@ final class ZTensor
     }
 
     /**
-     * Creates a new tensor filled with zeros, with the specified shape.
-     *
-     * @param array<int> $shape An array of integers defining the dimensions of the new tensor.
-     * The dimensions must be non-negative.
-     * @return ZTensor The new tensor filled with zeros.
-     * @throws InvalidArgumentException If the shape is not an array or contains invalid values (ZMATRIX_ERR_INVALID_SHAPE).
-     * @throws RuntimeException If allocation fails or another error occurs.
-     */
-    public static function zeros(array $shape): ZTensor
-    {
-    }
-
-    /**
-     * Creates a new tensor filled with ones, with the specified shape.
-     *
-     * @param array<int> $shape An array of integers defining the dimensions of the new tensor.
-     * The dimensions must be non-negative.
-     * @return ZTensor The new tensor filled with ones.
-     * @throws InvalidArgumentException If the shape is not an array or contains invalid values (ZMATRIX_ERR_INVALID_SHAPE).
-     * @throws RuntimeException If allocation fails or another error occurs.
-     */
-    public static function ones(array $shape): ZTensor
-    {
-    }
-
-    /**
-     * Creates a new tensor filled with a constant scalar value, with the specified shape.
-     *
-     * @param array<int> $shape An array of integers defining the dimensions of the new tensor.
-     * The dimensions must be non-negative.
-     * @param float $value The scalar value to be used to fill the tensor.
-     * @return ZTensor The new tensor filled with the constant value.
-     * @throws InvalidArgumentException If the shape is not an array or contains invalid values (ZMATRIX_ERR_INVALID_SHAPE).
-     * @throws RuntimeException If allocation fails or another error occurs.
-     */
-    public static function full(array $shape, float $value): ZTensor
-    {
-    }
-
-    /**
      * Fills the current tensor with a constant scalar value (in-place).
      *
      * Replaces all elements of this tensor with the specified scalar value.
@@ -525,37 +764,6 @@ final class ZTensor
      * @throws RuntimeException If the tensor is not initialized or another error occurs.
      */
     public function fill(float $value): ZTensor
-    {
-    }
-
-    /**
-     * Creates a 2D identity matrix (rank-2 tensor).
-     *
-     * Returns a square matrix of size $size x $size with 1s on the main diagonal and 0s elsewhere.
-     *
-     * @param int $size The size of the identity matrix (number of rows and columns). Must be positive.
-     * @return ZTensor The identity matrix.
-     * @throws InvalidArgumentException If $size is not positive.
-     * @throws RuntimeException If allocation fails or another error occurs.
-     */
-    public static function identity(int $size): ZTensor
-    {
-    }
-
-    /**
-     * Creates a new tensor with uniformly distributed random values.
-     *
-     * The values are generated in the interval [$min, $max).
-     *
-     * @param array<int> $shape An array of integers defining the dimensions of the new tensor.
-     * The dimensions must be non-negative (dimension 0 is allowed).
-     * @param float $min The lower bound (inclusive) of the generation interval (default: 0.0).
-     * @param float $max The upper bound (exclusive) of the generation interval (default: 1.0).
-     * @return ZTensor The new tensor filled with random values.
-     * @throws InvalidArgumentException If the shape is invalid (ZMATRIX_ERR_INVALID_SHAPE) or if $min > $max.
-     * @throws RuntimeException If allocation fails or another error occurs.
-     */
-    public static function random(array $shape, float $min = 0.0, float $max = 1.0): ZTensor
     {
     }
 
@@ -624,87 +832,6 @@ final class ZTensor
      * @throws RuntimeException
      */
     public function sqrt(): ZTensor
-    {
-    }
-
-    /**
-     * Creates a new tensor with random values from a normal (Gaussian) distribution.
-     *
-     * @param array<int> $shape The shape of the tensor to be created.
-     * @param float $mean The mean of the normal distribution (default: 0.0).
-     * @param float $std_dev The standard deviation of the normal distribution (default: 1.0). Must be non-negative.
-     * @return ZTensor The new tensor with normally distributed random values.
-     * @throws InvalidArgumentException If the shape is invalid or std_dev is negative.
-     * @throws RuntimeException If allocation fails.
-     */
-    public static function randn(array $shape, float $mean = 0.0, float $std_dev = 1.0): ZTensor
-    {
-    }
-
-    /**
-     * Creates a new 1D tensor with evenly spaced values within a given interval.
-     *
-     * Values are generated within the half-open interval [start, stop) (stop is not included).
-     * Use cases:
-     * - arange(stop): Values from 0 up to stop-1 with step 1.
-     * - arange(start, stop): Values from start up to stop-1 with step 1.
-     * - arange(start, stop, step): Values from start with increment step while < stop (or > stop if step is negative).
-     *
-     * @param float $start_or_stop If $stop is null, this is the 'stop' value and 'start' is 0. Otherwise, this is the 'start' value.
-     * @param ?float $stop The end of the interval (exclusive). If null, $start_or_stop is used as stop.
-     * @param float $step The spacing between values (default: 1.0). Cannot be zero.
-     * @return ZTensor The new 1D tensor.
-     * @throws InvalidArgumentException If $step is zero or the parameters result in an invalid interval.
-     * @throws RuntimeException If allocation fails.
-     */
-    public static function arange(float $start_or_stop, ?float $stop = null, float $step = 1.0): ZTensor
-    {
-    }
-
-    /**
-     * Creates a new 1D tensor with N evenly spaced values between start and stop.
-     *
-     * @param float $start The starting value of the sequence.
-     * @param float $stop The final value of the sequence.
-     * @param int $num The number of samples to generate (default: 50). Must be non-negative.
-     * @param bool $endpoint If true (default), 'stop' is the last value. Otherwise, it is not included.
-     * @return ZTensor The new 1D tensor.
-     * @throws InvalidArgumentException If $num is negative.
-     * @throws RuntimeException If allocation fails.
-     */
-    public static function linspace(float $start, float $stop, int $num = 50, bool $endpoint = true): ZTensor
-    {
-    }
-
-    /**
-     * Creates a new 1D tensor with N logarithmically spaced values.
-     *
-     * The values are base^start to base^stop.
-     *
-     * @param float $start The starting exponent (base^start).
-     * @param float $stop The final exponent (base^stop).
-     * @param int $num The number of samples to generate (default: 50). Must be non-negative.
-     * @param bool $endpoint If true (default), base^stop is the last value.
-     * @param float $base The base of the logarithm (default: 10.0).
-     * @return ZTensor The new 1D tensor.
-     * @throws InvalidArgumentException If $num is negative.
-     * @throws RuntimeException If allocation fails.
-     */
-    public static function logspace(float $start, float $stop, int $num = 50, bool $endpoint = true, float $base = 10.0): ZTensor
-    {
-    }
-
-    /**
-     * Creates a matrix (2D tensor) with ones on the k-th diagonal and zeros elsewhere.
-     *
-     * @param int $N Number of rows.
-     * @param ?int $M Number of columns. If null, M = N (square matrix). (Default: null)
-     * @param int $k Diagonal index: 0 for the main (default), positive for above, negative for below.
-     * @return ZTensor The resulting matrix.
-     * @throws InvalidArgumentException If N or M are negative.
-     * @throws RuntimeException If allocation fails.
-     */
-    public static function eye(int $N, ?int $M = null, int $k = 0): ZTensor
     {
     }
 
@@ -782,7 +909,9 @@ final class ZTensor
      *
      * @throws \Exception
      */
-    public function bincount(int $minlength = 0): ZTensor {}
+    public function bincount(int $minlength = 0): ZTensor
+    {
+    }
 
     /**
      * Returns the index of the maximum value or the indices of the maximum values
@@ -794,7 +923,9 @@ final class ZTensor
      *
      * @throws \Exception
      */
-    public function argmax(?int $axis = null): int|ZTensor {}
+    public function argmax(?int $axis = null): int|ZTensor
+    {
+    }
 
     /**
      * Returns the index of the minimum value or the indices of the minimum values
@@ -806,7 +937,9 @@ final class ZTensor
      *
      * @throws \Exception
      */
-    public function argmin(?int $axis = null): int|ZTensor {}
+    public function argmin(?int $axis = null): int|ZTensor
+    {
+    }
 
     /**
      * Returns a sorted copy of the tensor.
@@ -817,7 +950,9 @@ final class ZTensor
      *
      * @throws \Exception
      */
-    public function sort(int $axis = 0): ZTensor {}
+    public function sort(int $axis = 0): ZTensor
+    {
+    }
 
     /**
      * Returns the cumulative sum of the tensor.
@@ -829,7 +964,9 @@ final class ZTensor
      *
      * @throws \Exception
      */
-    public function cumsum(?int $axis = null): ZTensor {}
+    public function cumsum(?int $axis = null): ZTensor
+    {
+    }
 
     /**
      * Returns the unique values and their occurrence counts.
@@ -841,7 +978,9 @@ final class ZTensor
      *
      * @throws \Exception
      */
-    public function uniqueCounts(): array {}
+    public function uniqueCounts(): array
+    {
+    }
 
     /**
      * Tests whether each element of the tensor is contained in the given values.
@@ -852,52 +991,65 @@ final class ZTensor
      *
      * @throws \Exception
      */
-    public function isin(ZTensor|array $values): ZTensor {}
-
-    /**
-     * Stacks multiple tensors into a new tensor.
-     *
-     * @param list<ZTensor> $tensors
-     *
-     * @return ZTensor
-     *
-     * @throws \Exception
-     */
-    public static function stack(array $tensors): ZTensor {}
-
-    /**
-     * Concatenates multiple tensors along the specified axis.
-     *
-     * @param array<ZTensor> $tensors List of tensors to concatenate.
-     * @param int $axis Axis along which the tensors will be concatenated.
-     *
-     * @return ZTensor A new concatenated tensor.
-     *
-     * @throws \Exception If the tensors are incompatible for concatenation.
-     */
-    public static function concat(array $tensors, int $axis = 0): ZTensor
-    {
-    }
-
-    /**
-     * Repeats the tensor vertically (multiplies the number of rows).
-     *
-     * Example:
-     * ```
-     * $a = Ztensor::arr([[1, 2], [3, 4]]);
-     * Ztensor::tile($a, 3);
-     * // → [[1,2],[3,4],[1,2],[3,4],[1,2],[3,4]]
-     * ```
-     *
-     * @param ZTensor $tensor The tensor to be repeated.
-     * @param int $times How many times to repeat (must be >= 1).
-     * @return ZTensor A new tensor resulting from the repetition.
-     */
-    public static function tile(ZTensor $tensor, int $times): ZTensor
+    public function isin(ZTensor|array $values): ZTensor
     {
     }
 
     // ========== GPU MEMORY MANAGEMENT ==========
+
+    /**
+     * Computes the variance of the tensor.
+     *
+     * @param int $ddof Delta Degrees of Freedom. The divisor used in the
+     *                  calculation is N - ddof. Defaults to 0.
+     *
+     * @return float
+     *
+     * @throws \Exception
+     */
+    public function variance(int $ddof = 0): float
+    {
+    }
+
+    /**
+     * Computes the median of the tensor.
+     *
+     * @return float
+     *
+     * @throws \Exception
+     */
+    public function median(): float
+    {
+    }
+
+    /**
+     * Computes the q-th percentile of the tensor.
+     *
+     * @param float $q Percentile to compute, typically in the range [0, 100].
+     *
+     * @return float
+     *
+     * @throws \Exception
+     */
+    public function percentile(float $q): float
+    {
+    }
+
+    /**
+     * Computes the histogram of the tensor values.
+     *
+     * @param int $bins Number of histogram bins. Defaults to 10.
+     *
+     * @return array{
+     *     histogram: ZTensor,
+     *     bin_edges: ZTensor
+     * }
+     *
+     * @throws \Exception
+     */
+    public function histogram(int $bins = 10): array
+    {
+    }
 
     /**
      * Moves this tensor's data to GPU memory.
@@ -1021,6 +1173,8 @@ final class ZTensor
     {
     }
 
+    // ========== AUTOGRAD METHODS ==========
+
     /**
      * Returns a row from the tensor.
      *
@@ -1089,8 +1243,6 @@ final class ZTensor
     public function where(int $feature_index, float $threshold): ZTensor
     {
     }
-
-    // ========== AUTOGRAD METHODS ==========
 
     /**
      * Enables or disables automatic differentiation for this tensor.
@@ -1235,89 +1387,6 @@ final class ZTensor
      * ```
      */
     public function backward(?ZTensor $grad_output = null): void
-    {
-    }
-
-    /**
-     * Static method: Element-wise addition with autograd support
-     *
-     * Adds two tensors and tracks the operation for backpropagation if either
-     * tensor has requires_grad=true.
-     *
-     * @param ZTensor $a First tensor
-     * @param ZTensor $b Second tensor
-     * @return ZTensor Result tensor with computation graph information
-     * @throws RuntimeException If shapes don't match
-     *
-     * @example
-     * ```php
-     * $x = ZTensor::ones([2, 2])->requiresGrad(true);
-     * $y = ZTensor::ones([2, 2])->requiresGrad(true);
-     * $z = ZTensor::addAutograd($x, $y);
-     * ```
-     */
-    public static function addAutograd(ZTensor $a, ZTensor $b): ZTensor
-    {
-    }
-
-    /**
-     * Static method: Element-wise subtraction with autograd support
-     *
-     * Subtracts b from a and tracks the operation for backpropagation.
-     *
-     * @param ZTensor $a First tensor (minuend)
-     * @param ZTensor $b Second tensor (subtrahend)
-     * @return ZTensor Result tensor with computation graph information
-     * @throws RuntimeException If shapes don't match
-     *
-     * @example
-     * ```php
-     * $x = ZTensor::ones([2, 2])->requiresGrad(true);
-     * $y = ZTensor::ones([2, 2])->requiresGrad(true);
-     * $z = ZTensor::subAutograd($x, $y);
-     * ```
-     */
-    public static function subAutograd(ZTensor $a, ZTensor $b): ZTensor
-    {
-    }
-
-    /**
-     * Static method: Element-wise multiplication with autograd support
-     *
-     * Multiplies two tensors element-wise and tracks the operation for backpropagation.
-     *
-     * @param ZTensor $a First tensor
-     * @param ZTensor $b Second tensor
-     * @return ZTensor Result tensor with computation graph information
-     * @throws RuntimeException If shapes don't match
-     *
-     * @example
-     * ```php
-     * $x = ZTensor::ones([2, 2])->requiresGrad(true);
-     * $y = ZTensor::ones([2, 2])->requiresGrad(true);
-     * $z = ZTensor::mulAutograd($x, $y);
-     * ```
-     */
-    public static function mulAutograd(ZTensor $a, ZTensor $b): ZTensor
-    {
-    }
-
-    /**
-     * Static method: Sum reduction with autograd support
-     *
-     * Sums all elements of a tensor and returns a scalar (shape [1]) with
-     * computation graph tracking.
-     *
-     * @param ZTensor $tensor Tensor to sum
-     * @return ZTensor Scalar result tensor
-     *
-     * @example
-     * ```php
-     * $x = ZTensor::ones([2, 3])->requiresGrad(true);
-     * $sum = ZTensor::sumAutograd($x);  // Result shape [1]
-     * ```
-     */
-    public static function sumAutograd(ZTensor $tensor): ZTensor
     {
     }
 
