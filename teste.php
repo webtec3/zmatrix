@@ -682,3 +682,110 @@ run_test("autograd completo (mul + sum + backward + grad)", function () {
 });
 
 echo "\n🚀 TODOS OS TESTES ADICIONAIS CONCLUÍDOS!\n";
+
+function assertTensorEquals(
+    array $expected,
+    ZTensor $actual,
+    string $message
+): void {
+    $actualArray = $actual->toArray();
+
+    if ($actualArray !== $expected) {
+        echo "❌ {$message}\n";
+        echo "Esperado: " . json_encode($expected) . "\n";
+        echo "Recebido: " . json_encode($actualArray) . "\n";
+        exit(1);
+    }
+
+    echo "✅ {$message}\n";
+}
+
+echo str_repeat('=', 60) . PHP_EOL;
+echo "MODE TEST" . PHP_EOL;
+echo str_repeat('=', 60) . PHP_EOL;
+
+$global = ZTensor::arr([2, 1, 2, 3, 2, 1]);
+assertTensorEquals([2.0], $global->mode(), 'Moda global');
+
+$tie = ZTensor::arr([2, 2, 1, 1]);
+assertTensorEquals([1.0], $tie->mode(), 'Desempate escolhe o menor valor');
+
+$negative = ZTensor::arr([-2, -2, 1, 1, -2]);
+assertTensorEquals([-2.0], $negative->mode(), 'Moda com valores negativos');
+
+$floats = ZTensor::arr([1.5, 2.5, 1.5]);
+assertTensorEquals([1.5], $floats->mode(), 'Moda com floats');
+
+$rows = ZTensor::arr([
+    [1, 2, 2],
+    [3, 3, 1],
+    [5, 4, 5],
+]);
+assertTensorEquals([2.0, 3.0, 5.0], $rows->mode(1), 'Mode axis=1');
+
+$columns = ZTensor::arr([
+    [1, 2, 2],
+    [1, 3, 2],
+    [4, 3, 2],
+]);
+assertTensorEquals([1.0, 3.0, 2.0], $columns->mode(0), 'Mode axis=0');
+
+assertTensorEquals([2.0, 3.0, 5.0], $rows->mode(-1), 'Mode axis=-1');
+
+$ensemble = ZTensor::arr([
+    [0, 1, 2, 1],
+    [0, 2, 2, 1],
+    [1, 1, 0, 1],
+    [0, 2, 0, 2],
+]);
+assertTensorEquals([0.0, 1.0, 0.0, 1.0], $ensemble->mode(0), 'Votação de ensemble');
+
+try {
+    ZTensor::arr([])->mode();
+    echo "❌ Tensor vazio deveria lançar exceção\n";
+    exit(1);
+} catch (Throwable $exception) {
+    echo "✅ Exceção para tensor vazio: " . $exception->getMessage() . PHP_EOL;
+}
+
+try {
+    $rows->mode(2);
+    echo "❌ Axis inválido deveria lançar exceção\n";
+    exit(1);
+} catch (Throwable $exception) {
+    echo "✅ Exceção para axis inválido: " . $exception->getMessage() . PHP_EOL;
+}
+
+try {
+    ZTensor::arr([1.0, NAN, 2.0])->mode();
+    echo "❌ NaN deveria lançar exceção\n";
+    exit(1);
+} catch (Throwable $exception) {
+    echo "✅ Exceção para NaN: " . $exception->getMessage() . PHP_EOL;
+}
+
+// NOVO: valida especificamente que a checagem de NaN funciona também no
+// caminho por eixo (mode(axis)) — o pedido original menciona a validação
+// serial explicitamente para esse caminho, então vale testar em separado.
+try {
+    ZTensor::arr([[1.0, NAN], [2.0, 3.0]])->mode(1);
+    echo "❌ NaN em mode(axis) deveria lançar exceção\n";
+    exit(1);
+} catch (Throwable $exception) {
+    echo "✅ Exceção para NaN em mode(axis): " . $exception->getMessage() . PHP_EOL;
+}
+
+// NOVO: valida que a moda global retornada por mode() (sem axis) tem shape
+// [1], não um float solto — é a regra explícita da API PHP (diferente do
+// método C++ mode() que retorna float puro).
+$shapeCheck = ZTensor::arr([1, 1, 2]);
+$modeShape = $shapeCheck->mode()->shape();
+if ($modeShape === [1]) {
+    echo "✅ mode() sem axis retorna shape [1]\n";
+} else {
+    echo "❌ mode() sem axis deveria retornar shape [1], recebeu [" . implode(",", $modeShape) . "]\n";
+    exit(1);
+}
+
+echo PHP_EOL;
+echo "🚀 TODOS OS TESTES DE MODE PASSARAM!" . PHP_EOL;

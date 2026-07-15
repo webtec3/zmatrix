@@ -3193,7 +3193,7 @@ PHP_METHOD(ZTensor, findIndicesWhere)
     }
 }
 
-PHP_METHOD(ZTensor, calculate_split_gini)
+PHP_METHOD(ZTensor, calculateSplitGini)
 {
     zend_long feature_index;
     double threshold;
@@ -3220,6 +3220,46 @@ PHP_METHOD(ZTensor, calculate_split_gini)
             *y_obj->tensor
         );
         RETURN_DOUBLE((double)gini);
+    } catch (const std::exception& e) {
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+        RETURN_THROWS();
+    }
+}
+
+PHP_METHOD(ZTensor, mode)
+{
+    zval *axis_zv = nullptr;
+
+    ZEND_PARSE_PARAMETERS_START(0, 1)
+        Z_PARAM_OPTIONAL
+        Z_PARAM_ZVAL(axis_zv)
+    ZEND_PARSE_PARAMETERS_END();
+
+    zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
+
+    if (!self_obj->tensor) {
+        zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0);
+        RETURN_THROWS();
+    }
+
+    try {
+        ZTensor result;
+
+        if (axis_zv == nullptr || Z_TYPE_P(axis_zv) == IS_NULL) {
+            result = ZTensor({1});
+            result.data[0] = self_obj->tensor->mode();
+        } else {
+            if (Z_TYPE_P(axis_zv) != IS_LONG) {
+                zend_throw_exception_ex(zend_ce_type_error, 0,
+                    "ZTensor::mode(): axis must be int|null, %s given",
+                    zend_zval_type_name(axis_zv));
+                RETURN_THROWS();
+            }
+
+            result = self_obj->tensor->mode(static_cast<int>(Z_LVAL_P(axis_zv)));
+        }
+
+        zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
     } catch (const std::exception& e) {
         zend_throw_exception(zend_ce_exception, e.what(), 0);
         RETURN_THROWS();

@@ -1193,6 +1193,32 @@ final class ZTensor
     }
 
     /**
+     * Calculates the statistical mode globally or along an axis.
+     *
+     * When multiple values have the same highest frequency,
+     * the smallest value is returned.
+     *
+     * Global mode returns a tensor with shape [1].
+     *
+     * For a 2D tensor:
+     * - axis 0 returns one mode per column;
+     * - axis 1 returns one mode per row.
+     *
+     * Negative axes are supported.
+     *
+     * @param int|null $axis Axis to reduce. Null calculates the global mode.
+     *
+     * @return ZTensor
+     *
+     * @throws RuntimeException If the tensor is empty, contains NaN,
+     *                          has more than two dimensions, or the axis
+     *                          is invalid.
+     */
+    public function mode(?int $axis = null): ZTensor
+    {
+    }
+
+    /**
      * Returns a new tensor containing the elements at the specified indices.
      *
      * Gathers elements from the tensor according to the provided index list.
@@ -1272,10 +1298,13 @@ final class ZTensor
      * @throws \Exception If the input tensors have incompatible dimensions.
      */
     public function calculateSplitGini(
-        int $feature_index,
-        float $threshold,
+        int     $feature_index,
+        float   $threshold,
         ZTensor $y
-    ): float {}
+    ): float
+    {
+    }
+
     /**
      * Enables or disables automatic differentiation for this tensor.
      *

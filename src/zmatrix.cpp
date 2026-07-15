@@ -1755,6 +1755,178 @@ ZTensor column(size_t col_idx) const {
         return result;
     }
 
+    // --- Mode (moda) ---
+
+        // Validação SERIAL de NaN — deve rodar sempre ANTES de qualquer região
+        // OpenMP. Exceções C++ não podem atravessar um #pragma omp parallel for
+        // (comportamento indefinido / possível std::terminate()), então toda
+        // rejeição de NaN é resolvida aqui, fora do paralelismo.
+        static void validate_mode_values(const float* values, size_t count)
+        {
+            for (size_t i = 0; i < count; ++i) {
+                if (std::isnan(values[i])) {
+                    throw std::runtime_error(
+                        "mode: valores NaN não são suportados"
+                    );
+                }
+            }
+        }
+
+        // Calcula a moda de 'count' valores a partir de 'start', espaçados por
+        // 'stride' elementos (stride=1 para acesso contíguo — ex: linha;
+        // stride=cols para acesso não-contíguo — ex: coluna).
+        //
+        // PRÉ-CONDIÇÃO: o chamador já validou ausência de NaN via
+        // validate_mode_values() antes de invocar esta função. Por isso ela NÃO
+        // lança exceções — é seguro chamá-la de dentro de uma região OpenMP.
+        static float calculate_mode(const float* start, size_t count, size_t stride)
+        {
+            std::unordered_map<float, size_t> frequencies;
+            frequencies.reserve(count);
+
+            for (size_t i = 0; i < count; ++i) {
+                ++frequencies[start[i * stride]];
+            }
+
+            float best_value = start[0];
+            size_t best_count = 0;
+
+            // Desempate determinístico: em frequências iguais, escolhe o menor
+            // valor. Não depende da ordem de iteração de unordered_map, pois a
+            // condição de atualização compara explicitamente contra o melhor
+            // candidato atual a cada iteração.
+            for (const auto& [value, frequency] : frequencies) {
+                if (
+                    frequency > best_count ||
+                    (frequency == best_count && value < best_value)
+                ) {
+                    best_value = value;
+                    best_count = frequency;
+                }
+            }
+
+            return best_value;
+        }
+
+        // Moda global (valor mais frequente em todo o tensor).
+        // NÃO paralelizado nesta implementação: exigiria um unordered_map
+        // compartilhado (risco de corrida) ou merge de mapas por thread
+        // (complexidade sem benchmark que justifique o custo até o momento).
+        float mode() const
+        {
+    #ifdef HAVE_CUDA
+            // ensure_host() já é const — chamada direta, sem const_cast.
+            ensure_host();
+    #endif
+
+            const size_t N = size();
+
+            if (N == 0) {
+                throw std::runtime_error(
+                    "mode: não pode ser aplicado em tensor vazio"
+                );
+            }
+
+            const float* p = data.data();
+
+            validate_mode_values(p, N);
+
+            return calculate_mode(p, N, 1);
+        }
+
+        // Moda ao longo de um eixo. Suporta apenas tensores 1D e 2D.
+        ZTensor mode(int axis) const
+        {
+    #ifdef HAVE_CUDA
+            ensure_host();
+    #endif
+
+            const size_t N = size();
+
+            if (N == 0) {
+                throw std::runtime_error(
+                    "mode: não pode ser aplicado em tensor vazio"
+                );
+            }
+
+            if (shape.size() > 2) {
+                throw std::runtime_error(
+                    "mode(axis): apenas tensores 1D e 2D são suportados"
+                );
+            }
+
+            // Normalização de eixo negativo ANTES de qualquer conversão para
+            // size_t (evita wraparound silencioso de inteiro sem sinal).
+            if (axis < 0) {
+                axis += static_cast<int>(shape.size());
+            }
+
+            if (axis < 0 || axis >= static_cast<int>(shape.size())) {
+                throw std::runtime_error(
+                    "axis fora dos limites para mode"
+                );
+            }
+
+            const float* p = data.data();
+
+            // Validação obrigatoriamente serial, antes de qualquer OpenMP abaixo.
+            validate_mode_values(p, N);
+
+            if (shape.size() == 1) {
+                ZTensor result({1});
+                result.data[0] = calculate_mode(p, N, 1);
+                return result;
+            }
+
+            const size_t rows = shape[0];
+            const size_t cols = shape[1];
+
+            if (axis == 1) {
+                // Moda por linha: cada linha é contígua (stride=1).
+                ZTensor result({rows});
+                float* out = result.data.data();
+
+                // Critério de paralelização considera o TRABALHO TOTAL (N),
+                // não apenas o tamanho da saída (rows) — cada iteração processa
+                // 'cols' elementos, então o custo real escala com N = rows*cols.
+    #if HAS_OPENMP
+                if (N > ZMATRIX_PARALLEL_THRESHOLD) {
+                    #pragma omp parallel for schedule(static)
+                    for (size_t row = 0; row < rows; ++row) {
+                        out[row] = calculate_mode(p + row * cols, cols, 1);
+                    }
+                } else
+    #endif
+                {
+                    for (size_t row = 0; row < rows; ++row) {
+                        out[row] = calculate_mode(p + row * cols, cols, 1);
+                    }
+                }
+
+                return result;
+            }
+
+            // axis == 0: moda por coluna — elementos espaçados por 'cols' (stride=cols).
+            ZTensor result({cols});
+            float* out = result.data.data();
+
+    #if HAS_OPENMP
+            if (N > ZMATRIX_PARALLEL_THRESHOLD) {
+                #pragma omp parallel for schedule(static)
+                for (size_t col = 0; col < cols; ++col) {
+                    out[col] = calculate_mode(p + col, rows, cols);
+                }
+            } else
+    #endif
+            {
+                for (size_t col = 0; col < cols; ++col) {
+                    out[col] = calculate_mode(p + col, rows, cols);
+                }
+            }
+
+            return result;
+        }
+
     // --- Unique ---
         ZTensor unique() const {
     #ifdef HAVE_CUDA
@@ -4039,7 +4211,7 @@ static const zend_function_entry zmatrix_ztensor_methods[] = {
     PHP_ME(ZTensor, argsort,          arginfo_ztensor_argsort,            ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, where,            arginfo_ztensor_where,              ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, findIndicesWhere, arginfo_ztensor_find_indices_where, ZEND_ACC_PUBLIC)
-    PHP_ME(ZTensor, calculate_split_gini, arginfo_ztensor_calculate_split_gini, ZEND_ACC_PUBLIC)
+    PHP_ME(ZTensor, calculateSplitGini, arginfo_ztensor_calculate_split_gini, ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, arr,              arginfo_ztensor_static_arr,         ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)
     PHP_ME(ZTensor, fill,             arginfo_ztensor_fill,               ZEND_ACC_PUBLIC)
     // Métodos Estáticos de Criação Adicionais
@@ -4056,6 +4228,7 @@ static const zend_function_entry zmatrix_ztensor_methods[] = {
     PHP_ME(ZTensor, greater,          arginfo_ztensor_greater,          ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, minimum,          arginfo_ztensor_minimum,          ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)
     PHP_ME(ZTensor, maximum,          arginfo_ztensor_maximum,          ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)
+    PHP_ME(ZTensor, mode,             arginfo_ztensor_mode,             ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, scalarDivide,     arginfo_ztensor_scalarDivide,     ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, copy,             arginfo_ztensor_copy,             ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, safe,             arginfo_ztensor_static_safe,      ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)

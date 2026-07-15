@@ -331,4 +331,8 @@ ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_calculate_split_gini, 0, 0, 3)
     ZEND_ARG_TYPE_INFO(0, threshold, IS_DOUBLE, 0)
     ZEND_ARG_OBJ_INFO(0, y, ZMatrix\\ZTensor, 0)
 ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_mode, 0, 0, 0)
+    ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, axis, IS_LONG, 1, "null")
+ZEND_END_ARG_INFO()
 #endif /* ZMATRIX_ARGINFO_H */
