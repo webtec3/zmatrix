@@ -92,7 +92,7 @@ static double zmatrix_elapsed_ms(std::chrono::steady_clock::time_point start) {
     return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
 }
 
-static void zmatrix_profile_result(const char* operation, double host_output_ms,
+[[maybe_unused]] static void zmatrix_profile_result(const char* operation, double host_output_ms,
                                    double device_allocation_ms, double wrapper_ms) {
     if (!zmatrix_cuda_profile_enabled()) return;
     std::fprintf(stderr,
@@ -960,7 +960,7 @@ struct ZTensor {
 #else
         ZTensor result(shape);
 #endif
-        const double host_ms = profile ? zmatrix_elapsed_ms(host_start) : 0.0;
+        [[maybe_unused]] const double host_ms = profile ? zmatrix_elapsed_ms(host_start) : 0.0;
         if (n == 0) {
 #ifdef HAVE_CUDA
             if (device_valid) result.ensure_device();
@@ -999,7 +999,7 @@ struct ZTensor {
 #else
         ZTensor result(shape);
 #endif
-        const double host_ms = profile ? zmatrix_elapsed_ms(host_start) : 0.0;
+        [[maybe_unused]] const double host_ms = profile ? zmatrix_elapsed_ms(host_start) : 0.0;
         if (n == 0) {
 #ifdef HAVE_CUDA
             if (device_valid || other.device_valid) result.ensure_device();
@@ -1092,7 +1092,7 @@ struct ZTensor {
 #else
         ZTensor result(output_shape);
 #endif
-        const double host_ms = profile ? zmatrix_elapsed_ms(host_start) : 0.0;
+        [[maybe_unused]] const double host_ms = profile ? zmatrix_elapsed_ms(host_start) : 0.0;
         const size_t input_size = size();
         const size_t output_size = result.size();
         if (output_size == 0) {
@@ -2603,7 +2603,7 @@ ZTensor column(size_t col_idx) const {
 #else
                     ZTensor result(shape);
 #endif
-                    const double host_ms = profile ? zmatrix_elapsed_ms(host_start) : 0.0;
+                    [[maybe_unused]] const double host_ms = profile ? zmatrix_elapsed_ms(host_start) : 0.0;
                     const size_t N = size();
                     if (N == 0) {
 #ifdef HAVE_CUDA
@@ -2653,7 +2653,7 @@ ZTensor column(size_t col_idx) const {
 #else
                 ZTensor result(shape);
 #endif
-                const double host_ms = profile ? zmatrix_elapsed_ms(host_start) : 0.0;
+                [[maybe_unused]] const double host_ms = profile ? zmatrix_elapsed_ms(host_start) : 0.0;
                 if (rows == 0 || cols == 0) {
 #ifdef HAVE_CUDA
                     if (device_valid) result.ensure_device();

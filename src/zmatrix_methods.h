@@ -1543,7 +1543,7 @@ PHP_METHOD(ZTensor, dot)
 #else
             ZTensor result_tensor({M}); // Resultado é um vetor de tamanho M (já zerado)
 #endif
-            const double host_ms = profile ? zmatrix_elapsed_ms(host_start) : 0.0;
+            [[maybe_unused]] const double host_ms = profile ? zmatrix_elapsed_ms(host_start) : 0.0;
             if (M == 0) { // Se A é 0xK, resultado é vetor de tamanho 0
                  zmatrix_return_tensor_obj(result_tensor, return_value, zmatrix_ce_ZTensor);
                  return;
