@@ -5,7 +5,7 @@ declare(strict_types=1);
 use ZMatrix\ZTensor;
 
 [$script, $operationName, $sizeText, $scenario] = $argv + [null, null, null, null];
-if (!in_array($operationName, ['dot', 'matvec'], true) || !ctype_digit((string) $sizeText)
+if (!in_array($operationName, ['dot', 'matvec'], true) || !preg_match('/^[0-9]+$/', (string) $sizeText)
     || !in_array($scenario, ['cpu_cpu', 'gpu_gpu', 'gpu_cpu', 'cpu_gpu'], true)) {
     fwrite(STDERR, "usage: isolated_linalg_case.php dot|matvec size cpu_cpu|gpu_gpu|gpu_cpu|cpu_gpu\n");
     exit(2);
