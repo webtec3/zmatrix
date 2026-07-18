@@ -15,6 +15,7 @@
 #include <link.h>
 #include <mutex>
 #include <cctype>
+#include <algorithm>
 #include <fstream>
 #include <limits>
 #include <stdexcept>
@@ -125,6 +126,8 @@ static std::mutex cache_mutex;
 // introducing a general-purpose allocator or changing stream semantics.
 static void* reduction_temporary = nullptr;
 static size_t reduction_temporary_capacity = 0;
+static size_t scan_workspace_capacity_items = 0;
+static size_t scan_workspace_bytes = 0;
 static float* reduction_output = nullptr;
 static std::mutex reduction_cache_mutex;
 static bool reduction_cache_inited = false;
@@ -150,6 +153,8 @@ static void release_reduction_cache() {
     if (reduction_output) cudaFree(reduction_output);
     reduction_temporary = nullptr;
     reduction_temporary_capacity = 0;
+    scan_workspace_capacity_items = 0;
+    scan_workspace_bytes = 0;
     reduction_output = nullptr;
 }
 
@@ -203,6 +208,50 @@ static inline bool ensure_buffer(size_t n, float *&buf, size_t &cap) {
     CUDA_CHECK_CONTEXT(cudaPeekAtLastError(), context); \
     CUDA_CHECK_CONTEXT(cudaDeviceSynchronize(), context); \
 } while (0)
+
+#define CUDA_LAUNCH_CHECK(context) CUDA_CHECK_CONTEXT(cudaPeekAtLastError(), context)
+
+static bool cuda_profile_enabled() {
+    static const bool enabled = [] {
+        const char* value = std::getenv("ZMATRIX_CUDA_PROFILE");
+        return value && *value && std::string(value) != "0";
+    }();
+    return enabled;
+}
+
+class CudaProfileEvents {
+public:
+    explicit CudaProfileEvents(const char* operation) : operation_(operation), enabled_(cuda_profile_enabled()) {
+        if (!enabled_) return;
+        CUDA_CHECK_CONTEXT(cudaEventCreate(&start_), "profile start event creation");
+        try {
+            CUDA_CHECK_CONTEXT(cudaEventCreate(&stop_), "profile stop event creation");
+            CUDA_CHECK_CONTEXT(cudaEventRecord(start_), "profile start record");
+        } catch (...) {
+            cudaEventDestroy(start_);
+            start_ = nullptr;
+            throw;
+        }
+    }
+    ~CudaProfileEvents() noexcept {
+        if (start_) cudaEventDestroy(start_);
+        if (stop_) cudaEventDestroy(stop_);
+    }
+    void finish(size_t launches, size_t synchronizations, size_t d2d_copies = 0) {
+        if (!enabled_) return;
+        CUDA_CHECK_CONTEXT(cudaEventRecord(stop_), "profile stop record");
+        CUDA_CHECK_CONTEXT(cudaEventSynchronize(stop_), "profile event synchronization");
+        float elapsed = 0.0f;
+        CUDA_CHECK_CONTEXT(cudaEventElapsedTime(&elapsed, start_, stop_), "profile elapsed time");
+        std::fprintf(stderr, "[zmatrix][cuda-profile] op=%s device_ms=%.6f launches=%zu device_syncs=%zu d2d=%zu\n",
+            operation_, elapsed, launches, synchronizations, d2d_copies);
+    }
+private:
+    const char* operation_;
+    bool enabled_ = false;
+    cudaEvent_t start_ = nullptr;
+    cudaEvent_t stop_ = nullptr;
+};
 
 // Caller holds reduction_cache_mutex. Synchronous reductions and scans reuse
 // this single CUB workspace and therefore cannot overlap in the current model.
@@ -482,13 +531,21 @@ __global__ void kernel_softmax_derivative(float* a, size_t n) {
     if (i < n) a[i] = a[i] * (1.0f - a[i]);
 }
 
-__global__ void kernel_greater(const float* a, const float* b, float* output,
-                               size_t n, size_t broadcast_width, float scalar,
-                               int use_scalar) {
+__global__ void kernel_greater_scalar(const float* a, float* output, size_t n, float scalar) {
     const size_t i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= n) return;
-    const float rhs = use_scalar ? scalar : b[broadcast_width ? (i % broadcast_width) : i];
-    output[i] = a[i] > rhs ? 1.0f : 0.0f;
+    output[i] = a[i] > scalar ? 1.0f : 0.0f;
+}
+
+__global__ void kernel_greater_tensor(const float* a, const float* b, float* output, size_t n) {
+    const size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) output[i] = a[i] > b[i] ? 1.0f : 0.0f;
+}
+
+__global__ void kernel_greater_broadcast(const float* a, const float* b, float* output,
+                                         size_t n, size_t broadcast_width) {
+    const size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) output[i] = a[i] > b[i % broadcast_width] ? 1.0f : 0.0f;
 }
 
 __global__ void kernel_broadcast_materialize(const float* input, float* output,
@@ -1247,8 +1304,16 @@ extern "C" void gpu_greater_device(const float* d_a, const float* d_b, float* d_
     }
     int threads = 0, blocks = 0;
     launch_1d(n, blocks, threads);
-    kernel_greater<<<blocks, threads>>>(d_a, d_b, d_output, n, broadcast_width, scalar, use_scalar);
-    CUDA_KERNEL_CHECK("greater");
+    CudaProfileEvents profile("greater");
+    if (use_scalar) {
+        kernel_greater_scalar<<<blocks, threads>>>(d_a, d_output, n, scalar);
+    } else if (broadcast_width) {
+        kernel_greater_broadcast<<<blocks, threads>>>(d_a, d_b, d_output, n, broadcast_width);
+    } else {
+        kernel_greater_tensor<<<blocks, threads>>>(d_a, d_b, d_output, n);
+    }
+    CUDA_LAUNCH_CHECK("greater launch");
+    profile.finish(1, 0);
 }
 
 extern "C" void gpu_broadcast_device(const float* d_input, float* d_output,
@@ -1284,10 +1349,20 @@ extern "C" void gpu_tile_device(const float* d_input, float* d_output,
                                  size_t input_size, size_t output_size) {
     if (output_size == 0) return;
     if (!d_input || !d_output || input_size == 0) throw std::invalid_argument("tile: invalid device buffer");
-    int threads = 0, blocks = 0;
-    launch_1d(output_size, blocks, threads);
-    kernel_tile<<<blocks, threads>>>(d_input, d_output, input_size, output_size);
-    CUDA_KERNEL_CHECK("tile");
+    CudaProfileEvents profile("tile");
+    size_t copied = 0;
+    size_t copies = 0;
+    CUDA_CHECK_CONTEXT(cudaMemcpyAsync(d_output, d_input, input_size * sizeof(float), cudaMemcpyDeviceToDevice), "tile initial D2D");
+    copied = input_size;
+    ++copies;
+    while (copied < output_size) {
+        const size_t chunk = std::min(copied, output_size - copied);
+        CUDA_CHECK_CONTEXT(cudaMemcpyAsync(d_output + copied, d_output, chunk * sizeof(float), cudaMemcpyDeviceToDevice), "tile expansion D2D");
+        copied += chunk;
+        ++copies;
+    }
+    CUDA_LAUNCH_CHECK("tile D2D enqueue");
+    profile.finish(0, 0, copies);
 }
 
 extern "C" void gpu_cumsum_device(const float* d_input, float* d_output,
@@ -1297,22 +1372,31 @@ extern "C" void gpu_cumsum_device(const float* d_input, float* d_output,
     if (!d_input || !d_output) throw std::invalid_argument("cumsum: null device pointer");
     if (one_dimensional) {
         const size_t n = rows * cols;
-        void* temporary = nullptr;
-        size_t temporary_bytes = 0;
-        CUDA_CHECK_CONTEXT(cub::DeviceScan::InclusiveSum(temporary, temporary_bytes, d_input, d_output, n), "cumsum CUB size query");
         std::lock_guard<std::mutex> cache_lock(reduction_cache_mutex);
         init_reduction_cache();
+        void* temporary = nullptr;
+        size_t temporary_bytes = scan_workspace_bytes;
+        if (n > scan_workspace_capacity_items || temporary_bytes == 0) {
+            temporary_bytes = 0;
+            CUDA_CHECK_CONTEXT(cub::DeviceScan::InclusiveSum(nullptr, temporary_bytes, d_input, d_output, n), "cumsum CUB size query");
+            scan_workspace_capacity_items = n;
+            scan_workspace_bytes = temporary_bytes;
+        }
         temporary = ensure_cub_temporary_unlocked(temporary_bytes, "cumsum CUB cache");
+        CudaProfileEvents profile("cumsum_1d");
         CUDA_CHECK_CONTEXT(cub::DeviceScan::InclusiveSum(temporary, temporary_bytes, d_input, d_output, n), "cumsum CUB scan");
-        CUDA_KERNEL_CHECK("cumsum CUB execution");
+        CUDA_LAUNCH_CHECK("cumsum CUB launch");
+        profile.finish(1, 0);
         return;
     }
     if (axis != 0 && axis != 1) throw std::out_of_range("cumsum: invalid CUDA axis");
     const size_t segments = axis == 1 ? rows : cols;
     int threads = 0, blocks = 0;
     launch_1d(segments, blocks, threads);
+    CudaProfileEvents profile(axis == 1 ? "cumsum_axis1" : "cumsum_axis0");
     kernel_cumsum_axis<<<blocks, threads>>>(d_input, d_output, rows, cols, axis);
-    CUDA_KERNEL_CHECK("cumsum axis");
+    CUDA_LAUNCH_CHECK("cumsum axis launch");
+    profile.finish(1, 0);
 }
 
 extern "C" float gpu_dot_value_device(const float* d_a, const float* d_b, size_t n) {
@@ -1329,7 +1413,8 @@ extern "C" float gpu_dot_value_device(const float* d_a, const float* d_b, size_t
     CUBLAS_CHECK_CONTEXT(cublasSetPointerMode(sgemm_handle, CUBLAS_POINTER_MODE_HOST), "dot host result mode");
     float result = 0.0f;
     CUBLAS_CHECK_CONTEXT(cublasSdot(sgemm_handle, static_cast<int>(n), d_a, 1, d_b, 1, &result), "vector dot");
-    CUDA_CHECK_CONTEXT(cudaDeviceSynchronize(), "vector dot execution");
+    // Host pointer mode makes cublasSdot return only after the scalar is ready.
+    // No additional device-wide synchronization is needed.
     return result;
 }
 
@@ -1351,11 +1436,13 @@ extern "C" void gpu_matvec_device(const float* d_matrix, const float* d_vector,
     const float beta = 0.0f;
     // A_row[rows,cols] is seen as A_col[cols,rows]. Transposing that
     // column-major view computes y[rows] = A_row * x[cols] without copying A.
+    CudaProfileEvents profile("matvec");
     CUBLAS_CHECK_CONTEXT(cublasSgemv(sgemm_handle, CUBLAS_OP_T,
         static_cast<int>(cols), static_cast<int>(rows), &alpha,
         d_matrix, static_cast<int>(cols), d_vector, 1, &beta, d_output, 1),
         "SGEMV row-major A*x");
-    CUDA_CHECK_CONTEXT(cudaDeviceSynchronize(), "SGEMV execution");
+    CUDA_LAUNCH_CHECK("SGEMV launch");
+    profile.finish(1, 0);
 }
 
 extern "C" void gpu_fill_device(float* d_a, float value, size_t n) {
