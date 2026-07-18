@@ -1048,13 +1048,18 @@ PHP_METHOD(ZTensor, reshape)
         new_shape.push_back((size_t) dim);
     } ZEND_HASH_FOREACH_END();
 
-    /* 3. Chama o método C++ reshape */
-    ZTensor reshaped = self_obj->tensor->reshape(new_shape);
+    try {
+        /* 3. Chama o método C++ reshape */
+        ZTensor reshaped = self_obj->tensor->reshape(new_shape);
 
-    /* 4. Empacota o resultado em um novo objeto PHP ZTensor */
-    object_init_ex(return_value, zmatrix_ce_ZTensor);
-    zmatrix_ztensor_object *res_obj = Z_MATRIX_ZTENSOR_P(return_value);
-    res_obj->tensor = new ZTensor(std::move(reshaped));
+        /* 4. Empacota o resultado em um novo objeto PHP ZTensor */
+        object_init_ex(return_value, zmatrix_ce_ZTensor);
+        zmatrix_ztensor_object *res_obj = Z_MATRIX_ZTENSOR_P(return_value);
+        res_obj->tensor = new ZTensor(std::move(reshaped));
+    } catch (const std::exception& e) {
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+        RETURN_THROWS();
+    }
 }
 
 PHP_METHOD(ZTensor, randn)
@@ -1698,34 +1703,9 @@ PHP_METHOD(ZTensor, clip)
 
     try {
         ZTensor result = *input_tensor;  // cópia do tensor de entrada
-
-#ifdef HAVE_CUDA
-        result.ensure_host();
-#endif
-        const size_t N = result.size();
-        float * __restrict__ a = result.data.data();
         const float fmin = static_cast<float>(min_val);
         const float fmax = static_cast<float>(max_val);
-
-        #if HAS_OPENMP
-        if (N > ZMATRIX_PARALLEL_THRESHOLD) {
-            #pragma omp parallel for schedule(static)
-            for (size_t i = 0; i < N; ++i) {
-                a[i] = std::max(fmin, std::min(fmax, a[i]));
-            }
-        } else {
-            for (size_t i = 0; i < N; ++i) {
-                a[i] = std::max(fmin, std::min(fmax, a[i]));
-            }
-        }
-        #else
-        for (size_t i = 0; i < N; ++i) {
-            a[i] = std::max(fmin, std::min(fmax, a[i]));
-        }
-        #endif
-#ifdef HAVE_CUDA
-        result.mark_host_modified();
-#endif
+        result.clip_values(fmin, fmax);
         zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
     } catch (const std::exception& e) {
         zend_throw_exception(zend_ce_exception, e.what(), 0);

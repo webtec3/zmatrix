@@ -59,7 +59,6 @@
 #include "simd/simd_dispatch.h"
 #include "zmatrix_arginfo.h"
 
-
 #ifndef ZMATRIX_ERRORS_H
 #define ZMATRIX_ERRORS_H
 #define ZMATRIX_ERR_INVALID_VALUE "Invalid value for the operation"
@@ -80,6 +79,14 @@
 #define ZMATRIX_ERR_UNSUPPORTED_OP "Operation not supported for this tensor type/dimension"
 
 #define ZMATRIX_PARALLEL_THRESHOLD 10000000  // Disable OpenMP - its slower!
+
+#ifdef ZMATRIX_ENABLE_DEBUG_INVARIANTS
+#define ZMATRIX_DEBUG_ASSERT(condition, message) do { \
+    if (!(condition)) throw std::logic_error(std::string("ZTensor invariant failed: ") + (message)); \
+} while (0)
+#else
+#define ZMATRIX_DEBUG_ASSERT(condition, message) do { (void)sizeof(condition); } while (0)
+#endif
 
 #ifdef HAVE_CUDA
 #include "gpu_wrapper.h"
@@ -339,16 +346,7 @@ struct ZTensor {
 
     // Construtor Principal (inalterado, exceto 0.0f)
     ZTensor(const std::vector<size_t>& _shape) : shape(_shape) {
-            size_t total_size = 1;
-            bool has_zero_dim = false;
-            for (size_t dim : shape) {
-                 if (dim == 0) { has_zero_dim = true; break; }
-                 if (dim > 0 && total_size > (std::numeric_limits<size_t>::max() / dim)) {
-                     throw std::overflow_error(ZMATRIX_ERR_OVERFLOW);
-                 }
-                 total_size *= dim;
-            }
-            if (has_zero_dim) { total_size = 0;}
+            const size_t total_size = checked_element_count(shape);
 
             if (total_size > 0) {
                 try {
@@ -420,7 +418,7 @@ struct ZTensor {
     ZTensor& operator=(const ZTensor& other) {
         if (this == &other) return *this;
 #ifdef HAVE_CUDA
-        free_device();
+        release_device_noexcept();
         // Copia gradiente se existir
         if (other.grad) {
             grad = std::make_unique<ZTensor>(*other.grad);
@@ -487,7 +485,7 @@ struct ZTensor {
     ZTensor& operator=(ZTensor&& other) noexcept {
         if (this == &other) return *this;
 #ifdef HAVE_CUDA
-        free_device();
+        release_device_noexcept();
 #endif
         data = std::move(other.data);
         shape = std::move(other.shape);
@@ -516,7 +514,7 @@ struct ZTensor {
 
     ~ZTensor() {
 #ifdef HAVE_CUDA
-        free_device();
+        release_device_noexcept();
 #endif
     }
 
@@ -527,13 +525,43 @@ struct ZTensor {
         }
     }
 
+    void assert_invariants_unlocked() const {
+        const size_t n = checked_element_count(shape);
+        ZMATRIX_DEBUG_ASSERT(!host_valid || n == 0 || data.size() >= n, "valid host buffer is too small");
+        ZMATRIX_DEBUG_ASSERT(!device_valid || n == 0 || (d_data != nullptr && d_capacity >= n), "valid device buffer is missing or too small");
+        ZMATRIX_DEBUG_ASSERT(n == 0 || host_valid || device_valid, "non-empty tensor has no valid representation");
+    }
+
+    void mark_synchronized_unlocked() const {
+        host_valid = true;
+        device_valid = true;
+        assert_invariants_unlocked();
+    }
+
+    void mark_host_modified_unlocked() const {
+        host_valid = true;
+        device_valid = false;
+        assert_invariants_unlocked();
+    }
+
+    void mark_device_modified_unlocked() const {
+        device_valid = true;
+        host_valid = false;
+        assert_invariants_unlocked();
+    }
+
+    void invalidate_device_unlocked() const {
+        device_valid = false;
+        assert_invariants_unlocked();
+    }
+
     void ensure_device() const {
             gpu_require_available();
             std::lock_guard<std::mutex> lock(device_mutex); // FIX: thread-safety
             if (device_valid) return;
             size_t n = size();
             if (n == 0) {
-                device_valid = true;
+                mark_synchronized_unlocked();
                 return;
             }
             if (!host_valid) {
@@ -565,7 +593,7 @@ struct ZTensor {
                 if (!initialized_on_device) {
                     cuda_check(cudaMemcpy(d_data, data.data(), n * sizeof(float), cudaMemcpyHostToDevice), "cudaMemcpy H2D");
                 }
-                device_valid = true;
+                mark_synchronized_unlocked();
                 if (zmatrix_gpu_debug_enabled()) {
                     std::fprintf(stderr, initialized_on_device
                         ? "[zmatrix][gpu] device fill elements=%zu host_valid=1 device_valid=1\n"
@@ -579,7 +607,7 @@ struct ZTensor {
                     d_data = nullptr;
                 }
                 d_capacity = 0;
-                device_valid = false;
+                invalidate_device_unlocked();
                 throw;
             }
     }
@@ -592,7 +620,7 @@ struct ZTensor {
         gpu_require_available();
         std::lock_guard<std::mutex> lock(device_mutex);
         const size_t n = size();
-        device_valid = false;
+        invalidate_device_unlocked();
         if (n == 0) return;
         if (!d_data || d_capacity < n) {
             if (d_data) {
@@ -614,34 +642,32 @@ struct ZTensor {
         if (host_valid) return;
         size_t n = size();
         if (n == 0) {
-            host_valid = true;
+            mark_synchronized_unlocked();
             return;
         }
         if (!d_data) {
             throw std::runtime_error("Device data is not valid for host download");
         }
         cuda_check(cudaMemcpy(const_cast<float*>(data.data()), d_data, n * sizeof(float), cudaMemcpyDeviceToHost), "cudaMemcpy D2H");
-        host_valid = true;
+        mark_synchronized_unlocked();
         if (zmatrix_gpu_debug_enabled()) std::fprintf(stderr, "[zmatrix][gpu] D2H elements=%zu host_valid=1 device_valid=1\n", n);
     }
 
     void mark_host_modified() {
         std::lock_guard<std::mutex> lock(device_mutex); // FIX: thread-safety
         const bool state_changed = !host_valid || device_valid;
-        host_valid = true;
-        device_valid = false;
+        mark_host_modified_unlocked();
         if (state_changed && zmatrix_gpu_debug_enabled()) std::fprintf(stderr, "[zmatrix][gpu] state host_valid=1 device_valid=0\n");
     }
 
     void mark_device_modified() const {
         std::lock_guard<std::mutex> lock(device_mutex); // FIX: thread-safety
         const bool state_changed = host_valid || !device_valid;
-        device_valid = true;
-        host_valid = false;
+        mark_device_modified_unlocked();
         if (state_changed && zmatrix_gpu_debug_enabled()) std::fprintf(stderr, "[zmatrix][gpu] state host_valid=0 device_valid=1\n");
     }
 
-    void free_device() {
+    void release_device_noexcept() noexcept {
         std::lock_guard<std::mutex> lock(device_mutex); // FIX: thread-safety
         if (d_data) {
             cudaFree(d_data);
@@ -652,6 +678,13 @@ struct ZTensor {
         device_valid = false;
     }
 
+    void free_device() {
+        // Public freeDevice() must not discard a newer device-only value.
+        // Assignment/destruction use release_device_noexcept() directly.
+        ensure_host();
+        release_device_noexcept();
+    }
+
     void to_gpu() {
         ensure_device();
     }
@@ -659,7 +692,7 @@ struct ZTensor {
     void to_cpu() {
         ensure_host();
         std::lock_guard<std::mutex> lock(device_mutex);
-        device_valid = false;  // Explicitly leave device residency.
+        invalidate_device_unlocked();  // Explicitly leave device residency.
     }
 
     bool is_on_gpu() const {
@@ -697,12 +730,21 @@ struct ZTensor {
         return oss.str();
     }
 
-    static size_t compute_total_size(const std::vector<size_t>& shape) {
+    static size_t checked_element_count(const std::vector<size_t>& shape) {
+        if (shape.empty()) return 0;
         size_t total = 1;
         for (size_t dim : shape) {
+            if (dim == 0) return 0;
+            if (total > std::numeric_limits<size_t>::max() / dim) {
+                throw std::overflow_error(ZMATRIX_ERR_OVERFLOW);
+            }
             total *= dim;
         }
         return total;
+    }
+
+    static size_t compute_total_size(const std::vector<size_t>& shape) {
+        return checked_element_count(shape);
     }
     // --- Métodos Utilitários ---
     size_t get_linear_index(const std::vector<size_t>& indices) const {
@@ -741,14 +783,7 @@ struct ZTensor {
     }
     bool same_shape(const ZTensor& other) const { return shape == other.shape; }
     size_t size() const {
-        if (shape.empty()) return 0;
-        size_t total_size = 1;
-        for(size_t dim : shape) {
-            if (dim == 0) return 0;
-            if (dim > 0 && total_size > (std::numeric_limits<size_t>::max() / dim)) return 0;
-            total_size *= dim;
-        }
-        return total_size;
+        return checked_element_count(shape);
      }
     bool empty() const { return this->size() == 0; }
 
@@ -839,6 +874,39 @@ struct ZTensor {
             a[i] = std::max(-b[i], std::min(b[i], a[i]));
         }
         #endif
+#ifdef HAVE_CUDA
+        mark_host_modified();
+#endif
+    }
+
+    void clip_values(float min_value, float max_value) {
+        if (std::isnan(min_value) || std::isnan(max_value) || min_value > max_value) {
+            throw std::invalid_argument("clip min must be <= max and neither bound may be NaN");
+        }
+        const size_t N = size();
+        if (N == 0) return;
+#ifdef HAVE_CUDA
+        if (device_valid) {
+            gpu_clip_device(d_data, min_value, max_value, N);
+            mark_device_modified();
+            return;
+        }
+        ensure_host();
+#endif
+        float* __restrict__ values = data.data();
+#if HAS_OPENMP
+        if (N > ZMATRIX_PARALLEL_THRESHOLD) {
+#pragma omp parallel for schedule(static)
+            for (size_t i = 0; i < N; ++i) {
+                values[i] = std::max(min_value, std::min(max_value, values[i]));
+            }
+        } else
+#endif
+        {
+            for (size_t i = 0; i < N; ++i) {
+                values[i] = std::max(min_value, std::min(max_value, values[i]));
+            }
+        }
 #ifdef HAVE_CUDA
         mark_host_modified();
 #endif
@@ -3075,8 +3143,16 @@ ZTensor column(size_t col_idx) const {
         if (shape.empty() || (shape.size() != 1 && shape.size() != 2)) {
             throw std::runtime_error("Softmax requires 1D or 2D tensor");
         }
+        if (size() == 0) return;
 
 #ifdef HAVE_CUDA
+        if (device_valid) {
+            const size_t rows = shape.size() == 1 ? 1 : shape[0];
+            const size_t cols = shape.size() == 1 ? shape[0] : shape[1];
+            gpu_softmax_device(d_data, rows, cols, shape.size() == 1 ? 1 : 0);
+            mark_device_modified();
+            return;
+        }
         ensure_host();
 #endif
         float* __restrict__ a = data.data();
@@ -3141,6 +3217,11 @@ ZTensor column(size_t col_idx) const {
         if (N == 0) return;
 
 #ifdef HAVE_CUDA
+        if (device_valid) {
+            gpu_softmax_derivative_device(d_data, N);
+            mark_device_modified();
+            return;
+        }
         ensure_host();
 #endif
         float* __restrict__ a = data.data();
@@ -3333,6 +3414,11 @@ ZTensor column(size_t col_idx) const {
         if (total_size == 0) return;
 
 #ifdef HAVE_CUDA
+        if (device_valid) {
+            gpu_sqrt_device(d_data, total_size);
+            mark_device_modified();
+            return;
+        }
         ensure_host();
 #endif
         float* p_this = this->data.data();

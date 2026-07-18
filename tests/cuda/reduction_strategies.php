@@ -57,5 +57,10 @@ foreach (['serial', 'hierarchical', 'cub'] as $strategy) {
 }
 
 putenv('ZMATRIX_REDUCTION_IMPL');
+$cached = ZTensor::ones([1024, 1024])->toGpu();
+for ($iteration = 0; $iteration < 200; ++$iteration) {
+    sameScalar($cached->sumtotal(), 1048576.0, "cached reduction iteration {$iteration}", 0.0, 0.0);
+}
+if (!$cached->isOnGpu()) throw new RuntimeException('cached reductions lost input residency');
+echo "PASS repeated reduction cache lifecycle\n";
 echo "All reduction strategy checks passed.\n";
-

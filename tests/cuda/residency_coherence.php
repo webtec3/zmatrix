@@ -25,13 +25,13 @@ if (!$tensor->isOnGpu()) throw new RuntimeException('basic transition lost devic
 assertSameTree($tensor->toArray(), [[2, 4], [6, 8]], 'basic transition');
 echo "PASS CPU/H2D/CUDA/D2H transition\n";
 
-// CUDA write -> CPU-only write -> later CUDA operation. This verifies that a
-// host modification invalidates and is uploaded again on explicit toGpu().
-$tensor->add(1.0)->softmax();
-if ($tensor->isOnGpu()) throw new RuntimeException('CPU-only softmax left stale device state valid');
-$cpuAfterSoftmax = $tensor->toArray();
+// CUDA write -> CPU-only write -> later CUDA operation. sigmoidDerivative
+// intentionally remains CPU-only; softmax now has a CUDA implementation.
+$tensor->add(1.0)->sigmoidDerivative();
+if ($tensor->isOnGpu()) throw new RuntimeException('CPU-only sigmoidDerivative left stale device state valid');
+$cpuAfterCpuOperation = $tensor->toArray();
 $tensor->toGpu()->mul(3.0);
-$expected = ZTensor::arr($cpuAfterSoftmax)->mul(3.0)->toArray();
+$expected = ZTensor::arr($cpuAfterCpuOperation)->mul(3.0)->toArray();
 assertSameTree($tensor->toArray(), $expected, 'host modification re-upload');
 echo "PASS host modification invalidates and re-uploads\n";
 
