@@ -80,6 +80,26 @@
 
 #define ZMATRIX_PARALLEL_THRESHOLD 10000000  // Disable OpenMP - its slower!
 
+static bool zmatrix_cuda_profile_enabled() {
+    static const bool enabled = [] {
+        const char* value = std::getenv("ZMATRIX_CUDA_PROFILE");
+        return value && *value && std::string(value) != "0";
+    }();
+    return enabled;
+}
+
+static double zmatrix_elapsed_ms(std::chrono::steady_clock::time_point start) {
+    return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+}
+
+static void zmatrix_profile_result(const char* operation, double host_output_ms,
+                                   double device_allocation_ms, double wrapper_ms) {
+    if (!zmatrix_cuda_profile_enabled()) return;
+    std::fprintf(stderr,
+        "[zmatrix][cuda-profile-core] op=%s host_output_ms=%.6f device_allocation_ms=%.6f wrapper_ms=%.6f allocations=1\n",
+        operation, host_output_ms, device_allocation_ms, wrapper_ms);
+}
+
 #ifdef ZMATRIX_ENABLE_DEBUG_INVARIANTS
 #define ZMATRIX_DEBUG_ASSERT(condition, message) do { \
     if (!(condition)) throw std::logic_error(std::string("ZTensor invariant failed: ") + (message)); \
@@ -344,15 +364,20 @@ struct ZTensor {
 #endif
 
 
-    // Construtor Principal (inalterado, exceto 0.0f)
-    ZTensor(const std::vector<size_t>& _shape) : shape(_shape) {
+    // Internal device results may defer the host vector until the first D2H.
+    // CPU-visible construction keeps the original zero-initialized behavior.
+    ZTensor(const std::vector<size_t>& _shape) : ZTensor(_shape, false) {}
+
+    ZTensor(const std::vector<size_t>& _shape, bool defer_host_allocation) : shape(_shape) {
             const size_t total_size = checked_element_count(shape);
 
             if (total_size > 0) {
-                try {
-                    data.resize(total_size, 0.0f); // Usa 0.0f
-                } catch (const std::bad_alloc& e) {
-                    throw std::runtime_error(ZMATRIX_ERR_ALLOC_FAILED);
+                if (!defer_host_allocation) {
+                    try {
+                        data.resize(total_size, 0.0f);
+                    } catch (const std::bad_alloc&) {
+                        throw std::runtime_error(ZMATRIX_ERR_ALLOC_FAILED);
+                    }
                 }
                 strides.resize(shape.size());
                 size_t stride = 1;
@@ -369,6 +394,13 @@ struct ZTensor {
                 data.clear();
                 strides.clear();
             }
+#ifdef HAVE_CUDA
+            host_valid = !defer_host_allocation || total_size == 0;
+#else
+            if (defer_host_allocation && total_size > 0) {
+                data.resize(total_size, 0.0f);
+            }
+#endif
         }
 
     // Construtor Padrão (inalterado)
@@ -648,6 +680,13 @@ struct ZTensor {
         if (!d_data) {
             throw std::runtime_error("Device data is not valid for host download");
         }
+        if (data.size() < n) {
+            try {
+                const_cast<ZTensor*>(this)->data.resize(n);
+            } catch (const std::bad_alloc&) {
+                throw std::runtime_error(ZMATRIX_ERR_ALLOC_FAILED);
+            }
+        }
         cuda_check(cudaMemcpy(const_cast<float*>(data.data()), d_data, n * sizeof(float), cudaMemcpyDeviceToHost), "cudaMemcpy D2H");
         mark_synchronized_unlocked();
         if (zmatrix_gpu_debug_enabled()) std::fprintf(stderr, "[zmatrix][gpu] D2H elements=%zu host_valid=1 device_valid=1\n", n);
@@ -914,7 +953,14 @@ struct ZTensor {
 
     ZTensor greater_scalar(float scalar) const {
         const size_t n = size();
+        const bool profile = zmatrix_cuda_profile_enabled();
+        const auto host_start = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+#ifdef HAVE_CUDA
+        ZTensor result(shape, device_valid);
+#else
         ZTensor result(shape);
+#endif
+        const double host_ms = profile ? zmatrix_elapsed_ms(host_start) : 0.0;
         if (n == 0) {
 #ifdef HAVE_CUDA
             if (device_valid) result.ensure_device();
@@ -923,9 +969,14 @@ struct ZTensor {
         }
 #ifdef HAVE_CUDA
         if (device_valid) {
+            const auto allocation_start = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
             result.allocate_device_for_write();
+            const double allocation_ms = profile ? zmatrix_elapsed_ms(allocation_start) : 0.0;
+            const auto wrapper_start = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
             gpu_greater_device(d_data, nullptr, result.d_data, n, 0, scalar, 1);
+            const double wrapper_ms = profile ? zmatrix_elapsed_ms(wrapper_start) : 0.0;
             result.mark_device_modified();
+            zmatrix_profile_result("greater_scalar", host_ms, allocation_ms, wrapper_ms);
             return result;
         }
         ensure_host();
@@ -941,7 +992,14 @@ struct ZTensor {
             (broadcast_width != 1 && (shape.size() != 2 || shape[1] != broadcast_width)))) {
             throw std::invalid_argument(ZMATRIX_ERR_SHAPE_MISMATCH);
         }
+        const bool profile = zmatrix_cuda_profile_enabled();
+        const auto host_start = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+#ifdef HAVE_CUDA
+        ZTensor result(shape, device_valid || other.device_valid);
+#else
         ZTensor result(shape);
+#endif
+        const double host_ms = profile ? zmatrix_elapsed_ms(host_start) : 0.0;
         if (n == 0) {
 #ifdef HAVE_CUDA
             if (device_valid || other.device_valid) result.ensure_device();
@@ -952,9 +1010,14 @@ struct ZTensor {
         if (device_valid || other.device_valid) {
             ensure_device();
             other.ensure_device();
+            const auto allocation_start = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
             result.allocate_device_for_write();
+            const double allocation_ms = profile ? zmatrix_elapsed_ms(allocation_start) : 0.0;
+            const auto wrapper_start = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
             gpu_greater_device(d_data, other.d_data, result.d_data, n, broadcast_width, 0.0f, 0);
+            const double wrapper_ms = profile ? zmatrix_elapsed_ms(wrapper_start) : 0.0;
             result.mark_device_modified();
+            zmatrix_profile_result("greater_tensor", host_ms, allocation_ms, wrapper_ms);
             return result;
         }
         ensure_host();
@@ -979,7 +1042,11 @@ struct ZTensor {
                     std::to_string(input_dimension) + " x " + std::to_string(output_dimension));
             }
         }
+#ifdef HAVE_CUDA
+        ZTensor result(shape, device_valid || source.device_valid);
+#else
         ZTensor result(shape);
+#endif
         const size_t n = result.size();
         if (n == 0) {
 #ifdef HAVE_CUDA
@@ -1018,7 +1085,14 @@ struct ZTensor {
         if (shape[0] > std::numeric_limits<size_t>::max() / times) throw std::overflow_error(ZMATRIX_ERR_OVERFLOW);
         std::vector<size_t> output_shape = shape;
         output_shape[0] *= times;
+        const bool profile = zmatrix_cuda_profile_enabled();
+        const auto host_start = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+#ifdef HAVE_CUDA
+        ZTensor result(output_shape, device_valid);
+#else
         ZTensor result(output_shape);
+#endif
+        const double host_ms = profile ? zmatrix_elapsed_ms(host_start) : 0.0;
         const size_t input_size = size();
         const size_t output_size = result.size();
         if (output_size == 0) {
@@ -1029,9 +1103,14 @@ struct ZTensor {
         }
 #ifdef HAVE_CUDA
         if (device_valid) {
+            const auto allocation_start = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
             result.allocate_device_for_write();
+            const double allocation_ms = profile ? zmatrix_elapsed_ms(allocation_start) : 0.0;
+            const auto wrapper_start = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
             gpu_tile_device(d_data, result.d_data, input_size, output_size);
+            const double wrapper_ms = profile ? zmatrix_elapsed_ms(wrapper_start) : 0.0;
             result.mark_device_modified();
+            zmatrix_profile_result("tile", host_ms, allocation_ms, wrapper_ms);
             return result;
         }
         ensure_host();
@@ -2517,7 +2596,14 @@ ZTensor column(size_t col_idx) const {
             // boosting / probabilidade cumulativa).
             ZTensor cumsum(long axis = -1) const {
                 if (shape.size() == 1) {
+                    const bool profile = zmatrix_cuda_profile_enabled();
+                    const auto host_start = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+#ifdef HAVE_CUDA
+                    ZTensor result(shape, device_valid);
+#else
                     ZTensor result(shape);
+#endif
+                    const double host_ms = profile ? zmatrix_elapsed_ms(host_start) : 0.0;
                     const size_t N = size();
                     if (N == 0) {
 #ifdef HAVE_CUDA
@@ -2527,9 +2613,14 @@ ZTensor column(size_t col_idx) const {
                     }
 #ifdef HAVE_CUDA
                     if (device_valid) {
+                        const auto allocation_start = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
                         result.allocate_device_for_write();
+                        const double allocation_ms = profile ? zmatrix_elapsed_ms(allocation_start) : 0.0;
+                        const auto wrapper_start = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
                         gpu_cumsum_device(d_data, result.d_data, 1, N, 0, 1);
+                        const double wrapper_ms = profile ? zmatrix_elapsed_ms(wrapper_start) : 0.0;
                         result.mark_device_modified();
+                        zmatrix_profile_result("cumsum_1d", host_ms, allocation_ms, wrapper_ms);
                         return result;
                     }
                     ensure_host();
@@ -2555,7 +2646,14 @@ ZTensor column(size_t col_idx) const {
 
                 const size_t rows = shape[0];
                 const size_t cols = shape[1];
+                const bool profile = zmatrix_cuda_profile_enabled();
+                const auto host_start = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+#ifdef HAVE_CUDA
+                ZTensor result(shape, device_valid);
+#else
                 ZTensor result(shape);
+#endif
+                const double host_ms = profile ? zmatrix_elapsed_ms(host_start) : 0.0;
                 if (rows == 0 || cols == 0) {
 #ifdef HAVE_CUDA
                     if (device_valid) result.ensure_device();
@@ -2565,9 +2663,14 @@ ZTensor column(size_t col_idx) const {
 
 #ifdef HAVE_CUDA
                 if (device_valid) {
+                    const auto allocation_start = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
                     result.allocate_device_for_write();
+                    const double allocation_ms = profile ? zmatrix_elapsed_ms(allocation_start) : 0.0;
+                    const auto wrapper_start = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
                     gpu_cumsum_device(d_data, result.d_data, rows, cols, static_cast<int>(ax), 0);
+                    const double wrapper_ms = profile ? zmatrix_elapsed_ms(wrapper_start) : 0.0;
                     result.mark_device_modified();
+                    zmatrix_profile_result(ax == 1 ? "cumsum_axis1" : "cumsum_axis0", host_ms, allocation_ms, wrapper_ms);
                     return result;
                 }
                 ensure_host();
