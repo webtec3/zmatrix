@@ -1,0 +1,1566 @@
+{
+    "schema_version": 1,
+    "created_utc": "2026-07-18T21:20:32+00:00",
+    "suite": "full",
+    "categories": [
+        "reduction"
+    ],
+    "all_records_valid": true,
+    "invalid_records": 0,
+    "reduction_implementation": "hybrid",
+    "methodology": {
+        "warmups": 3,
+        "repetitions": 7,
+        "primary_statistic": "median_ms",
+        "validation": "Every timed case is compared with the CPU result; SGEMM tolerance derives from float32 gamma_k.",
+        "gpu_contract": "GPU execution occurs only after explicit toGpu()."
+    },
+    "environment": {
+        "php": "8.4.16",
+        "zmatrix": "0.4.0-float",
+        "os": "Linux DESKTOP-0748TMR 6.18.33.2-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Thu Jun 18 21:54:43 UTC 2026 x86_64",
+        "cpu": "Intel(R) Core(TM) i3-9100F CPU @ 3.60GHz",
+        "gpu": "NVIDIA GeForce RTX 3060, 576.02, 12288 MiB",
+        "nvcc": "Build cuda_12.0.r12.0/compiler.32267302_0",
+        "nsys": "NVIDIA Nsight Systems version 2022.4.2.50-32196742v0",
+        "ncu": "Version 2022.4.1.0 (build 32308335) (public-release)"
+    },
+    "records": [
+        {
+            "category": "reduction",
+            "operation": "sum",
+            "case": "1024x1024_sum_axis_all",
+            "shape": [
+                1024,
+                1024
+            ],
+            "axis": null,
+            "chain_length": 1,
+            "scenario": "cpu",
+            "timing": {
+                "samples": 7,
+                "min_ms": 0.26972,
+                "p05_ms": 0.27120500000000003,
+                "p25_ms": 0.274945,
+                "median_ms": 0.28072,
+                "p75_ms": 0.287265,
+                "p95_ms": 0.30164199999999997,
+                "p99_ms": 0.3054964,
+                "mean_ms": 0.2830457142857143,
+                "stddev_ms": 0.011450938647917349,
+                "max_ms": 0.30646,
+                "raw_ms": [
+                    0.26972,
+                    0.27467,
+                    0.27522,
+                    0.28072,
+                    0.28413,
+                    0.2904,
+                    0.30646
+                ]
+            },
+            "validation": {
+                "valid": true,
+                "max_abs_error": 2.828125,
+                "max_relative_error": 5.288483100885996e-6,
+                "max_ulp_error": 45,
+                "atol": 5.0e-5,
+                "rtol": 0.001
+            },
+            "memory": {
+                "php_mib": 2,
+                "php_peak_mib": 2,
+                "rss_mib": 234.03515625,
+                "gpu_process_mib": null
+            }
+        },
+        {
+            "category": "reduction",
+            "operation": "sum",
+            "case": "1024x1024_sum_axis_all",
+            "shape": [
+                1024,
+                1024
+            ],
+            "axis": null,
+            "chain_length": 1,
+            "scenario": "gpu_hybrid",
+            "timing": {
+                "samples": 7,
+                "min_ms": 0.13563,
+                "p05_ms": 0.140184,
+                "p25_ms": 0.157135,
+                "median_ms": 0.19767,
+                "p75_ms": 0.22649,
+                "p95_ms": 0.6166929999999996,
+                "p99_ms": 0.7491945999999996,
+                "mean_ms": 0.2689814285714286,
+                "stddev_ms": 0.21217334183085645,
+                "max_ms": 0.78232,
+                "raw_ms": [
+                    0.13563,
+                    0.15081,
+                    0.16346,
+                    0.19767,
+                    0.22275,
+                    0.23023,
+                    0.78232
+                ]
+            },
+            "validation": {
+                "valid": true,
+                "max_abs_error": 2.828125,
+                "max_relative_error": 5.288483100885996e-6,
+                "max_ulp_error": 45,
+                "atol": 5.0e-5,
+                "rtol": 0.001
+            },
+            "memory": {
+                "php_mib": 2,
+                "php_peak_mib": 2,
+                "rss_mib": 234.3203125,
+                "gpu_process_mib": null
+            }
+        },
+        {
+            "category": "reduction",
+            "operation": "min",
+            "case": "1024x1024_min_axis_all",
+            "shape": [
+                1024,
+                1024
+            ],
+            "axis": null,
+            "chain_length": 1,
+            "scenario": "cpu",
+            "timing": {
+                "samples": 7,
+                "min_ms": 0.26477,
+                "p05_ms": 0.267608,
+                "p25_ms": 0.27632,
+                "median_ms": 0.29271,
+                "p75_ms": 0.304975,
+                "p95_ms": 0.35303399999999996,
+                "p99_ms": 0.36655079999999995,
+                "mean_ms": 0.29857142857142854,
+                "stddev_ms": 0.03273064288512325,
+                "max_ms": 0.36993,
+                "raw_ms": [
+                    0.26477,
+                    0.27423,
+                    0.27841,
+                    0.29271,
+                    0.29634,
+                    0.31361,
+                    0.36993
+                ]
+            },
+            "validation": {
+                "valid": true,
+                "max_abs_error": 0,
+                "max_relative_error": 0,
+                "max_ulp_error": 0,
+                "atol": 5.0e-5,
+                "rtol": 0.001
+            },
+            "memory": {
+                "php_mib": 2,
+                "php_peak_mib": 2,
+                "rss_mib": 234.33203125,
+                "gpu_process_mib": null
+            }
+        },
+        {
+            "category": "reduction",
+            "operation": "min",
+            "case": "1024x1024_min_axis_all",
+            "shape": [
+                1024,
+                1024
+            ],
+            "axis": null,
+            "chain_length": 1,
+            "scenario": "gpu_hybrid",
+            "timing": {
+                "samples": 7,
+                "min_ms": 1.84855,
+                "p05_ms": 1.852873,
+                "p25_ms": 1.86604,
+                "median_ms": 1.94348,
+                "p75_ms": 1.962675,
+                "p95_ms": 2.2069189999999996,
+                "p99_ms": 2.2852477999999996,
+                "mean_ms": 1.9648985714285716,
+                "stddev_ms": 0.14620062022817154,
+                "max_ms": 2.30483,
+                "raw_ms": [
+                    1.84855,
+                    1.86296,
+                    1.86912,
+                    1.94348,
+                    1.94689,
+                    1.97846,
+                    2.30483
+                ]
+            },
+            "validation": {
+                "valid": true,
+                "max_abs_error": 0,
+                "max_relative_error": 0,
+                "max_ulp_error": 0,
+                "atol": 5.0e-5,
+                "rtol": 0.001
+            },
+            "memory": {
+                "php_mib": 2,
+                "php_peak_mib": 2,
+                "rss_mib": 234.33203125,
+                "gpu_process_mib": null
+            }
+        },
+        {
+            "category": "reduction",
+            "operation": "max",
+            "case": "1024x1024_max_axis_all",
+            "shape": [
+                1024,
+                1024
+            ],
+            "axis": null,
+            "chain_length": 1,
+            "scenario": "cpu",
+            "timing": {
+                "samples": 7,
+                "min_ms": 0.28512,
+                "p05_ms": 0.285252,
+                "p25_ms": 0.28666,
+                "median_ms": 0.29832,
+                "p75_ms": 0.33198,
+                "p95_ms": 0.36811499999999997,
+                "p99_ms": 0.379335,
+                "mean_ms": 0.31469428571428576,
+                "stddev_ms": 0.03356611891141885,
+                "max_ms": 0.38214,
+                "raw_ms": [
+                    0.28512,
+                    0.28556,
+                    0.28776,
+                    0.29832,
+                    0.32857,
+                    0.33539,
+                    0.38214
+                ]
+            },
+            "validation": {
+                "valid": true,
+                "max_abs_error": 0,
+                "max_relative_error": 0,
+                "max_ulp_error": 0,
+                "atol": 5.0e-5,
+                "rtol": 0.001
+            },
+            "memory": {
+                "php_mib": 2,
+                "php_peak_mib": 2,
+                "rss_mib": 238.33203125,
+                "gpu_process_mib": null
+            }
+        },
+        {
+            "category": "reduction",
+            "operation": "max",
+            "case": "1024x1024_max_axis_all",
+            "shape": [
+                1024,
+                1024
+            ],
+            "axis": null,
+            "chain_length": 1,
+            "scenario": "gpu_hybrid",
+            "timing": {
+                "samples": 7,
+                "min_ms": 1.86175,
+                "p05_ms": 1.8627070000000001,
+                "p25_ms": 1.866865,
+                "median_ms": 1.8766,
+                "p75_ms": 1.9349,
+                "p95_ms": 2.01454,
+                "p99_ms": 2.030644,
+                "mean_ms": 1.9109357142857142,
+                "stddev_ms": 0.06104266420349976,
+                "max_ms": 2.03467,
+                "raw_ms": [
+                    1.86175,
+                    1.86494,
+                    1.86879,
+                    1.8766,
+                    1.90223,
+                    1.96757,
+                    2.03467
+                ]
+            },
+            "validation": {
+                "valid": true,
+                "max_abs_error": 0,
+                "max_relative_error": 0,
+                "max_ulp_error": 0,
+                "atol": 5.0e-5,
+                "rtol": 0.001
+            },
+            "memory": {
+                "php_mib": 2,
+                "php_peak_mib": 2,
+                "rss_mib": 238.33203125,
+                "gpu_process_mib": null
+            }
+        },
+        {
+            "category": "reduction",
+            "operation": "argmin",
+            "case": "1024x1024_argmin_axis_all",
+            "shape": [
+                1024,
+                1024
+            ],
+            "axis": null,
+            "chain_length": 1,
+            "scenario": "cpu",
+            "timing": {
+                "samples": 7,
+                "min_ms": 1.40338,
+                "p05_ms": 1.403512,
+                "p25_ms": 1.4077250000000001,
+                "median_ms": 1.43264,
+                "p75_ms": 1.544015,
+                "p95_ms": 1.711017,
+                "p99_ms": 1.7424594,
+                "mean_ms": 1.4985457142857144,
+                "stddev_ms": 0.12466598549233675,
+                "max_ms": 1.75032,
+                "raw_ms": [
+                    1.40338,
+                    1.40382,
+                    1.41163,
+                    1.43264,
+                    1.46872,
+                    1.61931,
+                    1.75032
+                ]
+            },
+            "validation": {
+                "valid": true,
+                "max_abs_error": 0,
+                "max_relative_error": 0,
+                "max_ulp_error": 0,
+                "atol": 5.0e-5,
+                "rtol": 0.001
+            },
+            "memory": {
+                "php_mib": 2,
+                "php_peak_mib": 2,
+                "rss_mib": 234.33203125,
+                "gpu_process_mib": null
+            }
+        },
+        {
+            "category": "reduction",
+            "operation": "argmin",
+            "case": "1024x1024_argmin_axis_all",
+            "shape": [
+                1024,
+                1024
+            ],
+            "axis": null,
+            "chain_length": 1,
+            "scenario": "gpu_hybrid",
+            "timing": {
+                "samples": 7,
+                "min_ms": 1.87869,
+                "p05_ms": 1.893276,
+                "p25_ms": 1.930005,
+                "median_ms": 1.93303,
+                "p75_ms": 1.958715,
+                "p95_ms": 1.976832,
+                "p99_ms": 1.9772544,
+                "mean_ms": 1.9380742857142859,
+                "stddev_ms": 0.030850660959413065,
+                "max_ms": 1.97736,
+                "raw_ms": [
+                    1.87869,
+                    1.92731,
+                    1.9327,
+                    1.93303,
+                    1.94183,
+                    1.9756,
+                    1.97736
+                ]
+            },
+            "validation": {
+                "valid": true,
+                "max_abs_error": 0,
+                "max_relative_error": 0,
+                "max_ulp_error": 0,
+                "atol": 5.0e-5,
+                "rtol": 0.001
+            },
+            "memory": {
+                "php_mib": 2,
+                "php_peak_mib": 2,
+                "rss_mib": 234.33203125,
+                "gpu_process_mib": null
+            }
+        },
+        {
+            "category": "reduction",
+            "operation": "argmax",
+            "case": "1024x1024_argmax_axis_all",
+            "shape": [
+                1024,
+                1024
+            ],
+            "axis": null,
+            "chain_length": 1,
+            "scenario": "cpu",
+            "timing": {
+                "samples": 7,
+                "min_ms": 1.40008,
+                "p05_ms": 1.406911,
+                "p25_ms": 1.42912,
+                "median_ms": 1.65781,
+                "p75_ms": 1.9090500000000001,
+                "p95_ms": 2.096853,
+                "p99_ms": 2.1432906,
+                "mean_ms": 1.6984471428571428,
+                "stddev_ms": 0.2773256599695582,
+                "max_ms": 2.1549,
+                "raw_ms": [
+                    1.40008,
+                    1.42285,
+                    1.43539,
+                    1.65781,
+                    1.85669,
+                    1.96141,
+                    2.1549
+                ]
+            },
+            "validation": {
+                "valid": true,
+                "max_abs_error": 0,
+                "max_relative_error": 0,
+                "max_ulp_error": 0,
+                "atol": 5.0e-5,
+                "rtol": 0.001
+            },
+            "memory": {
+                "php_mib": 2,
+                "php_peak_mib": 2,
+                "rss_mib": 234.33203125,
+                "gpu_process_mib": null
+            }
+        },
+        {
+            "category": "reduction",
+            "operation": "argmax",
+            "case": "1024x1024_argmax_axis_all",
+            "shape": [
+                1024,
+                1024
+            ],
+            "axis": null,
+            "chain_length": 1,
+            "scenario": "gpu_hybrid",
+            "timing": {
+                "samples": 7,
+                "min_ms": 1.87616,
+                "p05_ms": 1.876754,
+                "p25_ms": 1.8832,
+                "median_ms": 1.89541,
+                "p75_ms": 1.9914399999999999,
+                "p95_ms": 2.1627099999999997,
+                "p99_ms": 2.191222,
+                "mean_ms": 1.9598857142857142,
+                "stddev_ms": 0.11793643770597577,
+                "max_ms": 2.19835,
+                "raw_ms": [
+                    1.87616,
+                    1.87814,
+                    1.88826,
+                    1.89541,
+                    1.90333,
+                    2.07955,
+                    2.19835
+                ]
+            },
+            "validation": {
+                "valid": true,
+                "max_abs_error": 0,
+                "max_relative_error": 0,
+                "max_ulp_error": 0,
+                "atol": 5.0e-5,
+                "rtol": 0.001
+            },
+            "memory": {
+                "php_mib": 2,
+                "php_peak_mib": 2,
+                "rss_mib": 234.33203125,
+                "gpu_process_mib": null
+            }
+        },
+        {
+            "category": "reduction",
+            "operation": "sum",
+            "case": "2048x2048_sum_axis_all",
+            "shape": [
+                2048,
+                2048
+            ],
+            "axis": null,
+            "chain_length": 1,
+            "scenario": "cpu",
+            "timing": {
+                "samples": 7,
+                "min_ms": 1.05358,
+                "p05_ms": 1.053646,
+                "p25_ms": 1.06909,
+                "median_ms": 1.08768,
+                "p75_ms": 1.25686,
+                "p95_ms": 1.4602169999999999,
+                "p99_ms": 1.5156834,
+                "mean_ms": 1.1889585714285715,
+                "stddev_ms": 0.16321359610982794,
+                "max_ms": 1.52955,
+                "raw_ms": [
+                    1.05358,
+                    1.0538,
+                    1.08438,
+                    1.08768,
+                    1.21528,
+                    1.29844,
+                    1.52955
+                ]
+            },
+            "validation": {
+                "valid": true,
+                "max_abs_error": 198.1875,
+                "max_relative_error": 9.26587801411692e-5,
+                "max_ulp_error": 793,
+                "atol": 5.0e-5,
+                "rtol": 0.001
+            },
+            "memory": {
+                "php_mib": 2,
+                "php_peak_mib": 2,
+                "rss_mib": 286.33203125,
+                "gpu_process_mib": null
+            }
+        },
+        {
+            "category": "reduction",
+            "operation": "sum",
+            "case": "2048x2048_sum_axis_all",
+            "shape": [
+                2048,
+                2048
+            ],
+            "axis": null,
+            "chain_length": 1,
+            "scenario": "gpu_hybrid",
+            "timing": {
+                "samples": 7,
+                "min_ms": 0.18205,
+                "p05_ms": 0.182281,
+                "p25_ms": 0.18348,
+                "median_ms": 0.23958,
+                "p75_ms": 0.31284,
+                "p95_ms": 0.370106,
+                "p99_ms": 0.3732212,
+                "mean_ms": 0.2554671428571429,
+                "stddev_ms": 0.07679620465218051,
+                "max_ms": 0.374,
+                "raw_ms": [
+                    0.18205,
+                    0.18282,
+                    0.18414,
+                    0.23958,
+                    0.26466,
+                    0.36102,
+                    0.374
+                ]
+            },
+            "validation": {
+                "valid": true,
+                "max_abs_error": 198.1875,
+                "max_relative_error": 9.26587801411692e-5,
+                "max_ulp_error": 793,
+                "atol": 5.0e-5,
+                "rtol": 0.001
+            },
+            "memory": {
+                "php_mib": 2,
+                "php_peak_mib": 2,
+                "rss_mib": 286.33203125,
+                "gpu_process_mib": null
+            }
+        },
+        {
+            "category": "reduction",
+            "operation": "min",
+            "case": "2048x2048_min_axis_all",
+            "shape": [
+                2048,
+                2048
+            ],
+            "axis": null,
+            "chain_length": 1,
+            "scenario": "cpu",
+            "timing": {
+                "samples": 7,
+                "min_ms": 1.06425,
+                "p05_ms": 1.077153,
+                "p25_ms": 1.111715,
+                "median_ms": 1.12299,
+                "p75_ms": 1.204885,
+                "p95_ms": 1.4527809999999999,
+                "p99_ms": 1.5317961999999998,
+                "mean_ms": 1.1959985714285715,
+                "stddev_ms": 0.15311890173779252,
+                "max_ms": 1.55155,
+                "raw_ms": [
+                    1.06425,
+                    1.10726,
+                    1.11617,
+                    1.12299,
+                    1.18745,
+                    1.22232,
+                    1.55155
+                ]
+            },
+            "validation": {
+                "valid": true,
+                "max_abs_error": 0,
+                "max_relative_error": 0,
+                "max_ulp_error": 0,
+                "atol": 5.0e-5,
+                "rtol": 0.001
+            },
+            "memory": {
+                "php_mib": 2,
+                "php_peak_mib": 2,
+                "rss_mib": 286.328125,
+                "gpu_process_mib": null
+            }
+        },
+        {
+            "category": "reduction",
+            "operation": "min",
+            "case": "2048x2048_min_axis_all",
+            "shape": [
+                2048,
+                2048
+            ],
+            "axis": null,
+            "chain_length": 1,
+            "scenario": "gpu_hybrid",
+            "timing": {
+                "samples": 7,
+                "min_ms": 6.83221,
+                "p05_ms": 6.856102,
+                "p25_ms": 6.934620000000001,
+                "median_ms": 6.96267,
+                "p75_ms": 7.022565,
+                "p95_ms": 7.196497,
+                "p99_ms": 7.2421954,
+                "mean_ms": 6.994695714285713,
+                "stddev_ms": 0.12397096109943787,
+                "max_ms": 7.25362,
+                "raw_ms": [
+                    6.83221,
+                    6.91185,
+                    6.95739,
+                    6.96267,
+                    6.98192,
+                    7.06321,
+                    7.25362
+                ]
+            },
+            "validation": {
+                "valid": true,
+                "max_abs_error": 0,
+                "max_relative_error": 0,
+                "max_ulp_error": 0,
+                "atol": 5.0e-5,
+                "rtol": 0.001
+            },
+            "memory": {
+                "php_mib": 2,
+                "php_peak_mib": 2,
+                "rss_mib": 286.328125,
+                "gpu_process_mib": null
+            }
+        },
+        {
+            "category": "reduction",
+            "operation": "max",
+            "case": "2048x2048_max_axis_all",
+            "shape": [
+                2048,
+                2048
+            ],
+            "axis": null,
+            "chain_length": 1,
+            "scenario": "cpu",
+            "timing": {
+                "samples": 7,
+                "min_ms": 1.12926,
+                "p05_ms": 1.141206,
+                "p25_ms": 1.171005,
+                "median_ms": 1.3761,
+                "p75_ms": 1.3891900000000001,
+                "p95_ms": 1.500532,
+                "p99_ms": 1.5384423999999999,
+                "mean_ms": 1.3105242857142856,
+                "stddev_ms": 0.14384023337987017,
+                "max_ms": 1.54792,
+                "raw_ms": [
+                    1.12926,
+                    1.16908,
+                    1.17293,
+                    1.3761,
+                    1.38842,
+                    1.38996,
+                    1.54792
+                ]
+            },
+            "validation": {
+                "valid": true,
+                "max_abs_error": 0,
+                "max_relative_error": 0,
+                "max_ulp_error": 0,
+                "atol": 5.0e-5,
+                "rtol": 0.001
+            },
+            "memory": {
+                "php_mib": 2,
+                "php_peak_mib": 2,
+                "rss_mib": 286.328125,
+                "gpu_process_mib": null
+            }
+        },
+        {
+            "category": "reduction",
+            "operation": "max",
+            "case": "2048x2048_max_axis_all",
+            "shape": [
+                2048,
+                2048
+            ],
+            "axis": null,
+            "chain_length": 1,
+            "scenario": "gpu_hybrid",
+            "timing": {
+                "samples": 7,
+                "min_ms": 6.85179,
+                "p05_ms": 6.86895,
+                "p25_ms": 6.912235,
+                "median_ms": 6.95981,
+                "p75_ms": 6.98687,
+                "p95_ms": 7.057743,
+                "p99_ms": 7.0735566,
+                "mean_ms": 6.955331428571428,
+                "stddev_ms": 0.0682627703235438,
+                "max_ms": 7.07751,
+                "raw_ms": [
+                    6.85179,
+                    6.90899,
+                    6.91548,
+                    6.95981,
+                    6.96212,
+                    7.01162,
+                    7.07751
+                ]
+            },
+            "validation": {
+                "valid": true,
+                "max_abs_error": 0,
+                "max_relative_error": 0,
+                "max_ulp_error": 0,
+                "atol": 5.0e-5,
+                "rtol": 0.001
+            },
+            "memory": {
+                "php_mib": 2,
+                "php_peak_mib": 2,
+                "rss_mib": 286.328125,
+                "gpu_process_mib": null
+            }
+        },
+        {
+            "category": "reduction",
+            "operation": "argmin",
+            "case": "2048x2048_argmin_axis_all",
+            "shape": [
+                2048,
+                2048
+            ],
+            "axis": null,
+            "chain_length": 1,
+            "scenario": "cpu",
+            "timing": {
+                "samples": 7,
+                "min_ms": 5.797,
+                "p05_ms": 5.889301,
+                "p25_ms": 6.108409999999999,
+                "median_ms": 6.15384,
+                "p75_ms": 6.863175,
+                "p95_ms": 8.924046999999998,
+                "p99_ms": 9.427257399999998,
+                "mean_ms": 6.778152857142857,
+                "stddev_ms": 1.2344950835719297,
+                "max_ms": 9.55306,
+                "raw_ms": [
+                    5.797,
+                    6.10467,
+                    6.11215,
+                    6.15384,
+                    6.27,
+                    7.45635,
+                    9.55306
+                ]
+            },
+            "validation": {
+                "valid": true,
+                "max_abs_error": 0,
+                "max_relative_error": 0,
+                "max_ulp_error": 0,
+                "atol": 5.0e-5,
+                "rtol": 0.001
+            },
+            "memory": {
+                "php_mib": 2,
+                "php_peak_mib": 2,
+                "rss_mib": 286.328125,
+                "gpu_process_mib": null
+            }
+        },
+        {
+            "category": "reduction",
+            "operation": "argmin",
+            "case": "2048x2048_argmin_axis_all",
+            "shape": [
+                2048,
+                2048
+            ],
+            "axis": null,
+            "chain_length": 1,
+            "scenario": "gpu_hybrid",
+            "timing": {
+                "samples": 7,
+                "min_ms": 6.7925,
+                "p05_ms": 6.795701,
+                "p25_ms": 6.803445,
+                "median_ms": 6.81725,
+                "p75_ms": 6.90998,
+                "p95_ms": 7.112501,
+                "p99_ms": 7.1730362,
+                "mean_ms": 6.889252857142857,
+                "stddev_ms": 0.13138285664579,
+                "max_ms": 7.18817,
+                "raw_ms": [
+                    6.7925,
+                    6.80317,
+                    6.80372,
+                    6.81725,
+                    6.88402,
+                    6.93594,
+                    7.18817
+                ]
+            },
+            "validation": {
+                "valid": true,
+                "max_abs_error": 0,
+                "max_relative_error": 0,
+                "max_ulp_error": 0,
+                "atol": 5.0e-5,
+                "rtol": 0.001
+            },
+            "memory": {
+                "php_mib": 2,
+                "php_peak_mib": 2,
+                "rss_mib": 286.328125,
+                "gpu_process_mib": null
+            }
+        },
+        {
+            "category": "reduction",
+            "operation": "argmax",
+            "case": "2048x2048_argmax_axis_all",
+            "shape": [
+                2048,
+                2048
+            ],
+            "axis": null,
+            "chain_length": 1,
+            "scenario": "cpu",
+            "timing": {
+                "samples": 7,
+                "min_ms": 5.67083,
+                "p05_ms": 5.7040939999999996,
+                "p25_ms": 5.82813,
+                "median_ms": 5.93153,
+                "p75_ms": 6.094385000000001,
+                "p95_ms": 6.3121849999999995,
+                "p99_ms": 6.371716999999999,
+                "mean_ms": 5.976284285714286,
+                "stddev_ms": 0.22157550198889914,
+                "max_ms": 6.3866,
+                "raw_ms": [
+                    5.67083,
+                    5.78171,
+                    5.87455,
+                    5.93153,
+                    6.05022,
+                    6.13855,
+                    6.3866
+                ]
+            },
+            "validation": {
+                "valid": true,
+                "max_abs_error": 0,
+                "max_relative_error": 0,
+                "max_ulp_error": 0,
+                "atol": 5.0e-5,
+                "rtol": 0.001
+            },
+            "memory": {
+                "php_mib": 2,
+                "php_peak_mib": 2,
+                "rss_mib": 286.328125,
+                "gpu_process_mib": null
+            }
+        },
+        {
+            "category": "reduction",
+            "operation": "argmax",
+            "case": "2048x2048_argmax_axis_all",
+            "shape": [
+                2048,
+                2048
+            ],
+            "axis": null,
+            "chain_length": 1,
+            "scenario": "gpu_hybrid",
+            "timing": {
+                "samples": 7,
+                "min_ms": 6.87038,
+                "p05_ms": 6.897803,
+                "p25_ms": 6.9645399999999995,
+                "median_ms": 6.96762,
+                "p75_ms": 7.020475,
+                "p95_ms": 7.166379,
+                "p99_ms": 7.2122358,
+                "mean_ms": 7.0045328571428565,
+                "stddev_ms": 0.10100322395339466,
+                "max_ms": 7.2237,
+                "raw_ms": [
+                    6.87038,
+                    6.96179,
+                    6.96729,
+                    6.96762,
+                    7.00832,
+                    7.03263,
+                    7.2237
+                ]
+            },
+            "validation": {
+                "valid": true,
+                "max_abs_error": 0,
+                "max_relative_error": 0,
+                "max_ulp_error": 0,
+                "atol": 5.0e-5,
+                "rtol": 0.001
+            },
+            "memory": {
+                "php_mib": 2,
+                "php_peak_mib": 2,
+                "rss_mib": 286.328125,
+                "gpu_process_mib": null
+            }
+        },
+        {
+            "category": "reduction",
+            "operation": "sum",
+            "case": "4096x256_sum_axis_0",
+            "shape": [
+                4096,
+                256
+            ],
+            "axis": 0,
+            "chain_length": 1,
+            "scenario": "cpu",
+            "timing": {
+                "samples": 7,
+                "min_ms": 29.64291,
+                "p05_ms": 29.875032,
+                "p25_ms": 30.67405,
+                "median_ms": 31.74292,
+                "p75_ms": 44.37037,
+                "p95_ms": 58.293245999999996,
+                "p99_ms": 59.1332412,
+                "mean_ms": 38.688272857142856,
+                "stddev_ms": 12.030313465301742,
+                "max_ms": 59.34324,
+                "raw_ms": [
+                    29.64291,
+                    30.41665,
+                    30.93145,
+                    31.74292,
+                    32.89748,
+                    55.84326,
+                    59.34324
+                ]
+            },
+            "validation": {
+                "valid": true,
+                "max_abs_error": 0.074951171875,
+                "max_relative_error": 3.587066696656258e-5,
+                "max_ulp_error": null,
+                "atol": 5.0e-5,
+                "rtol": 0.001
+            },
+            "memory": {
+                "php_mib": 2,
+                "php_peak_mib": 2,
+                "rss_mib": 238.328125,
+                "gpu_process_mib": null
+            }
+        },
+        {
+            "category": "reduction",
+            "operation": "sum",
+            "case": "4096x256_sum_axis_0",
+            "shape": [
+                4096,
+                256
+            ],
+            "axis": 0,
+            "chain_length": 1,
+            "scenario": "gpu_hybrid",
+            "timing": {
+                "samples": 7,
+                "min_ms": 0.1738,
+                "p05_ms": 0.176077,
+                "p25_ms": 0.18821,
+                "median_ms": 0.19624,
+                "p75_ms": 0.25707,
+                "p95_ms": 0.33200199999999996,
+                "p99_ms": 0.3472084,
+                "mean_ms": 0.23023,
+                "stddev_ms": 0.060784047484281824,
+                "max_ms": 0.35101,
+                "raw_ms": [
+                    0.1738,
+                    0.18139,
+                    0.19503,
+                    0.19624,
+                    0.22649,
+                    0.28765,
+                    0.35101
+                ]
+            },
+            "validation": {
+                "valid": true,
+                "max_abs_error": 0.074951171875,
+                "max_relative_error": 3.587066696656258e-5,
+                "max_ulp_error": null,
+                "atol": 5.0e-5,
+                "rtol": 0.001
+            },
+            "memory": {
+                "php_mib": 2,
+                "php_peak_mib": 2,
+                "rss_mib": 238.328125,
+                "gpu_process_mib": null
+            }
+        },
+        {
+            "category": "reduction",
+            "operation": "argmin",
+            "case": "4096x256_argmin_axis_0",
+            "shape": [
+                4096,
+                256
+            ],
+            "axis": 0,
+            "chain_length": 1,
+            "scenario": "cpu",
+            "timing": {
+                "samples": 7,
+                "min_ms": 30.02923,
+                "p05_ms": 30.123708999999998,
+                "p25_ms": 31.037765,
+                "median_ms": 33.63811,
+                "p75_ms": 59.341645,
+                "p95_ms": 87.11514899999999,
+                "p99_ms": 89.81499779999999,
+                "mean_ms": 47.84516,
+                "stddev_ms": 23.784869700258728,
+                "max_ms": 90.48996,
+                "raw_ms": [
+                    30.02923,
+                    30.34416,
+                    31.73137,
+                    33.63811,
+                    39.4427,
+                    79.24059,
+                    90.48996
+                ]
+            },
+            "validation": {
+                "valid": true,
+                "max_abs_error": 0,
+                "max_relative_error": 0,
+                "max_ulp_error": null,
+                "atol": 0,
+                "rtol": 0
+            },
+            "memory": {
+                "php_mib": 2,
+                "php_peak_mib": 2,
+                "rss_mib": 238.328125,
+                "gpu_process_mib": null
+            }
+        },
+        {
+            "category": "reduction",
+            "operation": "argmin",
+            "case": "4096x256_argmin_axis_0",
+            "shape": [
+                4096,
+                256
+            ],
+            "axis": 0,
+            "chain_length": 1,
+            "scenario": "gpu_hybrid",
+            "timing": {
+                "samples": 7,
+                "min_ms": 0.19855,
+                "p05_ms": 0.200563,
+                "p25_ms": 0.21032,
+                "median_ms": 0.30294,
+                "p75_ms": 0.365365,
+                "p95_ms": 0.38889399999999996,
+                "p99_ms": 0.39264279999999996,
+                "mean_ms": 0.29234857142857146,
+                "stddev_ms": 0.07896364306774739,
+                "max_ms": 0.39358,
+                "raw_ms": [
+                    0.19855,
+                    0.20526,
+                    0.21538,
+                    0.30294,
+                    0.35277,
+                    0.37796,
+                    0.39358
+                ]
+            },
+            "validation": {
+                "valid": true,
+                "max_abs_error": 0,
+                "max_relative_error": 0,
+                "max_ulp_error": null,
+                "atol": 0,
+                "rtol": 0
+            },
+            "memory": {
+                "php_mib": 2,
+                "php_peak_mib": 2,
+                "rss_mib": 238.328125,
+                "gpu_process_mib": null
+            }
+        },
+        {
+            "category": "reduction",
+            "operation": "argmax",
+            "case": "4096x256_argmax_axis_0",
+            "shape": [
+                4096,
+                256
+            ],
+            "axis": 0,
+            "chain_length": 1,
+            "scenario": "cpu",
+            "timing": {
+                "samples": 7,
+                "min_ms": 30.01724,
+                "p05_ms": 30.045686,
+                "p25_ms": 30.40477,
+                "median_ms": 31.1597,
+                "p75_ms": 36.136759999999995,
+                "p95_ms": 42.053186999999994,
+                "p99_ms": 42.891149399999996,
+                "mean_ms": 33.90866285714286,
+                "stddev_ms": 4.869171851330761,
+                "max_ms": 43.10064,
+                "raw_ms": [
+                    30.01724,
+                    30.11206,
+                    30.69748,
+                    31.1597,
+                    32.66439,
+                    39.60913,
+                    43.10064
+                ]
+            },
+            "validation": {
+                "valid": true,
+                "max_abs_error": 0,
+                "max_relative_error": 0,
+                "max_ulp_error": null,
+                "atol": 0,
+                "rtol": 0
+            },
+            "memory": {
+                "php_mib": 2,
+                "php_peak_mib": 2,
+                "rss_mib": 238.328125,
+                "gpu_process_mib": null
+            }
+        },
+        {
+            "category": "reduction",
+            "operation": "argmax",
+            "case": "4096x256_argmax_axis_0",
+            "shape": [
+                4096,
+                256
+            ],
+            "axis": 0,
+            "chain_length": 1,
+            "scenario": "gpu_hybrid",
+            "timing": {
+                "samples": 7,
+                "min_ms": 0.17567,
+                "p05_ms": 0.177155,
+                "p25_ms": 0.184085,
+                "median_ms": 0.19261,
+                "p75_ms": 0.1958,
+                "p95_ms": 0.30485399999999985,
+                "p99_ms": 0.3418667999999999,
+                "mean_ms": 0.21130999999999997,
+                "stddev_ms": 0.057516071791158634,
+                "max_ms": 0.35112,
+                "raw_ms": [
+                    0.17567,
+                    0.18062,
+                    0.18755,
+                    0.19261,
+                    0.1947,
+                    0.1969,
+                    0.35112
+                ]
+            },
+            "validation": {
+                "valid": true,
+                "max_abs_error": 0,
+                "max_relative_error": 0,
+                "max_ulp_error": null,
+                "atol": 0,
+                "rtol": 0
+            },
+            "memory": {
+                "php_mib": 2,
+                "php_peak_mib": 2,
+                "rss_mib": 238.328125,
+                "gpu_process_mib": null
+            }
+        },
+        {
+            "category": "reduction",
+            "operation": "sum",
+            "case": "256x4096_sum_axis_1",
+            "shape": [
+                256,
+                4096
+            ],
+            "axis": 1,
+            "chain_length": 1,
+            "scenario": "cpu",
+            "timing": {
+                "samples": 7,
+                "min_ms": 23.68476,
+                "p05_ms": 23.704890000000002,
+                "p25_ms": 23.81742,
+                "median_ms": 24.15061,
+                "p75_ms": 27.510395000000003,
+                "p95_ms": 32.726617,
+                "p99_ms": 33.6189634,
+                "mean_ms": 26.333292857142858,
+                "stddev_ms": 3.7275129034545817,
+                "max_ms": 33.84205,
+                "raw_ms": [
+                    23.68476,
+                    23.75186,
+                    23.88298,
+                    24.15061,
+                    24.89685,
+                    30.12394,
+                    33.84205
+                ]
+            },
+            "validation": {
+                "valid": true,
+                "max_abs_error": 0.00927734375,
+                "max_relative_error": 2.2469018770854796e-6,
+                "max_ulp_error": null,
+                "atol": 5.0e-5,
+                "rtol": 0.001
+            },
+            "memory": {
+                "php_mib": 2,
+                "php_peak_mib": 2,
+                "rss_mib": 238.328125,
+                "gpu_process_mib": null
+            }
+        },
+        {
+            "category": "reduction",
+            "operation": "sum",
+            "case": "256x4096_sum_axis_1",
+            "shape": [
+                256,
+                4096
+            ],
+            "axis": 1,
+            "chain_length": 1,
+            "scenario": "gpu_hybrid",
+            "timing": {
+                "samples": 7,
+                "min_ms": 0.20075,
+                "p05_ms": 0.20147600000000002,
+                "p25_ms": 0.2057,
+                "median_ms": 0.21252,
+                "p75_ms": 0.27203,
+                "p95_ms": 0.34816099999999994,
+                "p99_ms": 0.36566419999999994,
+                "mean_ms": 0.24839571428571428,
+                "stddev_ms": 0.059025823369859017,
+                "max_ms": 0.37004,
+                "raw_ms": [
+                    0.20075,
+                    0.20317,
+                    0.20823,
+                    0.21252,
+                    0.24695,
+                    0.29711,
+                    0.37004
+                ]
+            },
+            "validation": {
+                "valid": true,
+                "max_abs_error": 0.00927734375,
+                "max_relative_error": 2.2469018770854796e-6,
+                "max_ulp_error": null,
+                "atol": 5.0e-5,
+                "rtol": 0.001
+            },
+            "memory": {
+                "php_mib": 2,
+                "php_peak_mib": 2,
+                "rss_mib": 238.328125,
+                "gpu_process_mib": null
+            }
+        },
+        {
+            "category": "reduction",
+            "operation": "argmin",
+            "case": "256x4096_argmin_axis_1",
+            "shape": [
+                256,
+                4096
+            ],
+            "axis": 1,
+            "chain_length": 1,
+            "scenario": "cpu",
+            "timing": {
+                "samples": 7,
+                "min_ms": 24.3562,
+                "p05_ms": 24.377848,
+                "p25_ms": 24.497770000000003,
+                "median_ms": 24.63923,
+                "p75_ms": 25.4155,
+                "p95_ms": 26.462403,
+                "p99_ms": 26.788152599999997,
+                "mean_ms": 25.098794285714288,
+                "stddev_ms": 0.8323636264768128,
+                "max_ms": 26.86959,
+                "raw_ms": [
+                    24.3562,
+                    24.42836,
+                    24.56718,
+                    24.63923,
+                    25.3187,
+                    25.5123,
+                    26.86959
+                ]
+            },
+            "validation": {
+                "valid": true,
+                "max_abs_error": 0,
+                "max_relative_error": 0,
+                "max_ulp_error": null,
+                "atol": 0,
+                "rtol": 0
+            },
+            "memory": {
+                "php_mib": 2,
+                "php_peak_mib": 2,
+                "rss_mib": 238.328125,
+                "gpu_process_mib": null
+            }
+        },
+        {
+            "category": "reduction",
+            "operation": "argmin",
+            "case": "256x4096_argmin_axis_1",
+            "shape": [
+                256,
+                4096
+            ],
+            "axis": 1,
+            "chain_length": 1,
+            "scenario": "gpu_hybrid",
+            "timing": {
+                "samples": 7,
+                "min_ms": 0.23089,
+                "p05_ms": 0.236698,
+                "p25_ms": 0.268565,
+                "median_ms": 0.3025,
+                "p75_ms": 0.324115,
+                "p95_ms": 0.3991789999999999,
+                "p99_ms": 0.42391579999999995,
+                "mean_ms": 0.30697857142857143,
+                "stddev_ms": 0.059993817164431064,
+                "max_ms": 0.4301,
+                "raw_ms": [
+                    0.23089,
+                    0.25025,
+                    0.28688,
+                    0.3025,
+                    0.3212,
+                    0.32703,
+                    0.4301
+                ]
+            },
+            "validation": {
+                "valid": true,
+                "max_abs_error": 0,
+                "max_relative_error": 0,
+                "max_ulp_error": null,
+                "atol": 0,
+                "rtol": 0
+            },
+            "memory": {
+                "php_mib": 2,
+                "php_peak_mib": 2,
+                "rss_mib": 238.328125,
+                "gpu_process_mib": null
+            }
+        },
+        {
+            "category": "reduction",
+            "operation": "argmax",
+            "case": "256x4096_argmax_axis_1",
+            "shape": [
+                256,
+                4096
+            ],
+            "axis": 1,
+            "chain_length": 1,
+            "scenario": "cpu",
+            "timing": {
+                "samples": 7,
+                "min_ms": 24.14181,
+                "p05_ms": 24.170421,
+                "p25_ms": 24.257145,
+                "median_ms": 24.31814,
+                "p75_ms": 24.585549999999998,
+                "p95_ms": 24.755280000000003,
+                "p99_ms": 24.808608,
+                "mean_ms": 24.423897142857147,
+                "stddev_ms": 0.22623363616998715,
+                "max_ms": 24.82194,
+                "raw_ms": [
+                    24.14181,
+                    24.23718,
+                    24.27711,
+                    24.31814,
+                    24.57136,
+                    24.59974,
+                    24.82194
+                ]
+            },
+            "validation": {
+                "valid": true,
+                "max_abs_error": 0,
+                "max_relative_error": 0,
+                "max_ulp_error": null,
+                "atol": 0,
+                "rtol": 0
+            },
+            "memory": {
+                "php_mib": 2,
+                "php_peak_mib": 2,
+                "rss_mib": 238.328125,
+                "gpu_process_mib": null
+            }
+        },
+        {
+            "category": "reduction",
+            "operation": "argmax",
+            "case": "256x4096_argmax_axis_1",
+            "shape": [
+                256,
+                4096
+            ],
+            "axis": 1,
+            "chain_length": 1,
+            "scenario": "gpu_hybrid",
+            "timing": {
+                "samples": 7,
+                "min_ms": 0.16423,
+                "p05_ms": 0.164824,
+                "p25_ms": 0.17578,
+                "median_ms": 0.24211,
+                "p75_ms": 0.31163,
+                "p95_ms": 0.46820399999999984,
+                "p99_ms": 0.5197367999999999,
+                "mean_ms": 0.27339714285714284,
+                "stddev_ms": 0.12091103668332653,
+                "max_ms": 0.53262,
+                "raw_ms": [
+                    0.16423,
+                    0.16621,
+                    0.18535,
+                    0.24211,
+                    0.30536,
+                    0.3179,
+                    0.53262
+                ]
+            },
+            "validation": {
+                "valid": true,
+                "max_abs_error": 0,
+                "max_relative_error": 0,
+                "max_ulp_error": null,
+                "atol": 0,
+                "rtol": 0
+            },
+            "memory": {
+                "php_mib": 2,
+                "php_peak_mib": 2,
+                "rss_mib": 238.328125,
+                "gpu_process_mib": null
+            }
+        }
+    ]
+}
