@@ -1473,10 +1473,15 @@ PHP_METHOD(ZTensor, dot)
                  RETURN_DOUBLE(0.0);
             }
 
-#ifdef HAVE_CUDA
+            #ifdef HAVE_CUDA
+            if (tensor_A->device_valid || tensor_B.device_valid) {
+                tensor_A->ensure_device();
+                tensor_B.ensure_device();
+                RETURN_DOUBLE(static_cast<double>(gpu_dot_value_device(tensor_A->d_data, tensor_B.d_data, tensor_A->shape[0])));
+            }
             tensor_A->ensure_host();
             tensor_B.ensure_host();
-#endif
+            #endif
             float sum_product = 0.0f;
             const float* a_data = tensor_A->data.data();
             const float* b_data = tensor_B.data.data();
@@ -1520,6 +1525,9 @@ PHP_METHOD(ZTensor, dot)
             }
             if (tensor_A->shape[1] == 0) { // Caso onde A é Mx0 e B é 0x1, resultado é Mx1 de zeros
                 ZTensor result_tensor({tensor_A->shape[0]}); // Já zerado pelo construtor
+#ifdef HAVE_CUDA
+                if (tensor_A->device_valid || tensor_B.device_valid) result_tensor.ensure_device();
+#endif
                 zmatrix_return_tensor_obj(result_tensor, return_value, zmatrix_ce_ZTensor);
                 return;
             }
@@ -1536,6 +1544,15 @@ PHP_METHOD(ZTensor, dot)
 
 
 #ifdef HAVE_CUDA
+            if (tensor_A->device_valid || tensor_B.device_valid) {
+                tensor_A->ensure_device();
+                tensor_B.ensure_device();
+                result_tensor.allocate_device_for_write();
+                gpu_matvec_device(tensor_A->d_data, tensor_B.d_data, result_tensor.d_data, M, K);
+                result_tensor.mark_device_modified();
+                zmatrix_return_tensor_obj(result_tensor, return_value, zmatrix_ce_ZTensor);
+                return;
+            }
             tensor_A->ensure_host();
             tensor_B.ensure_host();
 #endif
@@ -1811,78 +1828,7 @@ PHP_METHOD(ZTensor, broadcast)
         try {
             ZTensor &self_tensor = *self_obj->tensor;
             ZTensor &bias_tensor = *bias_ptr;
-#ifdef HAVE_CUDA
-            bias_tensor.ensure_host();
-#endif
-
-            const std::vector<size_t> &shapeA = self_tensor.shape;
-            const std::vector<size_t> &shapeB = bias_tensor.shape;
-
-            // 1. Verifica compatibilidade de broadcast:
-            //    shapes são comparados a partir do fim (direita):
-            size_t ndimA = shapeA.size();
-            size_t ndimB = shapeB.size();
-            for (size_t i = 0; i < ndimB; ++i) {
-                size_t dimA = shapeA[ndimA - 1 - i];
-                size_t dimB = shapeB[ndimB - 1 - i];
-                if (dimB != 1 && dimB != dimA) {
-                    throw std::runtime_error("Incompatible for broadcast: dimension " +
-                        std::to_string(dimB) + " x " + std::to_string(dimA));
-                }
-            }
-
-            // 2. Cria o resultado com a forma de self_tensor
-            ZTensor result(shapeA);
-            size_t total_size = result.size();
-            if (total_size == 0) {
-                // Se for tensor vazio, basta retornar result (vazio)
-                zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
-                return;
-            }
-
-            // 3. Pré-computa strides do self e do bias
-            const std::vector<size_t> &stridesA = self_tensor.strides;
-            const std::vector<size_t> &stridesB = bias_tensor.strides;
-
-            // 4. Para cada elemento em result, calcula o índice correspondente em bias
-            //    e copia o valor. O critério:
-            //    - Se bias_shape[d] == 1 → sempre usa índice 0 nessa dimensão
-            //    - Senão → usa o índice em self naquela dimensão
-            const float *dataB = bias_tensor.data.data();
-            float *dataR = result.data.data();
-
-            std::vector<size_t> indexA(ndimA), indexB(ndimB);
-            for (size_t lin = 0; lin < total_size; ++lin) {
-                // 4.1. Reconstrói o índice multidimensional de "lin" em shapeA
-                size_t rem = lin;
-                for (size_t d = 0; d < ndimA; ++d) {
-                    indexA[d] = rem / stridesA[d];
-                    rem = rem % stridesA[d];
-                }
-
-                // 4.2. Mapeia em indexB (direita-alinhado)
-                //      Se bias tem menos dims, as dimensões altas de indexB são consideradas "travadas" em zero
-                size_t offsetB = 0;
-                if (ndimB == 0) {
-                    // bias é escalar: sempre offsetB = 0
-                    offsetB = 0;
-                } else {
-                    // calcula deslocamento do índice multidimensional de bias
-                    // alinhando a direita:
-                    size_t diff = ndimA - ndimB;
-                    for (size_t db = 0; db < ndimB; ++db) {
-                        size_t dimB = shapeB[db];
-                        size_t dimIndexA = indexA[diff + db];
-                        size_t idxB = (dimB == 1 ? 0 : dimIndexA);
-                        offsetB += idxB * stridesB[db];
-                    }
-                }
-
-                // 4.3. Copia do bias
-                dataR[lin] = dataB[offsetB];
-            }
-
-            // 5. Retorna um novo objeto PHP contendo 'result'
+            ZTensor result = self_tensor.broadcast_materialized(bias_tensor);
             zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
         } catch (const std::exception &e) {
             zend_throw_exception(zend_ce_exception, e.what(), 0);
@@ -1905,12 +1851,6 @@ PHP_METHOD(ZTensor, greater)
     }
     ZTensor &A = *intern->tensor;
 
-#ifdef HAVE_CUDA
-    // FIX: greater() lia data.data() direto sem sincronizar — mesmo bug que já
-    // corrigimos em transpose(). Sincroniza A com o host antes de qualquer acesso.
-    A.ensure_host();
-#endif
-
     // FIX: greater() antes exigia same_shape() sempre, sem nenhum dos caminhos de
     // broadcast que add/sub/mul/divide já têm (escalar direto, vetor 1D de tamanho
     // 1, broadcast 2D×1D). Isso quebrava exatamente o uso real da classe Metric
@@ -1923,27 +1863,14 @@ PHP_METHOD(ZTensor, greater)
             ? (float)Z_LVAL_P(other_zv)
             : (float)Z_DVAL_P(other_zv);
 
-        size_t N = A.size();
-        ZTensor result(A.shape);
-        float *r_data = result.data.data();
-        const float *a_data = A.data.data();
-
-        #if HAS_OPENMP
-        if (N > ZMATRIX_PARALLEL_THRESHOLD) {
-            #pragma omp parallel for simd schedule(static)
-            for (size_t i = 0; i < N; ++i) {
-                r_data[i] = (a_data[i] > scalar) ? 1.0f : 0.0f;
-            }
-        } else
-        #endif
-        {
-            for (size_t i = 0; i < N; ++i) {
-                r_data[i] = (a_data[i] > scalar) ? 1.0f : 0.0f;
-            }
+        try {
+            ZTensor result = A.greater_scalar(scalar);
+            zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
+            return;
+        } catch (const std::exception& e) {
+            zend_throw_exception(zend_ce_exception, e.what(), 0);
+            RETURN_THROWS();
         }
-
-        zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
-        return;
     }
 
     // Converte o argumento (array ou ZTensor) para ZTensor*
@@ -1953,90 +1880,24 @@ PHP_METHOD(ZTensor, greater)
     }
     ZTensor &B = *B_ptr;
 
-#ifdef HAVE_CUDA
-    B.ensure_host();
-#endif
-
     try {
         // 2) Vetor 1D de tamanho 1 → escalar: $t->greater([0.5])
         if (B.shape.size() == 1 && B.shape[0] == 1) {
-            float scalar = B.data.data()[0];
-            size_t N = A.size();
-            ZTensor result(A.shape);
-            float *r_data = result.data.data();
-            const float *a_data = A.data.data();
-
-            #if HAS_OPENMP
-            if (N > ZMATRIX_PARALLEL_THRESHOLD) {
-                #pragma omp parallel for simd schedule(static)
-                for (size_t i = 0; i < N; ++i) {
-                    r_data[i] = (a_data[i] > scalar) ? 1.0f : 0.0f;
-                }
-            } else
-            #endif
-            {
-                for (size_t i = 0; i < N; ++i) {
-                    r_data[i] = (a_data[i] > scalar) ? 1.0f : 0.0f;
-                }
-            }
-
+            ZTensor result = A.greater_tensor(B, 1);
             zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
             return;
         }
 
         // 3) Mesmo shape → element-wise direto (comportamento original preservado)
         if (A.same_shape(B)) {
-            size_t N = A.size();
-            ZTensor result(A.shape);
-            float *r_data = result.data.data();
-            const float *a_data = A.data.data();
-            const float *b_data = B.data.data();
-
-            #if HAS_OPENMP
-            if (N > ZMATRIX_PARALLEL_THRESHOLD) {
-                #pragma omp parallel for simd schedule(static)
-                for (size_t i = 0; i < N; ++i) {
-                    r_data[i] = (a_data[i] > b_data[i]) ? 1.0f : 0.0f;
-                }
-            } else
-            #endif
-            {
-                for (size_t i = 0; i < N; ++i) {
-                    r_data[i] = (a_data[i] > b_data[i]) ? 1.0f : 0.0f;
-                }
-            }
-
+            ZTensor result = A.greater_tensor(B);
             zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
             return;
         }
 
         // 4) Broadcast 2D×1D: A [M×N], B [N] (mesmo padrão de add/sub/mul/divide)
         if (A.shape.size() == 2 && B.shape.size() == 1 && B.shape[0] == A.shape[1]) {
-            size_t M = A.shape[0], N = A.shape[1];
-            size_t total = M * N;
-            ZTensor result(A.shape);
-            float *r_data = result.data.data();
-            const float *a_data = A.data.data();
-            const float *b_data = B.data.data();
-
-            #if HAS_OPENMP
-            if (total > ZMATRIX_PARALLEL_THRESHOLD) {
-                #pragma omp parallel for schedule(static)
-                for (size_t i = 0; i < M; ++i) {
-                    for (size_t j = 0; j < N; ++j) {
-                        r_data[i * N + j] = (a_data[i * N + j] > b_data[j]) ? 1.0f : 0.0f;
-                    }
-                }
-            } else
-            #endif
-            {
-                for (size_t i = 0; i < M; ++i) {
-                    for (size_t j = 0; j < N; ++j) {
-                        r_data[i * N + j] = (a_data[i * N + j] > b_data[j]) ? 1.0f : 0.0f;
-                    }
-                }
-            }
-
+            ZTensor result = A.greater_tensor(B, A.shape[1]);
             zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
             return;
         }
@@ -2314,30 +2175,7 @@ PHP_METHOD(ZTensor, tile)
 
     try {
         const ZTensor &input = *obj->tensor;
-#ifdef HAVE_CUDA
-        input.ensure_host();
-#endif
-        const auto &inShape = input.shape;
-
-        if (inShape.empty()) {
-            zend_throw_exception(zend_ce_exception, "tile(): scalar tensor cannot be repeated", 0);
-            RETURN_THROWS();
-        }
-
-        size_t rows = inShape[0];
-        size_t cols = (inShape.size() == 2) ? inShape[1] : 1;
-        std::vector<size_t> outShape = {rows * (size_t)times};
-        if (inShape.size() == 2) outShape.push_back(cols);
-
-        ZTensor result(outShape);
-        const float* src = input.data.data();
-        float* dst = result.data.data();
-
-        size_t blockSize = rows * cols;
-        for (size_t i = 0; i < (size_t)times; ++i) {
-            memcpy(dst + i * blockSize, src, blockSize * sizeof(float));
-        }
-
+        ZTensor result = input.tiled(static_cast<size_t>(times));
         zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
     } catch (const std::exception& e) {
         zend_throw_exception(zend_ce_exception, e.what(), 0);

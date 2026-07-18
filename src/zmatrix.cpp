@@ -912,6 +912,136 @@ struct ZTensor {
 #endif
     }
 
+    ZTensor greater_scalar(float scalar) const {
+        const size_t n = size();
+        ZTensor result(shape);
+        if (n == 0) {
+#ifdef HAVE_CUDA
+            if (device_valid) result.ensure_device();
+#endif
+            return result;
+        }
+#ifdef HAVE_CUDA
+        if (device_valid) {
+            result.allocate_device_for_write();
+            gpu_greater_device(d_data, nullptr, result.d_data, n, 0, scalar, 1);
+            result.mark_device_modified();
+            return result;
+        }
+        ensure_host();
+#endif
+        for (size_t i = 0; i < n; ++i) result.data[i] = data[i] > scalar ? 1.0f : 0.0f;
+        return result;
+    }
+
+    ZTensor greater_tensor(const ZTensor& other, size_t broadcast_width = 0) const {
+        const size_t n = size();
+        if (broadcast_width == 0 && !same_shape(other)) throw std::invalid_argument(ZMATRIX_ERR_SHAPE_MISMATCH);
+        if (broadcast_width != 0 && (other.shape != std::vector<size_t>{broadcast_width} ||
+            (broadcast_width != 1 && (shape.size() != 2 || shape[1] != broadcast_width)))) {
+            throw std::invalid_argument(ZMATRIX_ERR_SHAPE_MISMATCH);
+        }
+        ZTensor result(shape);
+        if (n == 0) {
+#ifdef HAVE_CUDA
+            if (device_valid || other.device_valid) result.ensure_device();
+#endif
+            return result;
+        }
+#ifdef HAVE_CUDA
+        if (device_valid || other.device_valid) {
+            ensure_device();
+            other.ensure_device();
+            result.allocate_device_for_write();
+            gpu_greater_device(d_data, other.d_data, result.d_data, n, broadcast_width, 0.0f, 0);
+            result.mark_device_modified();
+            return result;
+        }
+        ensure_host();
+        other.ensure_host();
+#endif
+        for (size_t i = 0; i < n; ++i) {
+            const size_t rhs = broadcast_width ? i % broadcast_width : i;
+            result.data[i] = data[i] > other.data[rhs] ? 1.0f : 0.0f;
+        }
+        return result;
+    }
+
+    ZTensor broadcast_materialized(const ZTensor& source) const {
+        const size_t output_rank = shape.size();
+        const size_t input_rank = source.shape.size();
+        if (input_rank == 0 || input_rank > output_rank) throw std::invalid_argument("Incompatible ranks for broadcast");
+        for (size_t i = 0; i < input_rank; ++i) {
+            const size_t output_dimension = shape[output_rank - input_rank + i];
+            const size_t input_dimension = source.shape[i];
+            if (input_dimension != 1 && input_dimension != output_dimension) {
+                throw std::invalid_argument("Incompatible for broadcast: dimension " +
+                    std::to_string(input_dimension) + " x " + std::to_string(output_dimension));
+            }
+        }
+        ZTensor result(shape);
+        const size_t n = result.size();
+        if (n == 0) {
+#ifdef HAVE_CUDA
+            if (device_valid || source.device_valid) result.ensure_device();
+#endif
+            return result;
+        }
+        if (source.size() == 0) throw std::invalid_argument("Cannot broadcast an empty source to a non-empty tensor");
+#ifdef HAVE_CUDA
+        if (device_valid || source.device_valid) {
+            source.ensure_device();
+            result.allocate_device_for_write();
+            gpu_broadcast_device(source.d_data, result.d_data, shape.data(), strides.data(),
+                source.shape.data(), source.strides.data(), output_rank, input_rank, n);
+            result.mark_device_modified();
+            return result;
+        }
+        source.ensure_host();
+#endif
+        for (size_t linear = 0; linear < n; ++linear) {
+            size_t input_offset = 0;
+            const size_t rank_difference = output_rank - input_rank;
+            for (size_t input_axis = 0; input_axis < input_rank; ++input_axis) {
+                const size_t output_axis = rank_difference + input_axis;
+                const size_t coordinate = (linear / strides[output_axis]) % shape[output_axis];
+                if (source.shape[input_axis] != 1) input_offset += coordinate * source.strides[input_axis];
+            }
+            result.data[linear] = source.data[input_offset];
+        }
+        return result;
+    }
+
+    ZTensor tiled(size_t times) const {
+        if (times == 0) throw std::invalid_argument("tile(): parameter times must be >= 1");
+        if (shape.empty()) throw std::invalid_argument("tile(): scalar tensor cannot be repeated");
+        if (shape[0] > std::numeric_limits<size_t>::max() / times) throw std::overflow_error(ZMATRIX_ERR_OVERFLOW);
+        std::vector<size_t> output_shape = shape;
+        output_shape[0] *= times;
+        ZTensor result(output_shape);
+        const size_t input_size = size();
+        const size_t output_size = result.size();
+        if (output_size == 0) {
+#ifdef HAVE_CUDA
+            if (device_valid) result.ensure_device();
+#endif
+            return result;
+        }
+#ifdef HAVE_CUDA
+        if (device_valid) {
+            result.allocate_device_for_write();
+            gpu_tile_device(d_data, result.d_data, input_size, output_size);
+            result.mark_device_modified();
+            return result;
+        }
+        ensure_host();
+#endif
+        for (size_t repeat = 0; repeat < times; ++repeat) {
+            std::copy(data.begin(), data.end(), result.data.begin() + repeat * input_size);
+        }
+        return result;
+    }
+
 
     void soma(ZTensor& out, int axis) const {
         if (shape.empty()) throw std::runtime_error(ZMATRIX_ERR_EMPTY_MATRIX);
@@ -2386,13 +2516,24 @@ ZTensor column(size_t col_idx) const {
             // usa default axis=1 (cumsum por linha — o mais comum em gradient
             // boosting / probabilidade cumulativa).
             ZTensor cumsum(long axis = -1) const {
-        #ifdef HAVE_CUDA
-                ensure_host();
-        #endif
                 if (shape.size() == 1) {
                     ZTensor result(shape);
                     const size_t N = size();
-                    if (N == 0) return result;
+                    if (N == 0) {
+#ifdef HAVE_CUDA
+                        if (device_valid) result.ensure_device();
+#endif
+                        return result;
+                    }
+#ifdef HAVE_CUDA
+                    if (device_valid) {
+                        result.allocate_device_for_write();
+                        gpu_cumsum_device(d_data, result.d_data, 1, N, 0, 1);
+                        result.mark_device_modified();
+                        return result;
+                    }
+                    ensure_host();
+#endif
                     const float* a = data.data();
                     float* r = result.data.data();
                     double running = 0.0;
@@ -2415,7 +2556,22 @@ ZTensor column(size_t col_idx) const {
                 const size_t rows = shape[0];
                 const size_t cols = shape[1];
                 ZTensor result(shape);
-                if (rows == 0 || cols == 0) return result;
+                if (rows == 0 || cols == 0) {
+#ifdef HAVE_CUDA
+                    if (device_valid) result.ensure_device();
+#endif
+                    return result;
+                }
+
+#ifdef HAVE_CUDA
+                if (device_valid) {
+                    result.allocate_device_for_write();
+                    gpu_cumsum_device(d_data, result.d_data, rows, cols, static_cast<int>(ax), 0);
+                    result.mark_device_modified();
+                    return result;
+                }
+                ensure_host();
+#endif
 
                 const float* p_in = data.data();
                 float* p_out = result.data.data();
