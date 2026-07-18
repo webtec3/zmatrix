@@ -163,4 +163,24 @@ assertResident($chain, 'matvec softmax chain');
 assertTree($chain->toArray(), ZTensor::arr([3, 7])->softmax()->toArray(), 'matvec softmax chain', 1.0e-5, 1.0e-5);
 passed('resident chains');
 
+$aliasSource = ZTensor::arr([1, 2, 3, 4])->toGpu();
+for ($iteration = 0; $iteration < 200; ++$iteration) {
+    $comparison = $aliasSource->greater(2);
+    $tiled = ZTensor::tile($aliasSource, ($iteration % 4) + 1);
+    $scanSize = 257 + (($iteration % 5) * 509);
+    $scan = ZTensor::ones([$scanSize])->toGpu()->cumsum();
+    if (!$comparison->isOnGpu() || !$tiled->isOnGpu() || !$scan->isOnGpu()) fail('repeated operation lost residency');
+    if ($iteration % 40 === 0) {
+        assertTree($comparison->toArray(), [0, 0, 1, 1], 'repeated greater');
+        $scanValues = $scan->toArray();
+        assertTree($scanValues[$scanSize - 1], (float) $scanSize, 'workspace growth scan');
+    }
+}
+assertTree($aliasSource->toArray(), [1, 2, 3, 4], 'alias source unchanged');
+
+try { ZTensor::ones([2])->toGpu()->dot(ZTensor::ones([3])->toGpu()); } catch (Throwable) {}
+$recovered = ZTensor::arr([[1, 2], [3, 4]])->toGpu()->dot(ZTensor::arr([1, 1])->toGpu());
+assertTree($recovered->toArray(), [3, 7], 'cuBLAS recovery after shape error');
+passed('repeated execution workspace growth aliasing and recovery');
+
 echo "All extended CUDA operation checks passed.\n";
