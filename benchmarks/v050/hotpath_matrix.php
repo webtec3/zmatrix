@@ -133,7 +133,7 @@ $document = [
         'repetitions' => MATRIX_REPETITIONS,
         'php' => PHP_VERSION,
         'zmatrix' => phpversion('zmatrix'),
-        'commit' => trim((string) shell_exec('git rev-parse HEAD')),
+        'commit' => trim((string) shell_exec('git -C ' . escapeshellarg(__DIR__ . '/../..') . ' rev-parse HEAD')),
         'binary_sha256' => hash_file('sha256', __DIR__ . '/../../modules/zmatrix.so'),
     ],
     'results' => $results,

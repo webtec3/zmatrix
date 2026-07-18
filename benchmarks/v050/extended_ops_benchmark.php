@@ -158,7 +158,7 @@ foreach ($cases as $name => $case) {
     echo "completed $name\n";
 }
 
-$commit = command('git rev-parse HEAD');
+$commit = command('git -C ' . escapeshellarg(__DIR__ . '/../..') . ' rev-parse HEAD');
 $binary = __DIR__ . '/../../modules/zmatrix.so';
 $document = [
     'environment' => [
