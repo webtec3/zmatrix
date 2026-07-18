@@ -6,6 +6,9 @@
 extern "C" int gpu_available();
 extern "C" void gpu_require_available();
 extern "C" const char* gpu_driver_path();
+extern "C" int gpu_memory_pools_supported();
+extern "C" int gpu_device_allocate(void** pointer, size_t bytes, int request_async, int* used_async);
+extern "C" int gpu_device_free(void* pointer, int allocation_was_async);
 extern "C" void gpu_add(float* a, const float* b, size_t n);
 extern "C" void gpu_sub(float* a, const float* b, size_t n);
 extern "C" void gpu_mul(float* a, const float* b, size_t n);

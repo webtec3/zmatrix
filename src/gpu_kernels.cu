@@ -253,6 +253,40 @@ private:
     cudaEvent_t stop_ = nullptr;
 };
 
+extern "C" int gpu_memory_pools_supported() {
+    int device = 0;
+    if (cudaGetDevice(&device) != cudaSuccess) return 0;
+    int supported = 0;
+    if (cudaDeviceGetAttribute(&supported, cudaDevAttrMemoryPoolsSupported, device) != cudaSuccess) return 0;
+    return supported != 0;
+}
+
+extern "C" int gpu_device_allocate(void** pointer, size_t bytes, int request_async, int* used_async) {
+    if (!pointer || !used_async) return static_cast<int>(cudaErrorInvalidValue);
+    *pointer = nullptr;
+    *used_async = 0;
+    if (request_async && gpu_memory_pools_supported()) {
+        const cudaError_t async_status = cudaMallocAsync(pointer, bytes, nullptr);
+        if (async_status == cudaSuccess) {
+            *used_async = 1;
+            return static_cast<int>(cudaSuccess);
+        }
+        if (async_status != cudaErrorNotSupported && async_status != cudaErrorInvalidValue) {
+            return static_cast<int>(async_status);
+        }
+        cudaGetLastError();
+    }
+    return static_cast<int>(cudaMalloc(pointer, bytes));
+}
+
+extern "C" int gpu_device_free(void* pointer, int allocation_was_async) {
+    if (!pointer) return static_cast<int>(cudaSuccess);
+    const cudaError_t status = allocation_was_async
+        ? cudaFreeAsync(pointer, nullptr)
+        : cudaFree(pointer);
+    return static_cast<int>(status);
+}
+
 // Caller holds reduction_cache_mutex. Synchronous reductions and scans reuse
 // this single CUB workspace and therefore cannot overlap in the current model.
 static void* ensure_cub_temporary_unlocked(size_t required_bytes, const char* context) {

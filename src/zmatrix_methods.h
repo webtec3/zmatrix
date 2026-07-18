@@ -1537,14 +1537,8 @@ PHP_METHOD(ZTensor, dot)
             size_t K = tensor_A->shape[1]; // Colunas de A (e tamanho de B)
 
             const bool profile = zmatrix_cuda_profile_enabled();
-            const auto host_start = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
-#ifdef HAVE_CUDA
-            ZTensor result_tensor({M}, tensor_A->device_valid || tensor_B.device_valid);
-#else
-            ZTensor result_tensor({M}); // Resultado é um vetor de tamanho M (já zerado)
-#endif
-            [[maybe_unused]] const double host_ms = profile ? zmatrix_elapsed_ms(host_start) : 0.0;
             if (M == 0) { // Se A é 0xK, resultado é vetor de tamanho 0
+                 ZTensor result_tensor({M});
                  zmatrix_return_tensor_obj(result_tensor, return_value, zmatrix_ce_ZTensor);
                  return;
             }
@@ -1552,22 +1546,26 @@ PHP_METHOD(ZTensor, dot)
 
 #ifdef HAVE_CUDA
             if (tensor_A->device_valid || tensor_B.device_valid) {
+                const auto transfer_start = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
                 tensor_A->ensure_device();
                 tensor_B.ensure_device();
-                const auto allocation_start = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
-                result_tensor.allocate_device_for_write();
-                const double allocation_ms = profile ? zmatrix_elapsed_ms(allocation_start) : 0.0;
+                const double transfer_ms = profile ? zmatrix_elapsed_ms(transfer_start) : 0.0;
+                double construction_ms = 0.0, allocation_ms = 0.0;
+                ZTensor result_tensor = ZTensor::create_device_result({M}, profile, construction_ms, allocation_ms);
                 const auto wrapper_start = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
                 gpu_matvec_device(tensor_A->d_data, tensor_B.d_data, result_tensor.d_data, M, K);
                 const double wrapper_ms = profile ? zmatrix_elapsed_ms(wrapper_start) : 0.0;
+                const auto state_start = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
                 result_tensor.mark_device_modified();
-                zmatrix_profile_result("matvec", host_ms, allocation_ms, wrapper_ms);
+                const double state_ms = profile ? zmatrix_elapsed_ms(state_start) : 0.0;
+                zmatrix_profile_result("matvec", construction_ms, allocation_ms, wrapper_ms, transfer_ms, state_ms);
                 zmatrix_return_tensor_obj(result_tensor, return_value, zmatrix_ce_ZTensor);
                 return;
             }
             tensor_A->ensure_host();
             tensor_B.ensure_host();
 #endif
+            ZTensor result_tensor({M}); // Resultado CPU é um vetor zerado.
             const float* a_data = tensor_A->data.data();
             const float* b_data = tensor_B.data.data();
             float* c_data = result_tensor.data.data();
