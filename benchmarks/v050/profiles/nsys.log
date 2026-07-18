@@ -1,0 +1,6 @@
+profile target validated
+Importer error status: The importer binary and its dependencies were not found.
+Unable to retrieve the importer version: skipping importation of the QDSTRM file.
+Generating '/tmp/nsys-report-a287.qdstrm'
+Generated:
+    /home/omgaalfa/php-projetos/php-extension/zmatrix/benchmarks/v050/profiles/zmatrix_systems.qdstrm

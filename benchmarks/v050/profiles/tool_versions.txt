@@ -1,0 +1,11 @@
+NVIDIA Nsight Systems version 2022.4.2.50-32196742v0
+NVIDIA (R) Nsight Compute Command Line Profiler
+Copyright (c) 2018-2023 NVIDIA Corporation
+Version 2022.4.1.0 (build 32308335) (public-release)
+name, driver_version, memory.total [MiB]
+NVIDIA GeForce RTX 3060, 576.02, 12288 MiB
+nvcc: NVIDIA (R) Cuda compiler driver
+Copyright (c) 2005-2023 NVIDIA Corporation
+Built on Fri_Jan__6_16:45:21_PST_2023
+Cuda compilation tools, release 12.0, V12.0.140
+Build cuda_12.0.r12.0/compiler.32267302_0

@@ -1,0 +1,5 @@
+==PROF== Connected to process 91894 (/usr/bin/php8.4)
+==ERROR== Profiling is not supported on device 0 as it uses the Windows Subsystem for Linux (WSL). Refer to https://docs.nvidia.com/nsight-compute/ReleaseNotes/#system-requirements for more details.
+profile target validated
+==PROF== Disconnected from process 91894
+==WARNING== No kernels were profiled.
