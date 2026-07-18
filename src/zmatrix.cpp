@@ -1065,7 +1065,7 @@ struct ZTensor {
 
     ZTensor greater_scalar(float scalar) const {
         const size_t n = size();
-        const bool profile = zmatrix_cuda_profile_enabled();
+        [[maybe_unused]] const bool profile = zmatrix_cuda_profile_enabled();
         if (n == 0) {
             ZTensor result(shape);
 #ifdef HAVE_CUDA
@@ -1100,7 +1100,7 @@ struct ZTensor {
             (broadcast_width != 1 && (shape.size() != 2 || shape[1] != broadcast_width)))) {
             throw std::invalid_argument(ZMATRIX_ERR_SHAPE_MISMATCH);
         }
-        const bool profile = zmatrix_cuda_profile_enabled();
+        [[maybe_unused]] const bool profile = zmatrix_cuda_profile_enabled();
         if (n == 0) {
             ZTensor result(shape);
 #ifdef HAVE_CUDA
@@ -1191,7 +1191,7 @@ struct ZTensor {
         if (shape[0] > std::numeric_limits<size_t>::max() / times) throw std::overflow_error(ZMATRIX_ERR_OVERFLOW);
         std::vector<size_t> output_shape = shape;
         output_shape[0] *= times;
-        const bool profile = zmatrix_cuda_profile_enabled();
+        [[maybe_unused]] const bool profile = zmatrix_cuda_profile_enabled();
         const size_t input_size = size();
         const size_t output_size = checked_element_count(output_shape);
         if (output_size == 0) {
@@ -2698,7 +2698,7 @@ ZTensor column(size_t col_idx) const {
             // boosting / probabilidade cumulativa).
             ZTensor cumsum(long axis = -1) const {
                 if (shape.size() == 1) {
-                    const bool profile = zmatrix_cuda_profile_enabled();
+                    [[maybe_unused]] const bool profile = zmatrix_cuda_profile_enabled();
                     const size_t N = size();
                     if (N == 0) {
                         ZTensor result(shape);

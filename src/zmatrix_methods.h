@@ -1443,8 +1443,8 @@ PHP_METHOD(ZTensor, dot)
     ZEND_PARSE_PARAMETERS_START(1, 1)
         Z_PARAM_ZVAL(other_zv)
     ZEND_PARSE_PARAMETERS_END();
-    const double parse_ms = php_profile ? zmatrix_elapsed_ms(parse_start) : 0.0;
-    const auto preparation_start = php_profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+    [[maybe_unused]] const double parse_ms = php_profile ? zmatrix_elapsed_ms(parse_start) : 0.0;
+    [[maybe_unused]] const auto preparation_start = php_profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
 
     zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
     if (!self_obj->tensor) {
@@ -1546,7 +1546,7 @@ PHP_METHOD(ZTensor, dot)
             size_t M = tensor_A->shape[0]; // Linhas de A
             size_t K = tensor_A->shape[1]; // Colunas de A (e tamanho de B)
 
-            const bool profile = zmatrix_cuda_profile_enabled();
+            [[maybe_unused]] const bool profile = zmatrix_cuda_profile_enabled();
             if (M == 0) { // Se A é 0xK, resultado é vetor de tamanho 0
                  ZTensor result_tensor({M});
                  zmatrix_return_tensor_obj(result_tensor, return_value, zmatrix_ce_ZTensor);
