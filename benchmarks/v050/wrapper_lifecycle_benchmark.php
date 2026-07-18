@@ -88,7 +88,7 @@ $root = dirname(__DIR__, 2);
 $document = [
     'environment' => [
         'timestamp' => date(DATE_ATOM), 'warmups' => LIFECYCLE_WARMUPS,
-        'repetitions' => LIFECYCLE_REPETITIONS, 'allocator' => getenv('ZMATRIX_CUDA_ALLOCATOR') ?: 'legacy',
+        'repetitions' => LIFECYCLE_REPETITIONS, 'allocator' => getenv('ZMATRIX_CUDA_ALLOCATOR') ?: 'auto',
         'commit' => trim((string) shell_exec('git -C ' . escapeshellarg($root) . ' rev-parse HEAD')),
         'binary_sha256' => hash_file('sha256', $root . '/modules/zmatrix.so'),
         'php_memory_bytes' => memory_get_usage(true), 'php_peak_bytes' => memory_get_peak_usage(true),
@@ -101,12 +101,12 @@ $json = __DIR__ . "/results/wrapper_lifecycle_$suffix.json";
 $csv = __DIR__ . "/results/wrapper_lifecycle_$suffix.csv";
 file_put_contents($json, json_encode($document, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . "\n");
 $handle = fopen($csv, 'wb');
-fputcsv($handle, ['operation', 'phase', 'cold_ms', 'min_ms', 'p25_ms', 'median_ms', 'p75_ms', 'max_ms', 'mad_ms']);
+fputcsv($handle, ['operation', 'phase', 'cold_ms', 'min_ms', 'p25_ms', 'median_ms', 'p75_ms', 'max_ms', 'mad_ms'], ',', '"', '');
 foreach ($results as $operation => $result) {
     foreach (['operation', 'destruction', 'gc'] as $phase) {
         $s = $result[$phase];
         fputcsv($handle, [$operation, $phase, $result['cold_ms'], $s['min_ms'], $s['p25_ms'],
-            $s['median_ms'], $s['p75_ms'], $s['max_ms'], $s['mad_ms']]);
+            $s['median_ms'], $s['p75_ms'], $s['max_ms'], $s['mad_ms']], ',', '"', '');
     }
 }
 fclose($handle);
