@@ -204,6 +204,24 @@ static inline bool ensure_buffer(size_t n, float *&buf, size_t &cap) {
     CUDA_CHECK_CONTEXT(cudaDeviceSynchronize(), context); \
 } while (0)
 
+// Caller holds reduction_cache_mutex. Synchronous reductions and scans reuse
+// this single CUB workspace and therefore cannot overlap in the current model.
+static void* ensure_cub_temporary_unlocked(size_t required_bytes, const char* context) {
+    if (required_bytes <= reduction_temporary_capacity && reduction_temporary) return reduction_temporary;
+    void* replacement = nullptr;
+    CUDA_CHECK_CONTEXT(cudaMalloc(&replacement, required_bytes), context);
+    if (reduction_temporary) {
+        const cudaError_t free_status = cudaFree(reduction_temporary);
+        if (free_status != cudaSuccess) {
+            cudaFree(replacement);
+            throw std::runtime_error(std::string(context) + ": CUB cache resize free failed: " + cudaGetErrorString(free_status));
+        }
+    }
+    reduction_temporary = replacement;
+    reduction_temporary_capacity = required_bytes;
+    return reduction_temporary;
+}
+
 template <typename T>
 class ScopedCudaBuffer {
 public:
@@ -1282,11 +1300,11 @@ extern "C" void gpu_cumsum_device(const float* d_input, float* d_output,
         void* temporary = nullptr;
         size_t temporary_bytes = 0;
         CUDA_CHECK_CONTEXT(cub::DeviceScan::InclusiveSum(temporary, temporary_bytes, d_input, d_output, n), "cumsum CUB size query");
-        ScopedCudaBuffer<unsigned char> storage(temporary_bytes, "cumsum CUB allocation");
-        temporary = storage.get();
+        std::lock_guard<std::mutex> cache_lock(reduction_cache_mutex);
+        init_reduction_cache();
+        temporary = ensure_cub_temporary_unlocked(temporary_bytes, "cumsum CUB cache");
         CUDA_CHECK_CONTEXT(cub::DeviceScan::InclusiveSum(temporary, temporary_bytes, d_input, d_output, n), "cumsum CUB scan");
         CUDA_KERNEL_CHECK("cumsum CUB execution");
-        storage.release_checked("cumsum CUB free");
         return;
     }
     if (axis != 0 && axis != 1) throw std::out_of_range("cumsum: invalid CUDA axis");
@@ -1421,20 +1439,8 @@ static float reduce_value_device(const float* input, size_t n, int mode, const c
             void* temporary = nullptr;
             size_t temporary_bytes = 0;
             CUDA_CHECK_CONTEXT(cub::DeviceReduce::Sum(temporary, temporary_bytes, input, output, n), context);
-            if (temporary_bytes > reduction_temporary_capacity) {
-                void* replacement = nullptr;
-                CUDA_CHECK_CONTEXT(cudaMalloc(&replacement, temporary_bytes), context);
-                if (reduction_temporary) {
-                    cudaError_t free_status = cudaFree(reduction_temporary);
-                    if (free_status != cudaSuccess) {
-                        cudaFree(replacement);
-                        throw std::runtime_error(std::string(context) + ": reduction cache resize free failed: " + cudaGetErrorString(free_status));
-                    }
-                }
-                reduction_temporary = replacement;
-                reduction_temporary_capacity = temporary_bytes;
-            }
-            CUDA_CHECK_CONTEXT(cub::DeviceReduce::Sum(reduction_temporary, reduction_temporary_capacity, input, output, n), context);
+            temporary = ensure_cub_temporary_unlocked(temporary_bytes, context);
+            CUDA_CHECK_CONTEXT(cub::DeviceReduce::Sum(temporary, temporary_bytes, input, output, n), context);
             CUDA_KERNEL_CHECK(context);
         } else {
             launch_reduce_axis(input, output, 1, n, 1, mode, context);
