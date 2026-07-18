@@ -22,6 +22,12 @@ ac_cv_path_NVCC=no \
 make clean >/dev/null
 make -j"$(nproc)" >/tmp/zmatrix-asan-build.log
 
+if ldd "$build_dir/modules/zmatrix.so" | grep -Eq 'libcuda|libcudart|libcublas|libcurand'; then
+    echo "CPU-only build unexpectedly links CUDA libraries" >&2
+    ldd "$build_dir/modules/zmatrix.so" >&2
+    exit 1
+fi
+
 asan_library="$(gcc -print-file-name=libasan.so)"
 LD_PRELOAD="$asan_library" \
 ASAN_OPTIONS="detect_leaks=1:halt_on_error=1" \
