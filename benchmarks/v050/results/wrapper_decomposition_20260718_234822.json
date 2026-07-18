@@ -1,0 +1,4669 @@
+{
+    "environment": {
+        "allocator": "auto",
+        "commit": "073f512827c3e4dd770b1223bd6565a9e7f03348",
+        "binary_sha256": "8f7a2199532e17f5fded12968da6127fffeba8cb0860d8aabb9e1e07b598b0e4"
+    },
+    "wrapper_summary": {
+        "greater_scalar": {
+            "result_creation_ms": {
+                "p25_ms": 0.00022,
+                "median_ms": 0.00033,
+                "p75_ms": 0.00033,
+                "samples_ms": [
+                    0.00022,
+                    0.00022,
+                    0.00022,
+                    0.00033,
+                    0.00033,
+                    0.00033,
+                    0.00033
+                ]
+            },
+            "device_allocation_ms": {
+                "p25_ms": 0.01397,
+                "median_ms": 0.01518,
+                "p75_ms": 0.016445,
+                "samples_ms": [
+                    0.01111,
+                    0.0132,
+                    0.01474,
+                    0.01518,
+                    0.01584,
+                    0.01705,
+                    0.04763
+                ]
+            },
+            "operand_transfer_ms": {
+                "p25_ms": 0,
+                "median_ms": 0,
+                "p75_ms": 0,
+                "samples_ms": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "cuda_submit_ms": {
+                "p25_ms": 0.096855,
+                "median_ms": 0.11517,
+                "p75_ms": 0.13821499999999998,
+                "samples_ms": [
+                    0.08877,
+                    0.0891,
+                    0.10461,
+                    0.11517,
+                    0.12771,
+                    0.14872,
+                    0.14916
+                ]
+            },
+            "state_update_ms": {
+                "p25_ms": 0.00022,
+                "median_ms": 0.00033,
+                "p75_ms": 0.000495,
+                "samples_ms": [
+                    0.00022,
+                    0.00022,
+                    0.00022,
+                    0.00033,
+                    0.00044,
+                    0.00055,
+                    0.00055
+                ]
+            }
+        },
+        "tile": {
+            "result_creation_ms": {
+                "p25_ms": 0.00022,
+                "median_ms": 0.00022,
+                "p75_ms": 0.00033,
+                "samples_ms": [
+                    0.00011,
+                    0.00022,
+                    0.00022,
+                    0.00022,
+                    0.00033,
+                    0.00033,
+                    0.00066
+                ]
+            },
+            "device_allocation_ms": {
+                "p25_ms": 0.011165000000000001,
+                "median_ms": 0.01243,
+                "p75_ms": 0.01353,
+                "samples_ms": [
+                    0.01078,
+                    0.01089,
+                    0.01144,
+                    0.01243,
+                    0.01287,
+                    0.01419,
+                    0.0209
+                ]
+            },
+            "operand_transfer_ms": {
+                "p25_ms": 0,
+                "median_ms": 0,
+                "p75_ms": 0,
+                "samples_ms": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "cuda_submit_ms": {
+                "p25_ms": 0.104225,
+                "median_ms": 0.1419,
+                "p75_ms": 0.293865,
+                "samples_ms": [
+                    0.10186,
+                    0.10373,
+                    0.10472,
+                    0.1419,
+                    0.2332,
+                    0.35453,
+                    0.6589
+                ]
+            },
+            "state_update_ms": {
+                "p25_ms": 0.000275,
+                "median_ms": 0.00033,
+                "p75_ms": 0.00055,
+                "samples_ms": [
+                    0.00011,
+                    0.00022,
+                    0.00033,
+                    0.00033,
+                    0.00044,
+                    0.00066,
+                    0.00121
+                ]
+            }
+        },
+        "cumsum_1d": {
+            "result_creation_ms": {
+                "p25_ms": 0.000495,
+                "median_ms": 0.00066,
+                "p75_ms": 0.0007149999999999999,
+                "samples_ms": [
+                    0.00022,
+                    0.00033,
+                    0.00066,
+                    0.00066,
+                    0.00066,
+                    0.00077,
+                    0.00132
+                ]
+            },
+            "device_allocation_ms": {
+                "p25_ms": 0.019525,
+                "median_ms": 0.02453,
+                "p75_ms": 0.029755000000000004,
+                "samples_ms": [
+                    0.01221,
+                    0.01485,
+                    0.0242,
+                    0.02453,
+                    0.02596,
+                    0.03355,
+                    0.03432
+                ]
+            },
+            "operand_transfer_ms": {
+                "p25_ms": 0,
+                "median_ms": 0,
+                "p75_ms": 0,
+                "samples_ms": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "cuda_submit_ms": {
+                "p25_ms": 0.21186,
+                "median_ms": 0.27654,
+                "p75_ms": 0.350075,
+                "samples_ms": [
+                    0.14212,
+                    0.18315,
+                    0.24057,
+                    0.27654,
+                    0.29018,
+                    0.40997,
+                    0.41283
+                ]
+            },
+            "state_update_ms": {
+                "p25_ms": 0.00066,
+                "median_ms": 0.00077,
+                "p75_ms": 0.00088,
+                "samples_ms": [
+                    0.00055,
+                    0.00055,
+                    0.00077,
+                    0.00077,
+                    0.00088,
+                    0.00088,
+                    0.00165
+                ]
+            }
+        },
+        "matvec": {
+            "result_creation_ms": {
+                "p25_ms": 0.00011,
+                "median_ms": 0.00011,
+                "p75_ms": 0.00011,
+                "samples_ms": [
+                    0.00011,
+                    0.00011,
+                    0.00011,
+                    0.00011,
+                    0.00011,
+                    0.00011,
+                    0.00022
+                ]
+            },
+            "device_allocation_ms": {
+                "p25_ms": 0.009184999999999999,
+                "median_ms": 0.00924,
+                "p75_ms": 0.009569999999999999,
+                "samples_ms": [
+                    0.00902,
+                    0.00913,
+                    0.00924,
+                    0.00924,
+                    0.00946,
+                    0.00968,
+                    0.01155
+                ]
+            },
+            "operand_transfer_ms": {
+                "p25_ms": 0.00671,
+                "median_ms": 0.00682,
+                "p75_ms": 0.00726,
+                "samples_ms": [
+                    0.00649,
+                    0.0066,
+                    0.00682,
+                    0.00682,
+                    0.00704,
+                    0.00748,
+                    0.00979
+                ]
+            },
+            "cuda_submit_ms": {
+                "p25_ms": 0.120835,
+                "median_ms": 0.12628,
+                "p75_ms": 0.13293500000000003,
+                "samples_ms": [
+                    0.10648,
+                    0.11594,
+                    0.12573,
+                    0.12628,
+                    0.12826,
+                    0.13761,
+                    0.17204
+                ]
+            },
+            "state_update_ms": {
+                "p25_ms": 0.00022,
+                "median_ms": 0.00033,
+                "p75_ms": 0.00033,
+                "samples_ms": [
+                    0.00022,
+                    0.00022,
+                    0.00022,
+                    0.00033,
+                    0.00033,
+                    0.00033,
+                    0.00044
+                ]
+            }
+        }
+    },
+    "php_summary": {
+        "greater_scalar": {
+            "parse_ms": {
+                "p25_ms": 0,
+                "median_ms": 0,
+                "p75_ms": 0,
+                "samples_ms": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0.00011
+                ]
+            },
+            "validation_and_residency_ms": {
+                "p25_ms": 0,
+                "median_ms": 0,
+                "p75_ms": 0,
+                "samples_ms": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "return_construction_ms": {
+                "p25_ms": 0.020735,
+                "median_ms": 0.02189,
+                "p75_ms": 0.02453,
+                "samples_ms": [
+                    0.02002,
+                    0.02035,
+                    0.02112,
+                    0.02189,
+                    0.02409,
+                    0.02497,
+                    0.02805
+                ]
+            }
+        },
+        "matvec": {
+            "parse_ms": {
+                "p25_ms": 0,
+                "median_ms": 0,
+                "p75_ms": 0,
+                "samples_ms": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0.00011
+                ]
+            },
+            "validation_and_residency_ms": {
+                "p25_ms": 0.00693,
+                "median_ms": 0.00704,
+                "p75_ms": 0.007425,
+                "samples_ms": [
+                    0.00671,
+                    0.00682,
+                    0.00704,
+                    0.00704,
+                    0.00715,
+                    0.0077,
+                    0.01001
+                ]
+            },
+            "return_construction_ms": {
+                "p25_ms": 0.020295,
+                "median_ms": 0.02244,
+                "p75_ms": 0.025079999999999998,
+                "samples_ms": [
+                    0.01991,
+                    0.02024,
+                    0.02035,
+                    0.02244,
+                    0.0242,
+                    0.02596,
+                    0.02651
+                ]
+            }
+        }
+    },
+    "device_summary": {
+        "greater": {
+            "p25_ms": 0.031744,
+            "median_ms": 0.037888,
+            "p75_ms": 0.067584,
+            "samples_ms": [
+                0.028672,
+                0.031744,
+                0.031744,
+                0.037888,
+                0.058368,
+                0.0768,
+                0.082944
+            ]
+        },
+        "tile": {
+            "p25_ms": 0.058368,
+            "median_ms": 0.063488,
+            "p75_ms": 0.066048,
+            "samples_ms": [
+                0.057344,
+                0.058368,
+                0.058368,
+                0.063488,
+                0.064512,
+                0.067584,
+                0.084992
+            ]
+        },
+        "cumsum_1d": {
+            "p25_ms": 0.07270399999999999,
+            "median_ms": 0.15712,
+            "p75_ms": 0.170576,
+            "samples_ms": [
+                0.065536,
+                0.070656,
+                0.074752,
+                0.15712,
+                0.167936,
+                0.173216,
+                0.313344
+            ]
+        },
+        "matvec": {
+            "p25_ms": 0.06912,
+            "median_ms": 0.080896,
+            "p75_ms": 0.082432,
+            "samples_ms": [
+                0.059392,
+                0.060416,
+                0.077824,
+                0.080896,
+                0.08192,
+                0.082944,
+                0.082944
+            ]
+        }
+    },
+    "lifecycle_summary": {
+        "allocate:async:4194304": {
+            "p25_ms": 0.00264,
+            "median_ms": 0.00385,
+            "p75_ms": 0.006325,
+            "samples_ms": [
+                0.00143,
+                0.00165,
+                0.00176,
+                0.00187,
+                0.00209,
+                0.0022,
+                0.00231,
+                0.00242,
+                0.00253,
+                0.00253,
+                0.00253,
+                0.00264,
+                0.00264,
+                0.00275,
+                0.00275,
+                0.00275,
+                0.00286,
+                0.00297,
+                0.00308,
+                0.00319,
+                0.00341,
+                0.00352,
+                0.00363,
+                0.00385,
+                0.00429,
+                0.00462,
+                0.00462,
+                0.00495,
+                0.00506,
+                0.00539,
+                0.00539,
+                0.00572,
+                0.00583,
+                0.00605,
+                0.00605,
+                0.0066,
+                0.0066,
+                0.00847,
+                0.0088,
+                0.00913,
+                0.00924,
+                0.00935,
+                0.01496,
+                0.01529,
+                0.01837,
+                0.0209,
+                21.50896
+            ]
+        },
+        "free:async:4194304": {
+            "p25_ms": 0.00121,
+            "median_ms": 0.00198,
+            "p75_ms": 0.002805,
+            "samples_ms": [
+                0.00088,
+                0.00088,
+                0.00088,
+                0.00088,
+                0.00099,
+                0.00099,
+                0.00099,
+                0.00099,
+                0.00099,
+                0.0011,
+                0.0011,
+                0.00121,
+                0.00121,
+                0.00121,
+                0.00121,
+                0.00121,
+                0.00121,
+                0.00132,
+                0.00132,
+                0.00143,
+                0.00154,
+                0.00176,
+                0.00187,
+                0.00198,
+                0.00198,
+                0.00209,
+                0.00209,
+                0.00209,
+                0.00209,
+                0.0022,
+                0.0022,
+                0.0022,
+                0.00231,
+                0.00231,
+                0.00275,
+                0.00286,
+                0.00297,
+                0.00297,
+                0.00319,
+                0.00341,
+                0.00363,
+                0.00385,
+                0.00396,
+                0.0055,
+                0.00814,
+                0.01342,
+                0.02255
+            ]
+        },
+        "destructor:async:4194304": {
+            "p25_ms": 0.004784999999999999,
+            "median_ms": 0.00572,
+            "p75_ms": 0.00737,
+            "samples_ms": [
+                0.00429,
+                0.00429,
+                0.0044,
+                0.0044,
+                0.0044,
+                0.0044,
+                0.00451,
+                0.00451,
+                0.00451,
+                0.00462,
+                0.00462,
+                0.00473,
+                0.00484,
+                0.00484,
+                0.00484,
+                0.00495,
+                0.00495,
+                0.00506,
+                0.00506,
+                0.00506,
+                0.00517,
+                0.00539,
+                0.0055,
+                0.00572,
+                0.00572,
+                0.00572,
+                0.00583,
+                0.00583,
+                0.00594,
+                0.00594,
+                0.00605,
+                0.00649,
+                0.00649,
+                0.00671,
+                0.00693,
+                0.00781,
+                0.00803,
+                0.0088,
+                0.0088,
+                0.01012,
+                0.01012,
+                0.01122,
+                0.01133,
+                0.01287,
+                0.02838,
+                0.0561,
+                0.06248
+            ]
+        },
+        "allocate:async:8388608": {
+            "p25_ms": 0.00264,
+            "median_ms": 0.0031349999999999998,
+            "p75_ms": 0.0038225,
+            "samples_ms": [
+                0.00154,
+                0.00187,
+                0.0022,
+                0.0022,
+                0.00242,
+                0.00264,
+                0.00264,
+                0.00275,
+                0.00286,
+                0.00297,
+                0.00308,
+                0.00319,
+                0.00319,
+                0.0033,
+                0.00352,
+                0.00374,
+                0.00385,
+                0.00396,
+                0.00517,
+                0.00583,
+                0.01133,
+                0.01419
+            ]
+        },
+        "free:async:8388608": {
+            "p25_ms": 0.0012374999999999999,
+            "median_ms": 0.001705,
+            "p75_ms": 0.002145,
+            "samples_ms": [
+                0.0011,
+                0.0011,
+                0.00121,
+                0.00121,
+                0.00121,
+                0.00121,
+                0.00132,
+                0.00132,
+                0.00143,
+                0.00143,
+                0.00165,
+                0.00176,
+                0.00176,
+                0.00176,
+                0.00176,
+                0.00198,
+                0.0022,
+                0.00231,
+                0.00242,
+                0.00286,
+                0.00352,
+                0.00418
+            ]
+        },
+        "destructor:async:8388608": {
+            "p25_ms": 0.00484,
+            "median_ms": 0.005719999999999999,
+            "p75_ms": 0.00693,
+            "samples_ms": [
+                0.00462,
+                0.00462,
+                0.00462,
+                0.00462,
+                0.00473,
+                0.00484,
+                0.00484,
+                0.00495,
+                0.00495,
+                0.00506,
+                0.0055,
+                0.00594,
+                0.00616,
+                0.00616,
+                0.00627,
+                0.0066,
+                0.00704,
+                0.00715,
+                0.00737,
+                0.00803,
+                0.00825,
+                0.00946
+            ]
+        },
+        "allocate:async:16777216": {
+            "p25_ms": 0.44165,
+            "median_ms": 0.44165,
+            "p75_ms": 0.44165,
+            "samples_ms": [
+                0.44165
+            ]
+        },
+        "allocate:async:8192": {
+            "p25_ms": 0.00253,
+            "median_ms": 0.00286,
+            "p75_ms": 0.00385,
+            "samples_ms": [
+                0.00176,
+                0.00198,
+                0.00231,
+                0.00242,
+                0.00242,
+                0.00253,
+                0.00253,
+                0.00253,
+                0.00264,
+                0.00264,
+                0.00275,
+                0.00286,
+                0.00308,
+                0.00308,
+                0.00341,
+                0.00352,
+                0.00385,
+                0.00385,
+                0.00407,
+                0.00429,
+                0.00506,
+                0.00847,
+                0.02068
+            ]
+        },
+        "free:async:8192": {
+            "p25_ms": 0.001265,
+            "median_ms": 0.00187,
+            "p75_ms": 0.00209,
+            "samples_ms": [
+                0.0011,
+                0.0011,
+                0.0011,
+                0.00121,
+                0.00121,
+                0.00121,
+                0.00132,
+                0.00143,
+                0.00143,
+                0.00154,
+                0.00165,
+                0.00187,
+                0.00198,
+                0.00198,
+                0.00198,
+                0.00198,
+                0.00209,
+                0.00209,
+                0.00209,
+                0.00209,
+                0.0022,
+                0.00264,
+                0.00396
+            ]
+        },
+        "destructor:async:8192": {
+            "p25_ms": 0.004895,
+            "median_ms": 0.0055,
+            "p75_ms": 0.005995,
+            "samples_ms": [
+                0.00462,
+                0.00462,
+                0.00462,
+                0.00473,
+                0.00473,
+                0.00484,
+                0.00495,
+                0.00495,
+                0.00495,
+                0.00528,
+                0.00539,
+                0.0055,
+                0.0055,
+                0.00561,
+                0.00561,
+                0.00583,
+                0.00594,
+                0.00605,
+                0.00616,
+                0.00627,
+                0.00693,
+                0.00825,
+                0.01419
+            ]
+        },
+        "free:async:16777216": {
+            "p25_ms": 0.0011,
+            "median_ms": 0.0011,
+            "p75_ms": 0.0011,
+            "samples_ms": [
+                0.0011
+            ]
+        },
+        "destructor:async:16777216": {
+            "p25_ms": 0.00462,
+            "median_ms": 0.00462,
+            "p75_ms": 0.00462,
+            "samples_ms": [
+                0.00462
+            ]
+        }
+    },
+    "raw": {
+        "wrapper": {
+            "greater_scalar": [
+                {
+                    "operation": "greater_scalar",
+                    "result_creation_ms": 0.00616,
+                    "device_allocation_ms": 0.06578,
+                    "operand_transfer_ms": 0,
+                    "cuda_submit_ms": 3.63264,
+                    "state_update_ms": 0.00242
+                },
+                {
+                    "operation": "greater_scalar",
+                    "result_creation_ms": 0.00055,
+                    "device_allocation_ms": 0.0374,
+                    "operand_transfer_ms": 0,
+                    "cuda_submit_ms": 0.09317,
+                    "state_update_ms": 0.00033
+                },
+                {
+                    "operation": "greater_scalar",
+                    "result_creation_ms": 0.00022,
+                    "device_allocation_ms": 0.03905,
+                    "operand_transfer_ms": 0,
+                    "cuda_submit_ms": 0.10142,
+                    "state_update_ms": 0.00033
+                },
+                {
+                    "operation": "greater_scalar",
+                    "result_creation_ms": 0.00022,
+                    "device_allocation_ms": 0.011,
+                    "operand_transfer_ms": 0,
+                    "cuda_submit_ms": 0.10626,
+                    "state_update_ms": 0.00066
+                },
+                {
+                    "operation": "greater_scalar",
+                    "result_creation_ms": 0.00033,
+                    "device_allocation_ms": 0.01518,
+                    "operand_transfer_ms": 0,
+                    "cuda_submit_ms": 0.14872,
+                    "state_update_ms": 0.00055
+                },
+                {
+                    "operation": "greater_scalar",
+                    "result_creation_ms": 0.00022,
+                    "device_allocation_ms": 0.0132,
+                    "operand_transfer_ms": 0,
+                    "cuda_submit_ms": 0.12771,
+                    "state_update_ms": 0.00022
+                },
+                {
+                    "operation": "greater_scalar",
+                    "result_creation_ms": 0.00022,
+                    "device_allocation_ms": 0.04763,
+                    "operand_transfer_ms": 0,
+                    "cuda_submit_ms": 0.11517,
+                    "state_update_ms": 0.00055
+                },
+                {
+                    "operation": "greater_scalar",
+                    "result_creation_ms": 0.00033,
+                    "device_allocation_ms": 0.01474,
+                    "operand_transfer_ms": 0,
+                    "cuda_submit_ms": 0.08877,
+                    "state_update_ms": 0.00022
+                },
+                {
+                    "operation": "greater_scalar",
+                    "result_creation_ms": 0.00022,
+                    "device_allocation_ms": 0.01705,
+                    "operand_transfer_ms": 0,
+                    "cuda_submit_ms": 0.14916,
+                    "state_update_ms": 0.00044
+                },
+                {
+                    "operation": "greater_scalar",
+                    "result_creation_ms": 0.00033,
+                    "device_allocation_ms": 0.01584,
+                    "operand_transfer_ms": 0,
+                    "cuda_submit_ms": 0.0891,
+                    "state_update_ms": 0.00033
+                },
+                {
+                    "operation": "greater_scalar",
+                    "result_creation_ms": 0.00033,
+                    "device_allocation_ms": 0.01111,
+                    "operand_transfer_ms": 0,
+                    "cuda_submit_ms": 0.10461,
+                    "state_update_ms": 0.00022
+                }
+            ],
+            "tile": [
+                {
+                    "operation": "tile",
+                    "result_creation_ms": 0.00066,
+                    "device_allocation_ms": 0.04246,
+                    "operand_transfer_ms": 0,
+                    "cuda_submit_ms": 0.29018,
+                    "state_update_ms": 0.00077
+                },
+                {
+                    "operation": "tile",
+                    "result_creation_ms": 0.00044,
+                    "device_allocation_ms": 0.01551,
+                    "operand_transfer_ms": 0,
+                    "cuda_submit_ms": 0.18414,
+                    "state_update_ms": 0.00022
+                },
+                {
+                    "operation": "tile",
+                    "result_creation_ms": 0.00022,
+                    "device_allocation_ms": 0.02541,
+                    "operand_transfer_ms": 0,
+                    "cuda_submit_ms": 0.1507,
+                    "state_update_ms": 0.00033
+                },
+                {
+                    "operation": "tile",
+                    "result_creation_ms": 0.00022,
+                    "device_allocation_ms": 0.00979,
+                    "operand_transfer_ms": 0,
+                    "cuda_submit_ms": 0.11495,
+                    "state_update_ms": 0.00022
+                },
+                {
+                    "operation": "tile",
+                    "result_creation_ms": 0.00011,
+                    "device_allocation_ms": 0.01144,
+                    "operand_transfer_ms": 0,
+                    "cuda_submit_ms": 0.10373,
+                    "state_update_ms": 0.00022
+                },
+                {
+                    "operation": "tile",
+                    "result_creation_ms": 0.00022,
+                    "device_allocation_ms": 0.01078,
+                    "operand_transfer_ms": 0,
+                    "cuda_submit_ms": 0.10186,
+                    "state_update_ms": 0.00011
+                },
+                {
+                    "operation": "tile",
+                    "result_creation_ms": 0.00033,
+                    "device_allocation_ms": 0.01287,
+                    "operand_transfer_ms": 0,
+                    "cuda_submit_ms": 0.10472,
+                    "state_update_ms": 0.00033
+                },
+                {
+                    "operation": "tile",
+                    "result_creation_ms": 0.00022,
+                    "device_allocation_ms": 0.01089,
+                    "operand_transfer_ms": 0,
+                    "cuda_submit_ms": 0.35453,
+                    "state_update_ms": 0.00066
+                },
+                {
+                    "operation": "tile",
+                    "result_creation_ms": 0.00033,
+                    "device_allocation_ms": 0.01419,
+                    "operand_transfer_ms": 0,
+                    "cuda_submit_ms": 0.1419,
+                    "state_update_ms": 0.00033
+                },
+                {
+                    "operation": "tile",
+                    "result_creation_ms": 0.00022,
+                    "device_allocation_ms": 0.01243,
+                    "operand_transfer_ms": 0,
+                    "cuda_submit_ms": 0.6589,
+                    "state_update_ms": 0.00121
+                },
+                {
+                    "operation": "tile",
+                    "result_creation_ms": 0.00066,
+                    "device_allocation_ms": 0.0209,
+                    "operand_transfer_ms": 0,
+                    "cuda_submit_ms": 0.2332,
+                    "state_update_ms": 0.00044
+                }
+            ],
+            "cumsum_1d": [
+                {
+                    "operation": "cumsum_1d",
+                    "result_creation_ms": 0.00187,
+                    "device_allocation_ms": 0.03564,
+                    "operand_transfer_ms": 0,
+                    "cuda_submit_ms": 0.93874,
+                    "state_update_ms": 0.00187
+                },
+                {
+                    "operation": "cumsum_1d",
+                    "result_creation_ms": 0.00044,
+                    "device_allocation_ms": 0.01639,
+                    "operand_transfer_ms": 0,
+                    "cuda_submit_ms": 0.0869,
+                    "state_update_ms": 0.00033
+                },
+                {
+                    "operation": "cumsum_1d",
+                    "result_creation_ms": 0.00033,
+                    "device_allocation_ms": 0.00891,
+                    "operand_transfer_ms": 0,
+                    "cuda_submit_ms": 0.15411,
+                    "state_update_ms": 0.00044
+                },
+                {
+                    "operation": "cumsum_1d",
+                    "result_creation_ms": 0.00022,
+                    "device_allocation_ms": 0.00979,
+                    "operand_transfer_ms": 0,
+                    "cuda_submit_ms": 0.09636,
+                    "state_update_ms": 0.00022
+                },
+                {
+                    "operation": "cumsum_1d",
+                    "result_creation_ms": 0.00033,
+                    "device_allocation_ms": 0.01221,
+                    "operand_transfer_ms": 0,
+                    "cuda_submit_ms": 0.14212,
+                    "state_update_ms": 0.00077
+                },
+                {
+                    "operation": "cumsum_1d",
+                    "result_creation_ms": 0.00022,
+                    "device_allocation_ms": 0.01485,
+                    "operand_transfer_ms": 0,
+                    "cuda_submit_ms": 0.27654,
+                    "state_update_ms": 0.00088
+                },
+                {
+                    "operation": "cumsum_1d",
+                    "result_creation_ms": 0.00077,
+                    "device_allocation_ms": 0.03432,
+                    "operand_transfer_ms": 0,
+                    "cuda_submit_ms": 0.29018,
+                    "state_update_ms": 0.00055
+                },
+                {
+                    "operation": "cumsum_1d",
+                    "result_creation_ms": 0.00066,
+                    "device_allocation_ms": 0.02453,
+                    "operand_transfer_ms": 0,
+                    "cuda_submit_ms": 0.40997,
+                    "state_update_ms": 0.00077
+                },
+                {
+                    "operation": "cumsum_1d",
+                    "result_creation_ms": 0.00066,
+                    "device_allocation_ms": 0.02596,
+                    "operand_transfer_ms": 0,
+                    "cuda_submit_ms": 0.18315,
+                    "state_update_ms": 0.00055
+                },
+                {
+                    "operation": "cumsum_1d",
+                    "result_creation_ms": 0.00066,
+                    "device_allocation_ms": 0.0242,
+                    "operand_transfer_ms": 0,
+                    "cuda_submit_ms": 0.24057,
+                    "state_update_ms": 0.00088
+                },
+                {
+                    "operation": "cumsum_1d",
+                    "result_creation_ms": 0.00132,
+                    "device_allocation_ms": 0.03355,
+                    "operand_transfer_ms": 0,
+                    "cuda_submit_ms": 0.41283,
+                    "state_update_ms": 0.00165
+                }
+            ],
+            "matvec": [
+                {
+                    "operation": "matvec",
+                    "result_creation_ms": 0.00044,
+                    "device_allocation_ms": 0.01507,
+                    "operand_transfer_ms": 0.03476,
+                    "cuda_submit_ms": 20.22625,
+                    "state_update_ms": 0.00176
+                },
+                {
+                    "operation": "matvec",
+                    "result_creation_ms": 0.00033,
+                    "device_allocation_ms": 0.01177,
+                    "operand_transfer_ms": 0.01716,
+                    "cuda_submit_ms": 0.18601,
+                    "state_update_ms": 0.00033
+                },
+                {
+                    "operation": "matvec",
+                    "result_creation_ms": 0.00033,
+                    "device_allocation_ms": 0.00814,
+                    "operand_transfer_ms": 0.00781,
+                    "cuda_submit_ms": 0.21362,
+                    "state_update_ms": 0.00022
+                },
+                {
+                    "operation": "matvec",
+                    "result_creation_ms": 0.00011,
+                    "device_allocation_ms": 0.00781,
+                    "operand_transfer_ms": 0.00671,
+                    "cuda_submit_ms": 0.17798,
+                    "state_update_ms": 0.00055
+                },
+                {
+                    "operation": "matvec",
+                    "result_creation_ms": 0.00011,
+                    "device_allocation_ms": 0.01155,
+                    "operand_transfer_ms": 0.00979,
+                    "cuda_submit_ms": 0.17204,
+                    "state_update_ms": 0.00033
+                },
+                {
+                    "operation": "matvec",
+                    "result_creation_ms": 0.00011,
+                    "device_allocation_ms": 0.00968,
+                    "operand_transfer_ms": 0.00748,
+                    "cuda_submit_ms": 0.11594,
+                    "state_update_ms": 0.00022
+                },
+                {
+                    "operation": "matvec",
+                    "result_creation_ms": 0.00011,
+                    "device_allocation_ms": 0.00924,
+                    "operand_transfer_ms": 0.00682,
+                    "cuda_submit_ms": 0.12628,
+                    "state_update_ms": 0.00022
+                },
+                {
+                    "operation": "matvec",
+                    "result_creation_ms": 0.00011,
+                    "device_allocation_ms": 0.00913,
+                    "operand_transfer_ms": 0.00682,
+                    "cuda_submit_ms": 0.13761,
+                    "state_update_ms": 0.00044
+                },
+                {
+                    "operation": "matvec",
+                    "result_creation_ms": 0.00011,
+                    "device_allocation_ms": 0.00946,
+                    "operand_transfer_ms": 0.00704,
+                    "cuda_submit_ms": 0.12826,
+                    "state_update_ms": 0.00033
+                },
+                {
+                    "operation": "matvec",
+                    "result_creation_ms": 0.00011,
+                    "device_allocation_ms": 0.00902,
+                    "operand_transfer_ms": 0.0066,
+                    "cuda_submit_ms": 0.12573,
+                    "state_update_ms": 0.00033
+                },
+                {
+                    "operation": "matvec",
+                    "result_creation_ms": 0.00022,
+                    "device_allocation_ms": 0.00924,
+                    "operand_transfer_ms": 0.00649,
+                    "cuda_submit_ms": 0.10648,
+                    "state_update_ms": 0.00022
+                }
+            ]
+        },
+        "device": {
+            "greater": [
+                3.16368,
+                0.03072,
+                0.031744,
+                0.031744,
+                0.082944,
+                0.058368,
+                0.031744,
+                0.028672,
+                0.0768,
+                0.037888,
+                0.031744
+            ],
+            "tile": [
+                0.204096,
+                0.057344,
+                0.104448,
+                0.057344,
+                0.064512,
+                0.058368,
+                0.063488,
+                0.084992,
+                0.067584,
+                0.058368,
+                0.057344
+            ],
+            "cumsum_1d": [
+                0.249248,
+                0.041984,
+                0.062464,
+                0.058368,
+                0.065536,
+                0.167936,
+                0.173216,
+                0.313344,
+                0.074752,
+                0.15712,
+                0.070656
+            ],
+            "matvec": [
+                4.186112,
+                0.11264,
+                0.060416,
+                0.101376,
+                0.077824,
+                0.060416,
+                0.08192,
+                0.080896,
+                0.082944,
+                0.082944,
+                0.059392
+            ]
+        },
+        "lifecycle": [
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0.00319,
+                "status": 0,
+                "allocations": 0,
+                "frees": 0,
+                "destructors": 1
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 21.50896,
+                "status": 0,
+                "allocations": 1,
+                "frees": 0,
+                "destructors": 1
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.0209,
+                "status": 0,
+                "allocations": 2,
+                "frees": 0,
+                "destructors": 1
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0.00011,
+                "status": 0,
+                "allocations": 2,
+                "frees": 0,
+                "destructors": 2
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00935,
+                "status": 0,
+                "allocations": 3,
+                "frees": 0,
+                "destructors": 2
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00814,
+                "status": 0,
+                "allocations": 3,
+                "frees": 1,
+                "destructors": 2
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.01287,
+                "status": 0,
+                "allocations": 3,
+                "frees": 1,
+                "destructors": 3
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00132,
+                "status": 0,
+                "allocations": 3,
+                "frees": 2,
+                "destructors": 3
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00506,
+                "status": 0,
+                "allocations": 3,
+                "frees": 2,
+                "destructors": 4
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.01837,
+                "status": 0,
+                "allocations": 4,
+                "frees": 2,
+                "destructors": 4
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0,
+                "status": 0,
+                "allocations": 4,
+                "frees": 2,
+                "destructors": 5
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00847,
+                "status": 0,
+                "allocations": 5,
+                "frees": 2,
+                "destructors": 5
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00231,
+                "status": 0,
+                "allocations": 5,
+                "frees": 3,
+                "destructors": 5
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00605,
+                "status": 0,
+                "allocations": 5,
+                "frees": 3,
+                "destructors": 6
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00088,
+                "status": 0,
+                "allocations": 5,
+                "frees": 4,
+                "destructors": 6
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.0044,
+                "status": 0,
+                "allocations": 5,
+                "frees": 4,
+                "destructors": 7
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00176,
+                "status": 0,
+                "allocations": 6,
+                "frees": 4,
+                "destructors": 7
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0.00011,
+                "status": 0,
+                "allocations": 6,
+                "frees": 4,
+                "destructors": 8
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00385,
+                "status": 0,
+                "allocations": 7,
+                "frees": 4,
+                "destructors": 8
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00286,
+                "status": 0,
+                "allocations": 7,
+                "frees": 5,
+                "destructors": 8
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00649,
+                "status": 0,
+                "allocations": 7,
+                "frees": 5,
+                "destructors": 9
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00099,
+                "status": 0,
+                "allocations": 7,
+                "frees": 6,
+                "destructors": 9
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.0044,
+                "status": 0,
+                "allocations": 7,
+                "frees": 6,
+                "destructors": 10
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00187,
+                "status": 0,
+                "allocations": 8,
+                "frees": 6,
+                "destructors": 10
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0,
+                "status": 0,
+                "allocations": 8,
+                "frees": 6,
+                "destructors": 11
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00352,
+                "status": 0,
+                "allocations": 9,
+                "frees": 6,
+                "destructors": 11
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.0022,
+                "status": 0,
+                "allocations": 9,
+                "frees": 7,
+                "destructors": 11
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00594,
+                "status": 0,
+                "allocations": 9,
+                "frees": 7,
+                "destructors": 12
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00143,
+                "status": 0,
+                "allocations": 9,
+                "frees": 8,
+                "destructors": 12
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00517,
+                "status": 0,
+                "allocations": 9,
+                "frees": 8,
+                "destructors": 13
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00341,
+                "status": 0,
+                "allocations": 10,
+                "frees": 8,
+                "destructors": 13
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0,
+                "status": 0,
+                "allocations": 10,
+                "frees": 8,
+                "destructors": 14
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00429,
+                "status": 0,
+                "allocations": 11,
+                "frees": 8,
+                "destructors": 14
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00209,
+                "status": 0,
+                "allocations": 11,
+                "frees": 9,
+                "destructors": 14
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00594,
+                "status": 0,
+                "allocations": 11,
+                "frees": 9,
+                "destructors": 15
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00132,
+                "status": 0,
+                "allocations": 11,
+                "frees": 10,
+                "destructors": 15
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00484,
+                "status": 0,
+                "allocations": 11,
+                "frees": 10,
+                "destructors": 16
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00264,
+                "status": 0,
+                "allocations": 12,
+                "frees": 10,
+                "destructors": 16
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0,
+                "status": 0,
+                "allocations": 12,
+                "frees": 10,
+                "destructors": 17
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00297,
+                "status": 0,
+                "allocations": 13,
+                "frees": 10,
+                "destructors": 17
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00231,
+                "status": 0,
+                "allocations": 13,
+                "frees": 11,
+                "destructors": 17
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00583,
+                "status": 0,
+                "allocations": 13,
+                "frees": 11,
+                "destructors": 18
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00121,
+                "status": 0,
+                "allocations": 13,
+                "frees": 12,
+                "destructors": 18
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00462,
+                "status": 0,
+                "allocations": 13,
+                "frees": 12,
+                "destructors": 19
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00264,
+                "status": 0,
+                "allocations": 14,
+                "frees": 12,
+                "destructors": 19
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0.00011,
+                "status": 0,
+                "allocations": 14,
+                "frees": 12,
+                "destructors": 20
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.0066,
+                "status": 0,
+                "allocations": 15,
+                "frees": 12,
+                "destructors": 20
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00209,
+                "status": 0,
+                "allocations": 15,
+                "frees": 13,
+                "destructors": 20
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00572,
+                "status": 0,
+                "allocations": 15,
+                "frees": 13,
+                "destructors": 21
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00099,
+                "status": 0,
+                "allocations": 15,
+                "frees": 14,
+                "destructors": 21
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00462,
+                "status": 0,
+                "allocations": 15,
+                "frees": 14,
+                "destructors": 22
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00253,
+                "status": 0,
+                "allocations": 16,
+                "frees": 14,
+                "destructors": 22
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0,
+                "status": 0,
+                "allocations": 16,
+                "frees": 14,
+                "destructors": 23
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00286,
+                "status": 0,
+                "allocations": 17,
+                "frees": 14,
+                "destructors": 23
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00176,
+                "status": 0,
+                "allocations": 17,
+                "frees": 15,
+                "destructors": 23
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00539,
+                "status": 0,
+                "allocations": 17,
+                "frees": 15,
+                "destructors": 24
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00099,
+                "status": 0,
+                "allocations": 17,
+                "frees": 16,
+                "destructors": 24
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.0044,
+                "status": 0,
+                "allocations": 17,
+                "frees": 16,
+                "destructors": 25
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00242,
+                "status": 0,
+                "allocations": 18,
+                "frees": 16,
+                "destructors": 25
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0.00011,
+                "status": 0,
+                "allocations": 18,
+                "frees": 16,
+                "destructors": 26
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00363,
+                "status": 0,
+                "allocations": 19,
+                "frees": 16,
+                "destructors": 26
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00209,
+                "status": 0,
+                "allocations": 19,
+                "frees": 17,
+                "destructors": 26
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00583,
+                "status": 0,
+                "allocations": 19,
+                "frees": 17,
+                "destructors": 27
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.0011,
+                "status": 0,
+                "allocations": 19,
+                "frees": 18,
+                "destructors": 27
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00451,
+                "status": 0,
+                "allocations": 19,
+                "frees": 18,
+                "destructors": 28
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00319,
+                "status": 0,
+                "allocations": 20,
+                "frees": 18,
+                "destructors": 28
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0.00011,
+                "status": 0,
+                "allocations": 20,
+                "frees": 18,
+                "destructors": 29
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00275,
+                "status": 0,
+                "allocations": 21,
+                "frees": 18,
+                "destructors": 29
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00198,
+                "status": 0,
+                "allocations": 21,
+                "frees": 19,
+                "destructors": 29
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00572,
+                "status": 0,
+                "allocations": 21,
+                "frees": 19,
+                "destructors": 30
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00099,
+                "status": 0,
+                "allocations": 21,
+                "frees": 20,
+                "destructors": 30
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00451,
+                "status": 0,
+                "allocations": 21,
+                "frees": 20,
+                "destructors": 31
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00253,
+                "status": 0,
+                "allocations": 22,
+                "frees": 20,
+                "destructors": 31
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0,
+                "status": 0,
+                "allocations": 22,
+                "frees": 20,
+                "destructors": 32
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00275,
+                "status": 0,
+                "allocations": 23,
+                "frees": 20,
+                "destructors": 32
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00187,
+                "status": 0,
+                "allocations": 23,
+                "frees": 21,
+                "destructors": 32
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.0055,
+                "status": 0,
+                "allocations": 23,
+                "frees": 21,
+                "destructors": 33
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00121,
+                "status": 0,
+                "allocations": 23,
+                "frees": 22,
+                "destructors": 33
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00484,
+                "status": 0,
+                "allocations": 23,
+                "frees": 22,
+                "destructors": 34
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0.0011,
+                "status": 0,
+                "allocations": 23,
+                "frees": 22,
+                "destructors": 35
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0.00011,
+                "status": 0,
+                "allocations": 23,
+                "frees": 22,
+                "destructors": 36
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0.00022,
+                "status": 0,
+                "allocations": 23,
+                "frees": 22,
+                "destructors": 37
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.01529,
+                "status": 0,
+                "allocations": 24,
+                "frees": 22,
+                "destructors": 37
+            },
+            {
+                "event": "allocate",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.01419,
+                "status": 0,
+                "allocations": 25,
+                "frees": 22,
+                "destructors": 37
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0.00022,
+                "status": 0,
+                "allocations": 25,
+                "frees": 22,
+                "destructors": 38
+            },
+            {
+                "event": "allocate",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00517,
+                "status": 0,
+                "allocations": 26,
+                "frees": 22,
+                "destructors": 38
+            },
+            {
+                "event": "free",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00352,
+                "status": 0,
+                "allocations": 26,
+                "frees": 23,
+                "destructors": 38
+            },
+            {
+                "event": "destructor",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00825,
+                "status": 0,
+                "allocations": 26,
+                "frees": 23,
+                "destructors": 39
+            },
+            {
+                "event": "free",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00176,
+                "status": 0,
+                "allocations": 26,
+                "frees": 24,
+                "destructors": 39
+            },
+            {
+                "event": "destructor",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.0055,
+                "status": 0,
+                "allocations": 26,
+                "frees": 24,
+                "destructors": 40
+            },
+            {
+                "event": "allocate",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00352,
+                "status": 0,
+                "allocations": 27,
+                "frees": 24,
+                "destructors": 40
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0.00011,
+                "status": 0,
+                "allocations": 27,
+                "frees": 24,
+                "destructors": 41
+            },
+            {
+                "event": "allocate",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.0033,
+                "status": 0,
+                "allocations": 28,
+                "frees": 24,
+                "destructors": 41
+            },
+            {
+                "event": "free",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00198,
+                "status": 0,
+                "allocations": 28,
+                "frees": 25,
+                "destructors": 41
+            },
+            {
+                "event": "destructor",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.0066,
+                "status": 0,
+                "allocations": 28,
+                "frees": 25,
+                "destructors": 42
+            },
+            {
+                "event": "free",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00121,
+                "status": 0,
+                "allocations": 28,
+                "frees": 26,
+                "destructors": 42
+            },
+            {
+                "event": "destructor",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00484,
+                "status": 0,
+                "allocations": 28,
+                "frees": 26,
+                "destructors": 43
+            },
+            {
+                "event": "allocate",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00187,
+                "status": 0,
+                "allocations": 29,
+                "frees": 26,
+                "destructors": 43
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0.00011,
+                "status": 0,
+                "allocations": 29,
+                "frees": 26,
+                "destructors": 44
+            },
+            {
+                "event": "allocate",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00385,
+                "status": 0,
+                "allocations": 30,
+                "frees": 26,
+                "destructors": 44
+            },
+            {
+                "event": "free",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00176,
+                "status": 0,
+                "allocations": 30,
+                "frees": 27,
+                "destructors": 44
+            },
+            {
+                "event": "destructor",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00627,
+                "status": 0,
+                "allocations": 30,
+                "frees": 27,
+                "destructors": 45
+            },
+            {
+                "event": "free",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.0011,
+                "status": 0,
+                "allocations": 30,
+                "frees": 28,
+                "destructors": 45
+            },
+            {
+                "event": "destructor",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00462,
+                "status": 0,
+                "allocations": 30,
+                "frees": 28,
+                "destructors": 46
+            },
+            {
+                "event": "allocate",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00154,
+                "status": 0,
+                "allocations": 31,
+                "frees": 28,
+                "destructors": 46
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0,
+                "status": 0,
+                "allocations": 31,
+                "frees": 28,
+                "destructors": 47
+            },
+            {
+                "event": "allocate",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00297,
+                "status": 0,
+                "allocations": 32,
+                "frees": 28,
+                "destructors": 47
+            },
+            {
+                "event": "free",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00165,
+                "status": 0,
+                "allocations": 32,
+                "frees": 29,
+                "destructors": 47
+            },
+            {
+                "event": "destructor",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00594,
+                "status": 0,
+                "allocations": 32,
+                "frees": 29,
+                "destructors": 48
+            },
+            {
+                "event": "free",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00121,
+                "status": 0,
+                "allocations": 32,
+                "frees": 30,
+                "destructors": 48
+            },
+            {
+                "event": "destructor",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00462,
+                "status": 0,
+                "allocations": 32,
+                "frees": 30,
+                "destructors": 49
+            },
+            {
+                "event": "allocate",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00242,
+                "status": 0,
+                "allocations": 33,
+                "frees": 30,
+                "destructors": 49
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0.00011,
+                "status": 0,
+                "allocations": 33,
+                "frees": 30,
+                "destructors": 50
+            },
+            {
+                "event": "allocate",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00264,
+                "status": 0,
+                "allocations": 34,
+                "frees": 30,
+                "destructors": 50
+            },
+            {
+                "event": "free",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00176,
+                "status": 0,
+                "allocations": 34,
+                "frees": 31,
+                "destructors": 50
+            },
+            {
+                "event": "destructor",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00616,
+                "status": 0,
+                "allocations": 34,
+                "frees": 31,
+                "destructors": 51
+            },
+            {
+                "event": "free",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.0011,
+                "status": 0,
+                "allocations": 34,
+                "frees": 32,
+                "destructors": 51
+            },
+            {
+                "event": "destructor",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00462,
+                "status": 0,
+                "allocations": 34,
+                "frees": 32,
+                "destructors": 52
+            },
+            {
+                "event": "allocate",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.0022,
+                "status": 0,
+                "allocations": 35,
+                "frees": 32,
+                "destructors": 52
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0,
+                "status": 0,
+                "allocations": 35,
+                "frees": 32,
+                "destructors": 53
+            },
+            {
+                "event": "allocate",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00264,
+                "status": 0,
+                "allocations": 36,
+                "frees": 32,
+                "destructors": 53
+            },
+            {
+                "event": "free",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.0022,
+                "status": 0,
+                "allocations": 36,
+                "frees": 33,
+                "destructors": 53
+            },
+            {
+                "event": "destructor",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00803,
+                "status": 0,
+                "allocations": 36,
+                "frees": 33,
+                "destructors": 54
+            },
+            {
+                "event": "free",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00132,
+                "status": 0,
+                "allocations": 36,
+                "frees": 34,
+                "destructors": 54
+            },
+            {
+                "event": "destructor",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00484,
+                "status": 0,
+                "allocations": 36,
+                "frees": 34,
+                "destructors": 55
+            },
+            {
+                "event": "allocate",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00275,
+                "status": 0,
+                "allocations": 37,
+                "frees": 34,
+                "destructors": 55
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0.00011,
+                "status": 0,
+                "allocations": 37,
+                "frees": 34,
+                "destructors": 56
+            },
+            {
+                "event": "allocate",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00308,
+                "status": 0,
+                "allocations": 38,
+                "frees": 34,
+                "destructors": 56
+            },
+            {
+                "event": "free",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00176,
+                "status": 0,
+                "allocations": 38,
+                "frees": 35,
+                "destructors": 56
+            },
+            {
+                "event": "destructor",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00616,
+                "status": 0,
+                "allocations": 38,
+                "frees": 35,
+                "destructors": 57
+            },
+            {
+                "event": "free",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00121,
+                "status": 0,
+                "allocations": 38,
+                "frees": 36,
+                "destructors": 57
+            },
+            {
+                "event": "destructor",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00462,
+                "status": 0,
+                "allocations": 38,
+                "frees": 36,
+                "destructors": 58
+            },
+            {
+                "event": "allocate",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.0022,
+                "status": 0,
+                "allocations": 39,
+                "frees": 36,
+                "destructors": 58
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0.00011,
+                "status": 0,
+                "allocations": 39,
+                "frees": 36,
+                "destructors": 59
+            },
+            {
+                "event": "allocate",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00583,
+                "status": 0,
+                "allocations": 40,
+                "frees": 36,
+                "destructors": 59
+            },
+            {
+                "event": "free",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00242,
+                "status": 0,
+                "allocations": 40,
+                "frees": 37,
+                "destructors": 59
+            },
+            {
+                "event": "destructor",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00715,
+                "status": 0,
+                "allocations": 40,
+                "frees": 37,
+                "destructors": 60
+            },
+            {
+                "event": "free",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00143,
+                "status": 0,
+                "allocations": 40,
+                "frees": 38,
+                "destructors": 60
+            },
+            {
+                "event": "destructor",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00495,
+                "status": 0,
+                "allocations": 40,
+                "frees": 38,
+                "destructors": 61
+            },
+            {
+                "event": "allocate",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00286,
+                "status": 0,
+                "allocations": 41,
+                "frees": 38,
+                "destructors": 61
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0.00011,
+                "status": 0,
+                "allocations": 41,
+                "frees": 38,
+                "destructors": 62
+            },
+            {
+                "event": "allocate",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00319,
+                "status": 0,
+                "allocations": 42,
+                "frees": 38,
+                "destructors": 62
+            },
+            {
+                "event": "free",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00231,
+                "status": 0,
+                "allocations": 42,
+                "frees": 39,
+                "destructors": 62
+            },
+            {
+                "event": "destructor",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00704,
+                "status": 0,
+                "allocations": 42,
+                "frees": 39,
+                "destructors": 63
+            },
+            {
+                "event": "free",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00121,
+                "status": 0,
+                "allocations": 42,
+                "frees": 40,
+                "destructors": 63
+            },
+            {
+                "event": "destructor",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00473,
+                "status": 0,
+                "allocations": 42,
+                "frees": 40,
+                "destructors": 64
+            },
+            {
+                "event": "allocate",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00319,
+                "status": 0,
+                "allocations": 43,
+                "frees": 40,
+                "destructors": 64
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0.00022,
+                "status": 0,
+                "allocations": 43,
+                "frees": 40,
+                "destructors": 65
+            },
+            {
+                "event": "allocate",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.01133,
+                "status": 0,
+                "allocations": 44,
+                "frees": 40,
+                "destructors": 65
+            },
+            {
+                "event": "free",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00418,
+                "status": 0,
+                "allocations": 44,
+                "frees": 41,
+                "destructors": 65
+            },
+            {
+                "event": "destructor",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00946,
+                "status": 0,
+                "allocations": 44,
+                "frees": 41,
+                "destructors": 66
+            },
+            {
+                "event": "free",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00143,
+                "status": 0,
+                "allocations": 44,
+                "frees": 42,
+                "destructors": 66
+            },
+            {
+                "event": "destructor",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00506,
+                "status": 0,
+                "allocations": 44,
+                "frees": 42,
+                "destructors": 67
+            },
+            {
+                "event": "allocate",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00396,
+                "status": 0,
+                "allocations": 45,
+                "frees": 42,
+                "destructors": 67
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0.00011,
+                "status": 0,
+                "allocations": 45,
+                "frees": 42,
+                "destructors": 68
+            },
+            {
+                "event": "allocate",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00374,
+                "status": 0,
+                "allocations": 46,
+                "frees": 42,
+                "destructors": 68
+            },
+            {
+                "event": "free",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00286,
+                "status": 0,
+                "allocations": 46,
+                "frees": 43,
+                "destructors": 68
+            },
+            {
+                "event": "destructor",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00737,
+                "status": 0,
+                "allocations": 46,
+                "frees": 43,
+                "destructors": 69
+            },
+            {
+                "event": "free",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00132,
+                "status": 0,
+                "allocations": 46,
+                "frees": 44,
+                "destructors": 69
+            },
+            {
+                "event": "destructor",
+                "bytes": 8388608,
+                "mode": "async",
+                "host_ms": 0.00495,
+                "status": 0,
+                "allocations": 46,
+                "frees": 44,
+                "destructors": 70
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0.00121,
+                "status": 0,
+                "allocations": 46,
+                "frees": 44,
+                "destructors": 71
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.01496,
+                "status": 0,
+                "allocations": 47,
+                "frees": 44,
+                "destructors": 71
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00924,
+                "status": 0,
+                "allocations": 48,
+                "frees": 44,
+                "destructors": 71
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0.00011,
+                "status": 0,
+                "allocations": 48,
+                "frees": 44,
+                "destructors": 72
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.0066,
+                "status": 0,
+                "allocations": 49,
+                "frees": 44,
+                "destructors": 72
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00363,
+                "status": 0,
+                "allocations": 49,
+                "frees": 45,
+                "destructors": 72
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.0088,
+                "status": 0,
+                "allocations": 49,
+                "frees": 45,
+                "destructors": 73
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00121,
+                "status": 0,
+                "allocations": 49,
+                "frees": 46,
+                "destructors": 73
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00506,
+                "status": 0,
+                "allocations": 49,
+                "frees": 46,
+                "destructors": 74
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00275,
+                "status": 0,
+                "allocations": 50,
+                "frees": 46,
+                "destructors": 74
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0.00011,
+                "status": 0,
+                "allocations": 50,
+                "frees": 46,
+                "destructors": 75
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.0022,
+                "status": 0,
+                "allocations": 51,
+                "frees": 46,
+                "destructors": 75
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00209,
+                "status": 0,
+                "allocations": 51,
+                "frees": 47,
+                "destructors": 75
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00671,
+                "status": 0,
+                "allocations": 51,
+                "frees": 47,
+                "destructors": 76
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00088,
+                "status": 0,
+                "allocations": 51,
+                "frees": 48,
+                "destructors": 76
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.0044,
+                "status": 0,
+                "allocations": 51,
+                "frees": 48,
+                "destructors": 77
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00143,
+                "status": 0,
+                "allocations": 52,
+                "frees": 48,
+                "destructors": 77
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0.00011,
+                "status": 0,
+                "allocations": 52,
+                "frees": 48,
+                "destructors": 78
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00308,
+                "status": 0,
+                "allocations": 53,
+                "frees": 48,
+                "destructors": 78
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.0022,
+                "status": 0,
+                "allocations": 53,
+                "frees": 49,
+                "destructors": 78
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00693,
+                "status": 0,
+                "allocations": 53,
+                "frees": 49,
+                "destructors": 79
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00088,
+                "status": 0,
+                "allocations": 53,
+                "frees": 50,
+                "destructors": 79
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00429,
+                "status": 0,
+                "allocations": 53,
+                "frees": 50,
+                "destructors": 80
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00165,
+                "status": 0,
+                "allocations": 54,
+                "frees": 50,
+                "destructors": 80
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0.00011,
+                "status": 0,
+                "allocations": 54,
+                "frees": 50,
+                "destructors": 81
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00209,
+                "status": 0,
+                "allocations": 55,
+                "frees": 50,
+                "destructors": 81
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00198,
+                "status": 0,
+                "allocations": 55,
+                "frees": 51,
+                "destructors": 81
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00649,
+                "status": 0,
+                "allocations": 55,
+                "frees": 51,
+                "destructors": 82
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00088,
+                "status": 0,
+                "allocations": 55,
+                "frees": 52,
+                "destructors": 82
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00429,
+                "status": 0,
+                "allocations": 55,
+                "frees": 52,
+                "destructors": 83
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00231,
+                "status": 0,
+                "allocations": 56,
+                "frees": 52,
+                "destructors": 83
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0.00011,
+                "status": 0,
+                "allocations": 56,
+                "frees": 52,
+                "destructors": 84
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00539,
+                "status": 0,
+                "allocations": 57,
+                "frees": 52,
+                "destructors": 84
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00297,
+                "status": 0,
+                "allocations": 57,
+                "frees": 53,
+                "destructors": 84
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00781,
+                "status": 0,
+                "allocations": 57,
+                "frees": 53,
+                "destructors": 85
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00121,
+                "status": 0,
+                "allocations": 57,
+                "frees": 54,
+                "destructors": 85
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00484,
+                "status": 0,
+                "allocations": 57,
+                "frees": 54,
+                "destructors": 86
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00253,
+                "status": 0,
+                "allocations": 58,
+                "frees": 54,
+                "destructors": 86
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0.00011,
+                "status": 0,
+                "allocations": 58,
+                "frees": 54,
+                "destructors": 87
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00605,
+                "status": 0,
+                "allocations": 59,
+                "frees": 54,
+                "destructors": 87
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00396,
+                "status": 0,
+                "allocations": 59,
+                "frees": 55,
+                "destructors": 87
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.01122,
+                "status": 0,
+                "allocations": 59,
+                "frees": 55,
+                "destructors": 88
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00121,
+                "status": 0,
+                "allocations": 59,
+                "frees": 56,
+                "destructors": 88
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00495,
+                "status": 0,
+                "allocations": 59,
+                "frees": 56,
+                "destructors": 89
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00583,
+                "status": 0,
+                "allocations": 60,
+                "frees": 56,
+                "destructors": 89
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0.00011,
+                "status": 0,
+                "allocations": 60,
+                "frees": 56,
+                "destructors": 90
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00462,
+                "status": 0,
+                "allocations": 61,
+                "frees": 56,
+                "destructors": 90
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00319,
+                "status": 0,
+                "allocations": 61,
+                "frees": 57,
+                "destructors": 90
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.01012,
+                "status": 0,
+                "allocations": 61,
+                "frees": 57,
+                "destructors": 91
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00099,
+                "status": 0,
+                "allocations": 61,
+                "frees": 58,
+                "destructors": 91
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00451,
+                "status": 0,
+                "allocations": 61,
+                "frees": 58,
+                "destructors": 92
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00506,
+                "status": 0,
+                "allocations": 62,
+                "frees": 58,
+                "destructors": 92
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0.00011,
+                "status": 0,
+                "allocations": 62,
+                "frees": 58,
+                "destructors": 93
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00605,
+                "status": 0,
+                "allocations": 63,
+                "frees": 58,
+                "destructors": 93
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00275,
+                "status": 0,
+                "allocations": 63,
+                "frees": 59,
+                "destructors": 93
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00803,
+                "status": 0,
+                "allocations": 63,
+                "frees": 59,
+                "destructors": 94
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.0055,
+                "status": 0,
+                "allocations": 63,
+                "frees": 60,
+                "destructors": 94
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.06248,
+                "status": 0,
+                "allocations": 63,
+                "frees": 60,
+                "destructors": 95
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00539,
+                "status": 0,
+                "allocations": 64,
+                "frees": 60,
+                "destructors": 95
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0.00011,
+                "status": 0,
+                "allocations": 64,
+                "frees": 60,
+                "destructors": 96
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00462,
+                "status": 0,
+                "allocations": 65,
+                "frees": 60,
+                "destructors": 96
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00297,
+                "status": 0,
+                "allocations": 65,
+                "frees": 61,
+                "destructors": 96
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.01012,
+                "status": 0,
+                "allocations": 65,
+                "frees": 61,
+                "destructors": 97
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.0011,
+                "status": 0,
+                "allocations": 65,
+                "frees": 62,
+                "destructors": 97
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00473,
+                "status": 0,
+                "allocations": 65,
+                "frees": 62,
+                "destructors": 98
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00495,
+                "status": 0,
+                "allocations": 66,
+                "frees": 62,
+                "destructors": 98
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0.00022,
+                "status": 0,
+                "allocations": 66,
+                "frees": 62,
+                "destructors": 99
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00572,
+                "status": 0,
+                "allocations": 67,
+                "frees": 62,
+                "destructors": 99
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00341,
+                "status": 0,
+                "allocations": 67,
+                "frees": 63,
+                "destructors": 99
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.0088,
+                "status": 0,
+                "allocations": 67,
+                "frees": 63,
+                "destructors": 100
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.02255,
+                "status": 0,
+                "allocations": 67,
+                "frees": 64,
+                "destructors": 100
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.0561,
+                "status": 0,
+                "allocations": 67,
+                "frees": 64,
+                "destructors": 101
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00913,
+                "status": 0,
+                "allocations": 68,
+                "frees": 64,
+                "destructors": 101
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0.00022,
+                "status": 0,
+                "allocations": 68,
+                "frees": 64,
+                "destructors": 102
+            },
+            {
+                "event": "allocate",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.0088,
+                "status": 0,
+                "allocations": 69,
+                "frees": 64,
+                "destructors": 102
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00385,
+                "status": 0,
+                "allocations": 69,
+                "frees": 65,
+                "destructors": 102
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.01133,
+                "status": 0,
+                "allocations": 69,
+                "frees": 65,
+                "destructors": 103
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00121,
+                "status": 0,
+                "allocations": 69,
+                "frees": 66,
+                "destructors": 103
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00495,
+                "status": 0,
+                "allocations": 69,
+                "frees": 66,
+                "destructors": 104
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0.00099,
+                "status": 0,
+                "allocations": 69,
+                "frees": 66,
+                "destructors": 105
+            },
+            {
+                "event": "allocate",
+                "bytes": 16777216,
+                "mode": "async",
+                "host_ms": 0.44165,
+                "status": 0,
+                "allocations": 70,
+                "frees": 66,
+                "destructors": 105
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0.00044,
+                "status": 0,
+                "allocations": 70,
+                "frees": 66,
+                "destructors": 106
+            },
+            {
+                "event": "allocate",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00847,
+                "status": 0,
+                "allocations": 71,
+                "frees": 66,
+                "destructors": 106
+            },
+            {
+                "event": "allocate",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00506,
+                "status": 0,
+                "allocations": 72,
+                "frees": 66,
+                "destructors": 106
+            },
+            {
+                "event": "allocate",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.02068,
+                "status": 0,
+                "allocations": 73,
+                "frees": 66,
+                "destructors": 106
+            },
+            {
+                "event": "free",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00396,
+                "status": 0,
+                "allocations": 73,
+                "frees": 67,
+                "destructors": 106
+            },
+            {
+                "event": "destructor",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00825,
+                "status": 0,
+                "allocations": 73,
+                "frees": 67,
+                "destructors": 107
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0.00011,
+                "status": 0,
+                "allocations": 73,
+                "frees": 67,
+                "destructors": 108
+            },
+            {
+                "event": "free",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00165,
+                "status": 0,
+                "allocations": 73,
+                "frees": 68,
+                "destructors": 108
+            },
+            {
+                "event": "destructor",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00539,
+                "status": 0,
+                "allocations": 73,
+                "frees": 68,
+                "destructors": 109
+            },
+            {
+                "event": "allocate",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00385,
+                "status": 0,
+                "allocations": 74,
+                "frees": 68,
+                "destructors": 109
+            },
+            {
+                "event": "allocate",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00385,
+                "status": 0,
+                "allocations": 75,
+                "frees": 68,
+                "destructors": 109
+            },
+            {
+                "event": "free",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00264,
+                "status": 0,
+                "allocations": 75,
+                "frees": 69,
+                "destructors": 109
+            },
+            {
+                "event": "destructor",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00627,
+                "status": 0,
+                "allocations": 75,
+                "frees": 69,
+                "destructors": 110
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0,
+                "status": 0,
+                "allocations": 75,
+                "frees": 69,
+                "destructors": 111
+            },
+            {
+                "event": "free",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00121,
+                "status": 0,
+                "allocations": 75,
+                "frees": 70,
+                "destructors": 111
+            },
+            {
+                "event": "destructor",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00495,
+                "status": 0,
+                "allocations": 75,
+                "frees": 70,
+                "destructors": 112
+            },
+            {
+                "event": "allocate",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00198,
+                "status": 0,
+                "allocations": 76,
+                "frees": 70,
+                "destructors": 112
+            },
+            {
+                "event": "allocate",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00341,
+                "status": 0,
+                "allocations": 77,
+                "frees": 70,
+                "destructors": 112
+            },
+            {
+                "event": "free",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.0022,
+                "status": 0,
+                "allocations": 77,
+                "frees": 71,
+                "destructors": 112
+            },
+            {
+                "event": "destructor",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00583,
+                "status": 0,
+                "allocations": 77,
+                "frees": 71,
+                "destructors": 113
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0,
+                "status": 0,
+                "allocations": 77,
+                "frees": 71,
+                "destructors": 114
+            },
+            {
+                "event": "free",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.0011,
+                "status": 0,
+                "allocations": 77,
+                "frees": 72,
+                "destructors": 114
+            },
+            {
+                "event": "destructor",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00473,
+                "status": 0,
+                "allocations": 77,
+                "frees": 72,
+                "destructors": 115
+            },
+            {
+                "event": "allocate",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00176,
+                "status": 0,
+                "allocations": 78,
+                "frees": 72,
+                "destructors": 115
+            },
+            {
+                "event": "allocate",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00429,
+                "status": 0,
+                "allocations": 79,
+                "frees": 72,
+                "destructors": 115
+            },
+            {
+                "event": "free",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00198,
+                "status": 0,
+                "allocations": 79,
+                "frees": 73,
+                "destructors": 115
+            },
+            {
+                "event": "destructor",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00616,
+                "status": 0,
+                "allocations": 79,
+                "frees": 73,
+                "destructors": 116
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0.00011,
+                "status": 0,
+                "allocations": 79,
+                "frees": 73,
+                "destructors": 117
+            },
+            {
+                "event": "free",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00154,
+                "status": 0,
+                "allocations": 79,
+                "frees": 74,
+                "destructors": 117
+            },
+            {
+                "event": "destructor",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00528,
+                "status": 0,
+                "allocations": 79,
+                "frees": 74,
+                "destructors": 118
+            },
+            {
+                "event": "allocate",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00407,
+                "status": 0,
+                "allocations": 80,
+                "frees": 74,
+                "destructors": 118
+            },
+            {
+                "event": "allocate",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00308,
+                "status": 0,
+                "allocations": 81,
+                "frees": 74,
+                "destructors": 118
+            },
+            {
+                "event": "free",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00187,
+                "status": 0,
+                "allocations": 81,
+                "frees": 75,
+                "destructors": 118
+            },
+            {
+                "event": "destructor",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00561,
+                "status": 0,
+                "allocations": 81,
+                "frees": 75,
+                "destructors": 119
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0,
+                "status": 0,
+                "allocations": 81,
+                "frees": 75,
+                "destructors": 120
+            },
+            {
+                "event": "free",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00143,
+                "status": 0,
+                "allocations": 81,
+                "frees": 76,
+                "destructors": 120
+            },
+            {
+                "event": "destructor",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00495,
+                "status": 0,
+                "allocations": 81,
+                "frees": 76,
+                "destructors": 121
+            },
+            {
+                "event": "allocate",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00275,
+                "status": 0,
+                "allocations": 82,
+                "frees": 76,
+                "destructors": 121
+            },
+            {
+                "event": "allocate",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00308,
+                "status": 0,
+                "allocations": 83,
+                "frees": 76,
+                "destructors": 121
+            },
+            {
+                "event": "free",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00198,
+                "status": 0,
+                "allocations": 83,
+                "frees": 77,
+                "destructors": 121
+            },
+            {
+                "event": "destructor",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00594,
+                "status": 0,
+                "allocations": 83,
+                "frees": 77,
+                "destructors": 122
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0,
+                "status": 0,
+                "allocations": 83,
+                "frees": 77,
+                "destructors": 123
+            },
+            {
+                "event": "free",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00143,
+                "status": 0,
+                "allocations": 83,
+                "frees": 78,
+                "destructors": 123
+            },
+            {
+                "event": "destructor",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00484,
+                "status": 0,
+                "allocations": 83,
+                "frees": 78,
+                "destructors": 124
+            },
+            {
+                "event": "allocate",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00242,
+                "status": 0,
+                "allocations": 84,
+                "frees": 78,
+                "destructors": 124
+            },
+            {
+                "event": "allocate",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00286,
+                "status": 0,
+                "allocations": 85,
+                "frees": 78,
+                "destructors": 124
+            },
+            {
+                "event": "free",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00209,
+                "status": 0,
+                "allocations": 85,
+                "frees": 79,
+                "destructors": 124
+            },
+            {
+                "event": "destructor",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.01419,
+                "status": 0,
+                "allocations": 85,
+                "frees": 79,
+                "destructors": 125
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0,
+                "status": 0,
+                "allocations": 85,
+                "frees": 79,
+                "destructors": 126
+            },
+            {
+                "event": "free",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00132,
+                "status": 0,
+                "allocations": 85,
+                "frees": 80,
+                "destructors": 126
+            },
+            {
+                "event": "destructor",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00495,
+                "status": 0,
+                "allocations": 85,
+                "frees": 80,
+                "destructors": 127
+            },
+            {
+                "event": "allocate",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00242,
+                "status": 0,
+                "allocations": 86,
+                "frees": 80,
+                "destructors": 127
+            },
+            {
+                "event": "allocate",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00352,
+                "status": 0,
+                "allocations": 87,
+                "frees": 80,
+                "destructors": 127
+            },
+            {
+                "event": "free",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00209,
+                "status": 0,
+                "allocations": 87,
+                "frees": 81,
+                "destructors": 127
+            },
+            {
+                "event": "destructor",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00605,
+                "status": 0,
+                "allocations": 87,
+                "frees": 81,
+                "destructors": 128
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0.00011,
+                "status": 0,
+                "allocations": 87,
+                "frees": 81,
+                "destructors": 129
+            },
+            {
+                "event": "free",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00121,
+                "status": 0,
+                "allocations": 87,
+                "frees": 82,
+                "destructors": 129
+            },
+            {
+                "event": "destructor",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00473,
+                "status": 0,
+                "allocations": 87,
+                "frees": 82,
+                "destructors": 130
+            },
+            {
+                "event": "allocate",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00253,
+                "status": 0,
+                "allocations": 88,
+                "frees": 82,
+                "destructors": 130
+            },
+            {
+                "event": "allocate",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00253,
+                "status": 0,
+                "allocations": 89,
+                "frees": 82,
+                "destructors": 130
+            },
+            {
+                "event": "free",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00209,
+                "status": 0,
+                "allocations": 89,
+                "frees": 83,
+                "destructors": 130
+            },
+            {
+                "event": "destructor",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00561,
+                "status": 0,
+                "allocations": 89,
+                "frees": 83,
+                "destructors": 131
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0,
+                "status": 0,
+                "allocations": 89,
+                "frees": 83,
+                "destructors": 132
+            },
+            {
+                "event": "free",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00121,
+                "status": 0,
+                "allocations": 89,
+                "frees": 84,
+                "destructors": 132
+            },
+            {
+                "event": "destructor",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00462,
+                "status": 0,
+                "allocations": 89,
+                "frees": 84,
+                "destructors": 133
+            },
+            {
+                "event": "allocate",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00231,
+                "status": 0,
+                "allocations": 90,
+                "frees": 84,
+                "destructors": 133
+            },
+            {
+                "event": "allocate",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00264,
+                "status": 0,
+                "allocations": 91,
+                "frees": 84,
+                "destructors": 133
+            },
+            {
+                "event": "free",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00198,
+                "status": 0,
+                "allocations": 91,
+                "frees": 85,
+                "destructors": 133
+            },
+            {
+                "event": "destructor",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.0055,
+                "status": 0,
+                "allocations": 91,
+                "frees": 85,
+                "destructors": 134
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0,
+                "status": 0,
+                "allocations": 91,
+                "frees": 85,
+                "destructors": 135
+            },
+            {
+                "event": "free",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.0011,
+                "status": 0,
+                "allocations": 91,
+                "frees": 86,
+                "destructors": 135
+            },
+            {
+                "event": "destructor",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00462,
+                "status": 0,
+                "allocations": 91,
+                "frees": 86,
+                "destructors": 136
+            },
+            {
+                "event": "allocate",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00253,
+                "status": 0,
+                "allocations": 92,
+                "frees": 86,
+                "destructors": 136
+            },
+            {
+                "event": "allocate",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00264,
+                "status": 0,
+                "allocations": 93,
+                "frees": 86,
+                "destructors": 136
+            },
+            {
+                "event": "free",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00198,
+                "status": 0,
+                "allocations": 93,
+                "frees": 87,
+                "destructors": 136
+            },
+            {
+                "event": "destructor",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.0055,
+                "status": 0,
+                "allocations": 93,
+                "frees": 87,
+                "destructors": 137
+            },
+            {
+                "event": "destructor",
+                "bytes": 0,
+                "mode": "legacy",
+                "host_ms": 0,
+                "status": 0,
+                "allocations": 93,
+                "frees": 87,
+                "destructors": 138
+            },
+            {
+                "event": "free",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.0011,
+                "status": 0,
+                "allocations": 93,
+                "frees": 88,
+                "destructors": 138
+            },
+            {
+                "event": "destructor",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00462,
+                "status": 0,
+                "allocations": 93,
+                "frees": 88,
+                "destructors": 139
+            },
+            {
+                "event": "free",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00209,
+                "status": 0,
+                "allocations": 93,
+                "frees": 89,
+                "destructors": 139
+            },
+            {
+                "event": "destructor",
+                "bytes": 8192,
+                "mode": "async",
+                "host_ms": 0.00693,
+                "status": 0,
+                "allocations": 93,
+                "frees": 89,
+                "destructors": 140
+            },
+            {
+                "event": "free",
+                "bytes": 16777216,
+                "mode": "async",
+                "host_ms": 0.0011,
+                "status": 0,
+                "allocations": 93,
+                "frees": 90,
+                "destructors": 140
+            },
+            {
+                "event": "destructor",
+                "bytes": 16777216,
+                "mode": "async",
+                "host_ms": 0.00462,
+                "status": 0,
+                "allocations": 93,
+                "frees": 90,
+                "destructors": 141
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.01342,
+                "status": 0,
+                "allocations": 93,
+                "frees": 91,
+                "destructors": 141
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.02838,
+                "status": 0,
+                "allocations": 93,
+                "frees": 91,
+                "destructors": 142
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.0022,
+                "status": 0,
+                "allocations": 93,
+                "frees": 92,
+                "destructors": 142
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00572,
+                "status": 0,
+                "allocations": 93,
+                "frees": 92,
+                "destructors": 143
+            },
+            {
+                "event": "free",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00154,
+                "status": 0,
+                "allocations": 93,
+                "frees": 93,
+                "destructors": 143
+            },
+            {
+                "event": "destructor",
+                "bytes": 4194304,
+                "mode": "async",
+                "host_ms": 0.00506,
+                "status": 0,
+                "allocations": 93,
+                "frees": 93,
+                "destructors": 144
+            }
+        ]
+    },
+    "child_stdout": "PROFILE_BEGIN greater_1m cold\nPROFILE_COLD greater_1m wrapper_ms=3.81953\nPROFILE_BEGIN greater_1m steady\nPROFILE_SAMPLE greater_1m iteration=0 wrapper_ms=0.21241\nPROFILE_SAMPLE greater_1m iteration=1 wrapper_ms=0.19646\nPROFILE_SAMPLE greater_1m iteration=2 wrapper_ms=0.21604\nPROFILE_SAMPLE greater_1m iteration=3 wrapper_ms=0.14707\nPROFILE_SAMPLE greater_1m iteration=4 wrapper_ms=0.21131\nPROFILE_SAMPLE greater_1m iteration=5 wrapper_ms=0.14861\nPROFILE_SAMPLE greater_1m iteration=6 wrapper_ms=0.16291\nPROFILE_BEGIN tile_1024sq_x2 cold\nPROFILE_COLD tile_1024sq_x2 wrapper_ms=0.38654\nPROFILE_BEGIN tile_1024sq_x2 steady\nPROFILE_SAMPLE tile_1024sq_x2 iteration=0 wrapper_ms=0.15191\nPROFILE_SAMPLE tile_1024sq_x2 iteration=1 wrapper_ms=0.20779\nPROFILE_SAMPLE tile_1024sq_x2 iteration=2 wrapper_ms=0.15587\nPROFILE_SAMPLE tile_1024sq_x2 iteration=3 wrapper_ms=0.4235\nPROFILE_SAMPLE tile_1024sq_x2 iteration=4 wrapper_ms=0.20768\nPROFILE_SAMPLE tile_1024sq_x2 iteration=5 wrapper_ms=0.75603\nPROFILE_SAMPLE tile_1024sq_x2 iteration=6 wrapper_ms=0.30162\nPROFILE_BEGIN cumsum_1m cold\nPROFILE_COLD cumsum_1m wrapper_ms=1.06095\nPROFILE_BEGIN cumsum_1m steady\nPROFILE_SAMPLE cumsum_1m iteration=0 wrapper_ms=0.20944\nPROFILE_SAMPLE cumsum_1m iteration=1 wrapper_ms=0.3696\nPROFILE_SAMPLE cumsum_1m iteration=2 wrapper_ms=0.40964\nPROFILE_SAMPLE cumsum_1m iteration=3 wrapper_ms=0.51326\nPROFILE_SAMPLE cumsum_1m iteration=4 wrapper_ms=0.29007\nPROFILE_SAMPLE cumsum_1m iteration=5 wrapper_ms=0.35332\nPROFILE_SAMPLE cumsum_1m iteration=6 wrapper_ms=0.55242\nPROFILE_BEGIN matvec_2048sq cold\nPROFILE_COLD matvec_2048sq wrapper_ms=20.37761\nPROFILE_BEGIN matvec_2048sq steady\nPROFILE_SAMPLE matvec_2048sq iteration=0 wrapper_ms=0.24167\nPROFILE_SAMPLE matvec_2048sq iteration=1 wrapper_ms=0.17963\nPROFILE_SAMPLE matvec_2048sq iteration=2 wrapper_ms=0.1936\nPROFILE_SAMPLE matvec_2048sq iteration=3 wrapper_ms=0.20405\nPROFILE_SAMPLE matvec_2048sq iteration=4 wrapper_ms=0.187\nPROFILE_SAMPLE matvec_2048sq iteration=5 wrapper_ms=0.1903\nPROFILE_SAMPLE matvec_2048sq iteration=6 wrapper_ms=0.16478\n",
+    "raw_php_wrapper": {
+        "greater_scalar": [
+            {
+                "operation": "greater_scalar",
+                "parse_ms": 0,
+                "validation_and_residency_ms": 0.00011,
+                "return_construction_ms": 0.06622
+            },
+            {
+                "operation": "greater_scalar",
+                "parse_ms": 0,
+                "validation_and_residency_ms": 0.00011,
+                "return_construction_ms": 0.03124
+            },
+            {
+                "operation": "greater_scalar",
+                "parse_ms": 0,
+                "validation_and_residency_ms": 0,
+                "return_construction_ms": 0.02299
+            },
+            {
+                "operation": "greater_scalar",
+                "parse_ms": 0,
+                "validation_and_residency_ms": 0,
+                "return_construction_ms": 0.02398
+            },
+            {
+                "operation": "greater_scalar",
+                "parse_ms": 0,
+                "validation_and_residency_ms": 0,
+                "return_construction_ms": 0.02409
+            },
+            {
+                "operation": "greater_scalar",
+                "parse_ms": 0,
+                "validation_and_residency_ms": 0,
+                "return_construction_ms": 0.02497
+            },
+            {
+                "operation": "greater_scalar",
+                "parse_ms": 0,
+                "validation_and_residency_ms": 0,
+                "return_construction_ms": 0.02805
+            },
+            {
+                "operation": "greater_scalar",
+                "parse_ms": 0.00011,
+                "validation_and_residency_ms": 0,
+                "return_construction_ms": 0.02112
+            },
+            {
+                "operation": "greater_scalar",
+                "parse_ms": 0,
+                "validation_and_residency_ms": 0,
+                "return_construction_ms": 0.02189
+            },
+            {
+                "operation": "greater_scalar",
+                "parse_ms": 0,
+                "validation_and_residency_ms": 0,
+                "return_construction_ms": 0.02035
+            },
+            {
+                "operation": "greater_scalar",
+                "parse_ms": 0,
+                "validation_and_residency_ms": 0,
+                "return_construction_ms": 0.02002
+            }
+        ],
+        "matvec": [
+            {
+                "operation": "matvec",
+                "parse_ms": 0.00011,
+                "validation_and_residency_ms": 0.03531,
+                "return_construction_ms": 0.06138
+            },
+            {
+                "operation": "matvec",
+                "parse_ms": 0,
+                "validation_and_residency_ms": 0.01782,
+                "return_construction_ms": 0.02794
+            },
+            {
+                "operation": "matvec",
+                "parse_ms": 0,
+                "validation_and_residency_ms": 0.00836,
+                "return_construction_ms": 0.02332
+            },
+            {
+                "operation": "matvec",
+                "parse_ms": 0,
+                "validation_and_residency_ms": 0.00693,
+                "return_construction_ms": 0.02596
+            },
+            {
+                "operation": "matvec",
+                "parse_ms": 0,
+                "validation_and_residency_ms": 0.01001,
+                "return_construction_ms": 0.0242
+            },
+            {
+                "operation": "matvec",
+                "parse_ms": 0,
+                "validation_and_residency_ms": 0.0077,
+                "return_construction_ms": 0.02244
+            },
+            {
+                "operation": "matvec",
+                "parse_ms": 0,
+                "validation_and_residency_ms": 0.00704,
+                "return_construction_ms": 0.02035
+            },
+            {
+                "operation": "matvec",
+                "parse_ms": 0,
+                "validation_and_residency_ms": 0.00704,
+                "return_construction_ms": 0.02651
+            },
+            {
+                "operation": "matvec",
+                "parse_ms": 0,
+                "validation_and_residency_ms": 0.00715,
+                "return_construction_ms": 0.01991
+            },
+            {
+                "operation": "matvec",
+                "parse_ms": 0,
+                "validation_and_residency_ms": 0.00682,
+                "return_construction_ms": 0.02596
+            },
+            {
+                "operation": "matvec",
+                "parse_ms": 0.00011,
+                "validation_and_residency_ms": 0.00671,
+                "return_construction_ms": 0.02024
+            }
+        ]
+    }
+}
