@@ -103,6 +103,15 @@ static double zmatrix_elapsed_ms(std::chrono::steady_clock::time_point start) {
         operation, host_output_ms, device_allocation_ms, operand_transfer_ms, wrapper_ms, state_update_ms);
 }
 
+[[maybe_unused]] static void zmatrix_profile_php(const char* operation, double parse_ms,
+                                                 double preparation_ms, double return_ms) noexcept {
+    if (!zmatrix_cuda_profile_enabled()) return;
+    std::fprintf(stderr,
+        "[zmatrix][php-wrapper] {\"operation\":\"%s\",\"parse_ms\":%.6f,"
+        "\"validation_and_residency_ms\":%.6f,\"return_construction_ms\":%.6f}\n",
+        operation, parse_ms, preparation_ms, return_ms);
+}
+
 #ifdef ZMATRIX_ENABLE_DEBUG_INVARIANTS
 #define ZMATRIX_DEBUG_ASSERT(condition, message) do { \
     if (!(condition)) throw std::logic_error(std::string("ZTensor invariant failed: ") + (message)); \

@@ -22,11 +22,14 @@ $stderr = stream_get_contents($pipes[2]); fclose($pipes[2]);
 $status = proc_close($process);
 if ($status !== 0) throw new RuntimeException("profiling child failed: $stderr");
 
-$wrappers = $lifecycle = $device = [];
+$wrappers = $phpWrappers = $lifecycle = $device = [];
 foreach (preg_split('/\R/', $stderr) as $line) {
     if (preg_match('/^\[zmatrix\]\[cuda-wrapper\] (\{.*\})$/', $line, $match)) {
         $record = json_decode($match[1], true, flags: JSON_THROW_ON_ERROR);
         $wrappers[$record['operation']][] = $record;
+    } elseif (preg_match('/^\[zmatrix\]\[php-wrapper\] (\{.*\})$/', $line, $match)) {
+        $record = json_decode($match[1], true, flags: JSON_THROW_ON_ERROR);
+        $phpWrappers[$record['operation']][] = $record;
     } elseif (preg_match('/^\[zmatrix\]\[cuda-lifecycle\] (\{.*\})$/', $line, $match)) {
         $lifecycle[] = json_decode($match[1], true, flags: JSON_THROW_ON_ERROR);
     } elseif (preg_match('/^\[zmatrix\]\[cuda-profile\] op=(\S+) device_ms=([0-9.]+)/', $line, $match)) {
@@ -43,6 +46,13 @@ foreach ($wrappers as $operation => $records) {
 }
 $deviceSummary = [];
 foreach ($device as $operation => $samples) $deviceSummary[$operation] = captureStats(array_slice($samples, -7));
+$phpSummary = [];
+foreach ($phpWrappers as $operation => $records) {
+    $steady = array_slice($records, -7);
+    foreach (['parse_ms', 'validation_and_residency_ms', 'return_construction_ms'] as $field) {
+        $phpSummary[$operation][$field] = captureStats(array_column($steady, $field));
+    }
+}
 $lifecycleGroups = [];
 foreach ($lifecycle as $record) {
     if ($record['bytes'] === 0) continue;
@@ -56,9 +66,9 @@ $document = ['environment' => [
     'allocator' => getenv('ZMATRIX_CUDA_ALLOCATOR') ?: 'auto',
     'commit' => trim((string) shell_exec('git -C ' . escapeshellarg($root) . ' rev-parse HEAD')),
     'binary_sha256' => hash_file('sha256', $root . '/modules/zmatrix.so'),
-], 'wrapper_summary' => $wrapperSummary, 'device_summary' => $deviceSummary,
+], 'wrapper_summary' => $wrapperSummary, 'php_summary' => $phpSummary, 'device_summary' => $deviceSummary,
    'lifecycle_summary' => $lifecycleSummary, 'raw' => ['wrapper' => $wrappers, 'device' => $device, 'lifecycle' => $lifecycle],
-   'child_stdout' => $stdout];
+   'child_stdout' => $stdout, 'raw_php_wrapper' => $phpWrappers];
 $suffix = date('Ymd_His');
 $path = __DIR__ . "/results/wrapper_decomposition_$suffix.json";
 file_put_contents($path, json_encode($document, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . "\n");

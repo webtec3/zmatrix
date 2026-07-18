@@ -1437,10 +1437,14 @@ PHP_METHOD(ZTensor, eye)
 
 PHP_METHOD(ZTensor, dot)
 {
+    const bool php_profile = zmatrix_cuda_profile_enabled();
+    const auto parse_start = php_profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
     zval *other_zv;
     ZEND_PARSE_PARAMETERS_START(1, 1)
         Z_PARAM_ZVAL(other_zv)
     ZEND_PARSE_PARAMETERS_END();
+    const double parse_ms = php_profile ? zmatrix_elapsed_ms(parse_start) : 0.0;
+    const auto preparation_start = php_profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
 
     zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
     if (!self_obj->tensor) {
@@ -1477,7 +1481,13 @@ PHP_METHOD(ZTensor, dot)
             if (tensor_A->device_valid || tensor_B.device_valid) {
                 tensor_A->ensure_device();
                 tensor_B.ensure_device();
-                RETURN_DOUBLE(static_cast<double>(gpu_dot_value_device(tensor_A->d_data, tensor_B.d_data, tensor_A->shape[0])));
+                const double preparation_ms = php_profile ? zmatrix_elapsed_ms(preparation_start) : 0.0;
+                const double dot_value = static_cast<double>(gpu_dot_value_device(tensor_A->d_data, tensor_B.d_data, tensor_A->shape[0]));
+                const auto return_start = php_profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+                ZVAL_DOUBLE(return_value, dot_value);
+                const double return_ms = php_profile ? zmatrix_elapsed_ms(return_start) : 0.0;
+                zmatrix_profile_php("dot", parse_ms, preparation_ms, return_ms);
+                return;
             }
             tensor_A->ensure_host();
             tensor_B.ensure_host();
@@ -1550,6 +1560,7 @@ PHP_METHOD(ZTensor, dot)
                 tensor_A->ensure_device();
                 tensor_B.ensure_device();
                 const double transfer_ms = profile ? zmatrix_elapsed_ms(transfer_start) : 0.0;
+                const double php_preparation_ms = php_profile ? zmatrix_elapsed_ms(preparation_start) : 0.0;
                 double construction_ms = 0.0, allocation_ms = 0.0;
                 ZTensor result_tensor = ZTensor::create_device_result({M}, profile, construction_ms, allocation_ms);
                 const auto wrapper_start = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
@@ -1559,7 +1570,10 @@ PHP_METHOD(ZTensor, dot)
                 result_tensor.mark_device_modified();
                 const double state_ms = profile ? zmatrix_elapsed_ms(state_start) : 0.0;
                 zmatrix_profile_result("matvec", construction_ms, allocation_ms, wrapper_ms, transfer_ms, state_ms);
+                const auto return_start = php_profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
                 zmatrix_return_tensor_obj(result_tensor, return_value, zmatrix_ce_ZTensor);
+                const double return_ms = php_profile ? zmatrix_elapsed_ms(return_start) : 0.0;
+                zmatrix_profile_php("matvec", parse_ms, php_preparation_ms, return_ms);
                 return;
             }
             tensor_A->ensure_host();
@@ -1849,10 +1863,14 @@ PHP_METHOD(ZTensor, broadcast)
 // --- PHP_METHOD para greater ---
 PHP_METHOD(ZTensor, greater)
 {
+    const bool php_profile = zmatrix_cuda_profile_enabled();
+    const auto parse_start = php_profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
     zval *other_zv;
     ZEND_PARSE_PARAMETERS_START(1, 1)
         Z_PARAM_ZVAL(other_zv)
     ZEND_PARSE_PARAMETERS_END();
+    const double parse_ms = php_profile ? zmatrix_elapsed_ms(parse_start) : 0.0;
+    const auto preparation_start = php_profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
 
     zmatrix_ztensor_object *intern = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
     if (!intern->tensor) {
@@ -1872,10 +1890,14 @@ PHP_METHOD(ZTensor, greater)
         float scalar = (Z_TYPE_P(other_zv) == IS_LONG)
             ? (float)Z_LVAL_P(other_zv)
             : (float)Z_DVAL_P(other_zv);
+        const double preparation_ms = php_profile ? zmatrix_elapsed_ms(preparation_start) : 0.0;
 
         try {
             ZTensor result = A.greater_scalar(scalar);
+            const auto return_start = php_profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
             zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
+            const double return_ms = php_profile ? zmatrix_elapsed_ms(return_start) : 0.0;
+            zmatrix_profile_php("greater_scalar", parse_ms, preparation_ms, return_ms);
             return;
         } catch (const std::exception& e) {
             zend_throw_exception(zend_ce_exception, e.what(), 0);
