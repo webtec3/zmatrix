@@ -142,6 +142,9 @@ preserva a validação de domínio síncrona exigida pela semântica de exceçã
 * PHP 8.4.16; extensão 0.4.0-float.
 * GCC/G++ 13.3.0; C++17, `-O3 -march=native`, OpenMP.
 * CUDA toolkit 12.0.140; driver 576.02; RTX 3060 12 GiB; WSL2.
+* Processo no benchmark final: PHP 73.400.320 bytes; pico PHP 106.962.944
+  bytes; RSS 394.067.968 bytes. Os valores são globais do processo, não uma
+  atribuição por operador.
 * CUDA normal: clean/configure/build/install aprovado.
 * PHPT: `basic.phpt` e `complete.phpt`, 2/2 PASS.
 * CUDA: SGEMM, elementwise, reduções, sqrt, clip, softmax, residência,
