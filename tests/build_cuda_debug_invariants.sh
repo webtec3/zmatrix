@@ -25,5 +25,8 @@ php -n -d "extension=$build_dir/modules/zmatrix.so" "$build_dir/tests/cuda/new_k
 php -n -d "extension=$build_dir/modules/zmatrix.so" "$build_dir/tests/cuda/residency_coherence.php"
 php -n -d "extension=$build_dir/modules/zmatrix.so" "$build_dir/tests/cuda/extended_ops_correctness.php"
 php -n -d "extension=$build_dir/modules/zmatrix.so" "$build_dir/tests/cuda/extended_ops_residency.php"
+ZMATRIX_CUDA_ALLOCATOR=auto php -n -d "extension=$build_dir/modules/zmatrix.so" "$build_dir/tests/cuda/allocator_lifecycle_stress.php"
+ZMATRIX_CUDA_ALLOCATOR=legacy php -n -d "extension=$build_dir/modules/zmatrix.so" "$build_dir/tests/cuda/allocator_lifecycle_stress.php"
+ZMATRIX_CUDA_ALLOCATOR=auto php -n -d "extension=$build_dir/modules/zmatrix.so" "$build_dir/tests/cuda/shutdown_live_tensors.php"
 
 echo "CUDA debug-invariant build passed: $build_dir"
