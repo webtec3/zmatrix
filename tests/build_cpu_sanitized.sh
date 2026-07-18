@@ -27,5 +27,9 @@ LD_PRELOAD="$asan_library" \
 ASAN_OPTIONS="detect_leaks=1:halt_on_error=1" \
 UBSAN_OPTIONS="halt_on_error=1:print_stacktrace=1" \
 php -n -d "extension=$build_dir/modules/zmatrix.so" "$build_dir/tests/cpu_lifecycle.php"
+LD_PRELOAD="$asan_library" \
+ASAN_OPTIONS="detect_leaks=1:halt_on_error=1" \
+UBSAN_OPTIONS="halt_on_error=1:print_stacktrace=1" \
+php -n -d "extension=$build_dir/modules/zmatrix.so" "$build_dir/tests/core_extended_ops.php"
 
 echo "Sanitized CPU build passed: $build_dir"

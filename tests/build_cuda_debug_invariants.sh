@@ -23,5 +23,7 @@ make -j"$(nproc)" >/tmp/zmatrix-cuda-invariants-build.log
 php -n -d "extension=$build_dir/modules/zmatrix.so" "$build_dir/tests/core_validation.php"
 php -n -d "extension=$build_dir/modules/zmatrix.so" "$build_dir/tests/cuda/new_kernels_correctness.php"
 php -n -d "extension=$build_dir/modules/zmatrix.so" "$build_dir/tests/cuda/residency_coherence.php"
+php -n -d "extension=$build_dir/modules/zmatrix.so" "$build_dir/tests/cuda/extended_ops_correctness.php"
+php -n -d "extension=$build_dir/modules/zmatrix.so" "$build_dir/tests/cuda/extended_ops_residency.php"
 
 echo "CUDA debug-invariant build passed: $build_dir"
