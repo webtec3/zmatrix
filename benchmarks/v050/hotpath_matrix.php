@@ -110,13 +110,20 @@ foreach ([256, 1024, 2048] as $side) {
 $matrix = ZTensor::ones([2048, 2048]);
 $vector = ZTensor::ones([2048]);
 foreach (['both_resident', 'matrix_resident', 'vector_resident'] as $residency) {
-    $a = ZTensor::arr($matrix);
-    $x = ZTensor::arr($vector);
-    if ($residency !== 'vector_resident') $a->toGpu();
-    if ($residency !== 'matrix_resident') $x->toGpu();
-    $results[] = matrixMeasure('matvec_' . $residency, '2048x2048 @ 2048', fn() => $a->dot($x),
+    if ($residency === 'both_resident') {
+        $a = ZTensor::arr($matrix)->toGpu();
+        $x = ZTensor::arr($vector)->toGpu();
+        $operation = fn() => $a->dot($x);
+    } elseif ($residency === 'matrix_resident') {
+        $a = ZTensor::arr($matrix)->toGpu();
+        $operation = fn() => $a->dot(ZTensor::arr($vector));
+    } else {
+        $x = ZTensor::arr($vector)->toGpu();
+        $operation = fn() => ZTensor::arr($matrix)->dot($x);
+    }
+    $results[] = matrixMeasure('matvec_' . $residency, '2048x2048 @ 2048', $operation,
         fn(ZTensor $result) => matrixClose(matrixScalar($result->sum()), 2048.0 * 2048.0), 2048 * 4);
-    unset($a, $x);
+    unset($a, $x, $operation);
 }
 
 $document = [
