@@ -6,6 +6,7 @@
 #include <cuda_runtime.h>
 #include <cuda.h>
 #include <cublas_v2.h>
+#include <cub/cub.cuh>
 #include <stddef.h>
 #include <math.h>
 #include <cstdio>
@@ -424,7 +425,7 @@ __global__ void kernel_transpose_tiled(const float* input, float* output, size_t
 
 enum ReductionMode : int { REDUCE_SUM = 0, REDUCE_MEAN = 1, REDUCE_MIN = 2, REDUCE_MAX = 3, REDUCE_ARGMIN = 4, REDUCE_ARGMAX = 5 };
 
-__global__ void kernel_reduce_axis(const float* input, float* output, size_t outer, size_t axis_size, size_t inner, int mode) {
+__global__ void kernel_reduce_axis_serial(const float* input, float* output, size_t outer, size_t axis_size, size_t inner, int mode) {
     size_t out_index = blockIdx.x * blockDim.x + threadIdx.x;
     size_t out_size = outer * inner;
     if (out_index >= out_size) return;
@@ -452,6 +453,70 @@ __global__ void kernel_reduce_axis(const float* input, float* output, size_t out
     output[out_index] = (mode == REDUCE_ARGMIN || mode == REDUCE_ARGMAX)
         ? static_cast<float>(best_index)
         : value;
+}
+
+__device__ __forceinline__ bool reduction_candidate_wins(float candidate, size_t candidate_index,
+                                                          float current, size_t current_index, int mode) {
+    // Preserve the public CPU semantics: a NaN in position zero remains the
+    // result, later NaNs are ignored, and ties retain the first index.
+    if (candidate_index == SIZE_MAX) return false;
+    if (current_index == SIZE_MAX) return true;
+    if (isnan(current)) return current_index != 0 && !isnan(candidate);
+    if (isnan(candidate)) return false;
+    if (mode == REDUCE_MIN || mode == REDUCE_ARGMIN) {
+        return candidate < current || (candidate == current && candidate_index < current_index);
+    }
+    return candidate > current || (candidate == current && candidate_index < current_index);
+}
+
+__global__ void kernel_reduce_axis_hierarchical(const float* input, float* output, size_t outer,
+                                                 size_t axis_size, size_t inner, int mode) {
+    const size_t out_index = blockIdx.x;
+    const size_t out_size = outer * inner;
+    if (out_index >= out_size) return;
+
+    extern __shared__ unsigned char shared_raw[];
+    float* shared_values = reinterpret_cast<float*>(shared_raw);
+    size_t* shared_indices = reinterpret_cast<size_t*>(shared_values + blockDim.x);
+    const size_t outer_index = out_index / inner;
+    const size_t inner_index = out_index % inner;
+    const size_t base = outer_index * axis_size * inner + inner_index;
+
+    float local_value = (mode == REDUCE_SUM || mode == REDUCE_MEAN) ? 0.0f : 0.0f;
+    size_t local_index = SIZE_MAX;
+    for (size_t axis_index = threadIdx.x; axis_index < axis_size; axis_index += blockDim.x) {
+        const float candidate = input[base + axis_index * inner];
+        if (mode == REDUCE_SUM || mode == REDUCE_MEAN) {
+            local_value += candidate;
+        } else if (reduction_candidate_wins(candidate, axis_index, local_value, local_index, mode)) {
+            local_value = candidate;
+            local_index = axis_index;
+        }
+    }
+    shared_values[threadIdx.x] = local_value;
+    shared_indices[threadIdx.x] = local_index;
+    __syncthreads();
+
+    for (unsigned int offset = blockDim.x / 2; offset > 0; offset >>= 1) {
+        if (threadIdx.x < offset) {
+            if (mode == REDUCE_SUM || mode == REDUCE_MEAN) {
+                shared_values[threadIdx.x] += shared_values[threadIdx.x + offset];
+            } else if (reduction_candidate_wins(shared_values[threadIdx.x + offset], shared_indices[threadIdx.x + offset],
+                                                shared_values[threadIdx.x], shared_indices[threadIdx.x], mode)) {
+                shared_values[threadIdx.x] = shared_values[threadIdx.x + offset];
+                shared_indices[threadIdx.x] = shared_indices[threadIdx.x + offset];
+            }
+        }
+        __syncthreads();
+    }
+
+    if (threadIdx.x == 0) {
+        float value = shared_values[0];
+        if (mode == REDUCE_MEAN) value /= static_cast<float>(axis_size);
+        output[out_index] = (mode == REDUCE_ARGMIN || mode == REDUCE_ARGMAX)
+            ? static_cast<float>(shared_indices[0])
+            : value;
+    }
 }
 
 __global__ void kernel_arg_value(const float* input, size_t n, size_t* output, int find_max) {
@@ -954,9 +1019,21 @@ static void launch_reduce_axis(const float* d_input, float* d_output, size_t out
     if (!d_input || !d_output) throw std::invalid_argument(std::string(context) + ": null device pointer");
     if (outer == 0 || axis_size == 0 || inner == 0) return;
     size_t output_size = outer * inner;
-    int threads = 0, blocks = 0;
-    launch_1d(output_size, blocks, threads);
-    kernel_reduce_axis<<<blocks, threads>>>(d_input, d_output, outer, axis_size, inner, mode);
+    const char* requested = std::getenv("ZMATRIX_REDUCTION_IMPL");
+    const bool serial = requested && std::string(requested) == "serial";
+    if (serial) {
+        int threads = 0, blocks = 0;
+        launch_1d(output_size, blocks, threads);
+        kernel_reduce_axis_serial<<<blocks, threads>>>(d_input, d_output, outer, axis_size, inner, mode);
+    } else {
+        if (output_size > static_cast<size_t>(std::numeric_limits<unsigned int>::max())) {
+            throw std::overflow_error(std::string(context) + ": output grid exceeds CUDA limit");
+        }
+        constexpr int threads = 256;
+        const size_t shared_bytes = threads * (sizeof(float) + sizeof(size_t));
+        kernel_reduce_axis_hierarchical<<<static_cast<unsigned int>(output_size), threads, shared_bytes>>>(
+            d_input, d_output, outer, axis_size, inner, mode);
+    }
     CUDA_KERNEL_CHECK(context);
 }
 
@@ -986,8 +1063,29 @@ static float reduce_value_device(const float* input, size_t n, int mode, const c
     float* output = nullptr;
     CUDA_CHECK_CONTEXT(cudaMalloc(reinterpret_cast<void**>(&output), sizeof(float)), context);
     try {
-        kernel_reduce_axis<<<1, 1>>>(input, output, 1, n, 1, mode);
-        CUDA_KERNEL_CHECK(context);
+        const char* requested = std::getenv("ZMATRIX_REDUCTION_IMPL");
+        // Default hybrid: CUB for global sum, the custom hierarchical kernel
+        // for operations whose NaN/tie contract CUB does not preserve.
+        const bool use_cub = !requested || std::string(requested) == "cub";
+        // CUB Sum is numerically compatible within the documented tolerance.
+        // DeviceReduce::Min/Max use identity values for NaN inputs and would
+        // violate ZTensor's "NaN at index zero wins" CPU contract.
+        if (use_cub && mode == REDUCE_SUM) {
+            void* temporary = nullptr;
+            size_t temporary_bytes = 0;
+            CUDA_CHECK_CONTEXT(cub::DeviceReduce::Sum(temporary, temporary_bytes, input, output, n), context);
+            CUDA_CHECK_CONTEXT(cudaMalloc(&temporary, temporary_bytes), context);
+            try {
+                CUDA_CHECK_CONTEXT(cub::DeviceReduce::Sum(temporary, temporary_bytes, input, output, n), context);
+                CUDA_KERNEL_CHECK(context);
+                CUDA_CHECK_CONTEXT(cudaFree(temporary), context);
+            } catch (...) {
+                if (temporary) cudaFree(temporary);
+                throw;
+            }
+        } else {
+            launch_reduce_axis(input, output, 1, n, 1, mode, context);
+        }
         float result = 0.0f;
         CUDA_CHECK_CONTEXT(cudaMemcpy(&result, output, sizeof(float), cudaMemcpyDeviceToHost), context);
         CUDA_CHECK_CONTEXT(cudaFree(output), context);
@@ -1012,15 +1110,17 @@ extern "C" float gpu_max_value_device(const float* input, size_t n) {
 
 extern "C" size_t gpu_arg_value_device(const float* input, size_t n, int find_max) {
     if (!input || n == 0) throw std::invalid_argument("arg reduction: empty input");
-    size_t* output = nullptr;
-    CUDA_CHECK_CONTEXT(cudaMalloc(reinterpret_cast<void**>(&output), sizeof(size_t)), "arg reduction allocation");
+    // CUB ArgMin/ArgMax are intentionally not used: their NaN handling does
+    // not preserve the established CPU semantics or first-index tie rule.
+    float* output = nullptr;
+    CUDA_CHECK_CONTEXT(cudaMalloc(reinterpret_cast<void**>(&output), sizeof(float)), "arg reduction allocation");
     try {
-        kernel_arg_value<<<1, 1>>>(input, n, output, find_max);
-        CUDA_KERNEL_CHECK(find_max ? "argmax value" : "argmin value");
-        size_t result = 0;
-        CUDA_CHECK_CONTEXT(cudaMemcpy(&result, output, sizeof(size_t), cudaMemcpyDeviceToHost), "arg reduction result");
+        launch_reduce_axis(input, output, 1, n, 1, find_max ? REDUCE_ARGMAX : REDUCE_ARGMIN,
+            find_max ? "argmax value" : "argmin value");
+        float result = 0.0f;
+        CUDA_CHECK_CONTEXT(cudaMemcpy(&result, output, sizeof(float), cudaMemcpyDeviceToHost), "arg reduction result");
         CUDA_CHECK_CONTEXT(cudaFree(output), "arg reduction free");
-        return result;
+        return static_cast<size_t>(result);
     } catch (...) {
         if (output) cudaFree(output);
         throw;
