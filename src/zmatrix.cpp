@@ -360,6 +360,10 @@ struct ZTensor {
     mutable size_t d_capacity = 0;
     mutable bool device_valid = false;
     mutable bool host_valid = true;
+    // True only while an internal result is being fully overwritten on the
+    // device. It permits the short construction interval in which neither
+    // representation is valid, but must be cleared before the tensor escapes.
+    mutable bool device_write_pending = false;
     mutable std::mutex device_mutex; // FIX: protege d_data/device_valid/host_valid contra corrida de dados
 #endif
 
@@ -396,6 +400,7 @@ struct ZTensor {
             }
 #ifdef HAVE_CUDA
             host_valid = !defer_host_allocation || total_size == 0;
+            device_write_pending = defer_host_allocation && total_size > 0;
 #else
             if (defer_host_allocation && total_size > 0) {
                 data.resize(total_size, 0.0f);
@@ -420,6 +425,7 @@ struct ZTensor {
         d_capacity = 0;
         device_valid = false;
         host_valid = other.host_valid;
+        device_write_pending = false;
 
         if (other.device_valid) {
             const size_t n = other.size();
@@ -468,6 +474,7 @@ struct ZTensor {
         d_capacity = 0;
         device_valid = false;
         host_valid = other.host_valid;
+        device_write_pending = false;
 
         if (other.device_valid) {
             const size_t n = other.size();
@@ -507,10 +514,12 @@ struct ZTensor {
         d_capacity = other.d_capacity;
         device_valid = other.device_valid;
         host_valid = other.host_valid;
+        device_write_pending = other.device_write_pending;
         other.d_data = nullptr;
         other.d_capacity = 0;
         other.device_valid = false;
         other.host_valid = true;
+        other.device_write_pending = false;
 #endif
     }
 
@@ -536,10 +545,12 @@ struct ZTensor {
         d_capacity = other.d_capacity;
         device_valid = other.device_valid;
         host_valid = other.host_valid;
+        device_write_pending = other.device_write_pending;
         other.d_data = nullptr;
         other.d_capacity = 0;
         other.device_valid = false;
         other.host_valid = true;
+        other.device_write_pending = false;
 #endif
         return *this;
     }
@@ -561,24 +572,28 @@ struct ZTensor {
         const size_t n = checked_element_count(shape);
         ZMATRIX_DEBUG_ASSERT(!host_valid || n == 0 || data.size() >= n, "valid host buffer is too small");
         ZMATRIX_DEBUG_ASSERT(!device_valid || n == 0 || (d_data != nullptr && d_capacity >= n), "valid device buffer is missing or too small");
-        ZMATRIX_DEBUG_ASSERT(n == 0 || host_valid || device_valid, "non-empty tensor has no valid representation");
+        ZMATRIX_DEBUG_ASSERT(n == 0 || host_valid || device_valid || device_write_pending,
+            "non-empty tensor has no valid representation or pending device write");
     }
 
     void mark_synchronized_unlocked() const {
         host_valid = true;
         device_valid = true;
+        device_write_pending = false;
         assert_invariants_unlocked();
     }
 
     void mark_host_modified_unlocked() const {
         host_valid = true;
         device_valid = false;
+        device_write_pending = false;
         assert_invariants_unlocked();
     }
 
     void mark_device_modified_unlocked() const {
         device_valid = true;
         host_valid = false;
+        device_write_pending = false;
         assert_invariants_unlocked();
     }
 
@@ -652,6 +667,7 @@ struct ZTensor {
         gpu_require_available();
         std::lock_guard<std::mutex> lock(device_mutex);
         const size_t n = size();
+        device_write_pending = n > 0;
         invalidate_device_unlocked();
         if (n == 0) return;
         if (!d_data || d_capacity < n) {
@@ -715,6 +731,7 @@ struct ZTensor {
         }
         d_capacity = 0;
         device_valid = false;
+        device_write_pending = false;
     }
 
     void free_device() {
