@@ -1,0 +1,32 @@
+operation,size,phase,median_ms,p25_ms,p75_ms,validated
+greater,"1048576 elements",cpu,1.66826,1.54638,1.778315,true
+greater,"1048576 elements",h2d,1.39667,1.29503,1.686025,true
+greater,"1048576 elements",gpu,3.39614,2.628285,4.0887,true
+greater,"1048576 elements",d2h,0.96162,0.85613,1.063425,true
+greater,"1048576 elements",end_to_end,5.35986,4.65619,6.93836,true
+broadcast,"1024x1024 <- 1x1024",cpu,22.50952,21.063295,23.51085,true
+broadcast,"1024x1024 <- 1x1024",h2d,1.54209,1.421145,1.58785,true
+broadcast,"1024x1024 <- 1x1024",gpu,3.1966,2.819685,3.32068,true
+broadcast,"1024x1024 <- 1x1024",d2h,0.89221,0.83842,1.10781,true
+broadcast,"1024x1024 <- 1x1024",end_to_end,9.58177,6.785295,10.718345,true
+tile,"1024x1024 x2",cpu,8.95092,7.47681,10.15344,true
+tile,"1024x1024 x2",h2d,1.4432,1.37566,1.767205,true
+tile,"1024x1024 x2",gpu,12.07294,7.324515,17.484885,true
+tile,"1024x1024 x2",d2h,1.92478,1.753015,2.35158,true
+tile,"1024x1024 x2",end_to_end,16.26108,14.77586,19.43755,true
+cumsum,"1048576 elements",cpu,2.56575,2.473845,2.771615,true
+cumsum,"1048576 elements",h2d,1.53824,1.502765,1.784475,true
+cumsum,"1048576 elements",gpu,4.994,4.677365,5.06935,true
+cumsum,"1048576 elements",d2h,1.33012,1.05501,1.62492,true
+cumsum,"1048576 elements",end_to_end,8.57989,7.65072,9.94939,true
+dot,"1048576 elements",cpu,1.69884,1.47917,1.75549,true
+dot,"1048576 elements",h2d,3.17537,3.160355,3.95054,true
+dot,"1048576 elements",gpu,1.12244,1.05215,1.922525,true
+dot,"1048576 elements",d2h,0,0,0,true
+dot,"1048576 elements",end_to_end,4.65762,4.397195,4.926845,true
+matvec,"2048x2048 @ 2048",cpu,6.64015,6.248715,9.027425,true
+matvec,"2048x2048 @ 2048",h2d,4.37701,4.314915,6.541315,true
+matvec,"2048x2048 @ 2048",gpu,1.62415,1.286285,2.318855,true
+matvec,"2048x2048 @ 2048",d2h,0.09339,0.08118,0.110495,true
+matvec,"2048x2048 @ 2048",end_to_end,7.51531,5.82483,7.86225,true
+resident_chain,"1048576 elements, greater->cumsum",gpu,9.96116,9.674665,15.628085,true
