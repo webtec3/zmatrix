@@ -38,6 +38,10 @@ dnl ========== DETECCAO DE WSL ==========
       WSL_DETECTED=1
       AC_MSG_RESULT([yes, detected WSL2])
       AC_DEFINE([HAVE_WSL], [1], [Define if running in WSL])
+      dnl Keep the driver before libcudart/cuBLAS in DT_NEEDED order. cuBLASLt
+      dnl may otherwise resolve a distro libcuda stub from its constructor
+      dnl before the loader reaches a later ZMatrix libcuda dependency.
+      ZMATRIX_SHARED_LIBADD="$ZMATRIX_SHARED_LIBADD -L/usr/lib/wsl/lib -lcuda"
     else
       WSL_DETECTED=0
       AC_MSG_RESULT([no, native Linux])
@@ -97,7 +101,12 @@ dnl ========== DETECCAO DE WSL ==========
     dnl ========== RPATH SETUP PARA WSL ==========
     dnl Se em WSL, adicionar rpath para /usr/lib/wsl/lib para fallback de libcuda
     if test "$WSL_DETECTED" = "1"; then
-      AC_MSG_NOTICE([WSL detected - adding rpath for CUDA libraries in /usr/lib/wsl/lib])
+      AC_MSG_NOTICE([WSL detected - linking the WSL CUDA driver proxy explicitly])
+      dnl libcudart resolves libcuda from its own constructor. A RUNPATH alone is
+      dnl not sufficient for that transitive lookup and can let a distro/toolkit
+      dnl stub win before our runtime validation. Keep libcuda.so.1 as an explicit
+      dnl DT_NEEDED dependency so the loader resolves it through this module's
+      dnl WSL rpath before libcudart initializes.
       ZMATRIX_SHARED_LIBADD="$ZMATRIX_SHARED_LIBADD -Wl,-rpath,/usr/lib/wsl/lib"
     fi
 

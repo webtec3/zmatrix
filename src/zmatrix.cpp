@@ -81,8 +81,6 @@
 
 #define ZMATRIX_PARALLEL_THRESHOLD 10000000  // Disable OpenMP - its slower!
 
-#define ZMATRIX_GPU_THRESHOLD 200000
-
 #ifdef HAVE_CUDA
 #include "gpu_wrapper.h"
 
@@ -102,12 +100,6 @@ static inline void zmatrix_gpu_debug(const char *op, size_t n) {
     }
 }
 
-static inline bool zmatrix_should_use_gpu(size_t n) {
-    if (zmatrix_force_cpu()) return false;
-    return (n >= ZMATRIX_GPU_THRESHOLD) && (gpu_available() != 0);
-}
-#else
-static inline bool zmatrix_should_use_gpu(size_t) { return false; }
 #endif
 
 // Gerador aleatório (mantido)
@@ -197,7 +189,13 @@ struct ZTensor {
     // Zera gradientes (apenas este tensor)
     void zeroGrad() {
         if (grad) {
+#ifdef HAVE_CUDA
+            grad->ensure_host();
+#endif
             std::fill(grad->data.begin(), grad->data.end(), 0.0f);
+#ifdef HAVE_CUDA
+            grad->mark_host_modified();
+#endif
         }
     }
 
@@ -265,7 +263,13 @@ struct ZTensor {
 
         // 2) Gradiente inicial
         ensureGrad();
+#ifdef HAVE_CUDA
+        grad->ensure_host();
+#endif
         grad->data[0] = 1.0f;
+#ifdef HAVE_CUDA
+        grad->mark_host_modified();
+#endif
 
         if (!grad_fn) return;
 
@@ -524,6 +528,7 @@ struct ZTensor {
     }
 
     void ensure_device() const {
+            gpu_require_available();
             std::lock_guard<std::mutex> lock(device_mutex); // FIX: thread-safety
             if (device_valid) return;
             size_t n = size();
@@ -545,9 +550,27 @@ struct ZTensor {
                     }
                     cuda_check(cudaMalloc(reinterpret_cast<void**>(&d_data), n * sizeof(float)), "cudaMalloc");
                     d_capacity = n;
+                    if (zmatrix_gpu_debug_enabled()) std::fprintf(stderr, "[zmatrix][gpu] device allocation elements=%zu\n", n);
                 }
-                cuda_check(cudaMemcpy(d_data, data.data(), n * sizeof(float), cudaMemcpyHostToDevice), "cudaMemcpy H2D");
+                // Static zeros()/ones() must remain host tensors until the
+                // explicit toGpu() call. At that point generate uniform 0/1
+                // contents directly on the device instead of uploading them.
+                bool initialized_on_device = false;
+                const float first = data[0];
+                if (first == 0.0f || first == 1.0f) {
+                    initialized_on_device = std::all_of(data.begin() + 1, data.end(),
+                        [first](float value) { return value == first; });
+                    if (initialized_on_device) gpu_fill_device(d_data, first, n);
+                }
+                if (!initialized_on_device) {
+                    cuda_check(cudaMemcpy(d_data, data.data(), n * sizeof(float), cudaMemcpyHostToDevice), "cudaMemcpy H2D");
+                }
                 device_valid = true;
+                if (zmatrix_gpu_debug_enabled()) {
+                    std::fprintf(stderr, initialized_on_device
+                        ? "[zmatrix][gpu] device fill elements=%zu host_valid=1 device_valid=1\n"
+                        : "[zmatrix][gpu] H2D elements=%zu host_valid=1 device_valid=1\n", n);
+                }
             } catch (const std::exception&) {
                 // FIX: libera a memória alocada antes de descartar o ponteiro,
                 // evitando vazamento de VRAM quando cudaMemcpy falha após cudaMalloc ter sucesso.
@@ -559,6 +582,31 @@ struct ZTensor {
                 device_valid = false;
                 throw;
             }
+    }
+
+    // Reserve device storage for an operation that overwrites every element.
+    // Unlike ensure_device(), this deliberately performs no H2D transfer. The
+    // device buffer remains invalid until the caller confirms successful work
+    // with mark_device_modified(). This is required for SGEMM with beta == 0.
+    void allocate_device_for_write() const {
+        gpu_require_available();
+        std::lock_guard<std::mutex> lock(device_mutex);
+        const size_t n = size();
+        device_valid = false;
+        if (n == 0) return;
+        if (!d_data || d_capacity < n) {
+            if (d_data) {
+                cudaError_t free_status = cudaFree(d_data);
+                d_data = nullptr;
+                d_capacity = 0;
+                cuda_check(free_status, "cudaFree before device output allocation");
+            }
+            cuda_check(cudaMalloc(reinterpret_cast<void**>(&d_data), n * sizeof(float)), "cudaMalloc device output");
+            d_capacity = n;
+        }
+        if (zmatrix_gpu_debug_enabled()) {
+            std::fprintf(stderr, "[zmatrix][gpu] allocate output n=%zu H2D=0 host_valid=%d device_valid=0\n", n, host_valid ? 1 : 0);
+        }
     }
 
     void ensure_host() const {
@@ -574,18 +622,23 @@ struct ZTensor {
         }
         cuda_check(cudaMemcpy(const_cast<float*>(data.data()), d_data, n * sizeof(float), cudaMemcpyDeviceToHost), "cudaMemcpy D2H");
         host_valid = true;
+        if (zmatrix_gpu_debug_enabled()) std::fprintf(stderr, "[zmatrix][gpu] D2H elements=%zu host_valid=1 device_valid=1\n", n);
     }
 
     void mark_host_modified() {
         std::lock_guard<std::mutex> lock(device_mutex); // FIX: thread-safety
+        const bool state_changed = !host_valid || device_valid;
         host_valid = true;
         device_valid = false;
+        if (state_changed && zmatrix_gpu_debug_enabled()) std::fprintf(stderr, "[zmatrix][gpu] state host_valid=1 device_valid=0\n");
     }
 
     void mark_device_modified() const {
         std::lock_guard<std::mutex> lock(device_mutex); // FIX: thread-safety
+        const bool state_changed = host_valid || !device_valid;
         device_valid = true;
         host_valid = false;
+        if (state_changed && zmatrix_gpu_debug_enabled()) std::fprintf(stderr, "[zmatrix][gpu] state host_valid=0 device_valid=1\n");
     }
 
     void free_device() {
@@ -593,6 +646,7 @@ struct ZTensor {
         if (d_data) {
             cudaFree(d_data);
             d_data = nullptr;
+            if (zmatrix_gpu_debug_enabled()) std::fprintf(stderr, "[zmatrix][gpu] device buffer released\n");
         }
         d_capacity = 0;
         device_valid = false;
@@ -604,7 +658,8 @@ struct ZTensor {
 
     void to_cpu() {
         ensure_host();
-        device_valid = false;  // Mark as no longer on GPU
+        std::lock_guard<std::mutex> lock(device_mutex);
+        device_valid = false;  // Explicitly leave device residency.
     }
 
     bool is_on_gpu() const {
@@ -760,6 +815,10 @@ struct ZTensor {
 
         const size_t N = size();
         if (N == 0) return;
+#ifdef HAVE_CUDA
+        ensure_host();
+        other.ensure_host();
+#endif
 
         float* __restrict__ a = data.data();
         const float* __restrict__ b = other.data.data();
@@ -797,6 +856,20 @@ struct ZTensor {
 
         const size_t axis_dim = shape[axis];
         const size_t out_size = out.size();
+#ifdef HAVE_CUDA
+        if (device_valid) {
+            size_t outer = 1;
+            size_t inner = 1;
+            for (int i = 0; i < axis; ++i) outer *= shape[static_cast<size_t>(i)];
+            for (size_t i = static_cast<size_t>(axis) + 1; i < shape.size(); ++i) inner *= shape[i];
+            out.allocate_device_for_write();
+            gpu_sum_axis_device(d_data, out.d_data, outer, axis_dim, inner);
+            out.mark_device_modified();
+            return;
+        }
+        ensure_host();
+        out.ensure_host();
+#endif
 
         float* __restrict__ out_data = out.data.data();
 
@@ -845,6 +918,9 @@ struct ZTensor {
                 out_data[i] = acc;
             }
         }
+#ifdef HAVE_CUDA
+        out.mark_host_modified();
+#endif
     }
 
     // --- Subtração (float) - Loop Canônico ---
@@ -1070,6 +1146,11 @@ struct ZTensor {
             if (N == 0) return;
 
     #ifdef HAVE_CUDA
+            if (device_valid) {
+                gpu_fill_device(d_data, value, N);
+                mark_device_modified();
+                return;
+            }
             ensure_host();
     #endif
 
@@ -1165,12 +1246,15 @@ struct ZTensor {
 
 #ifdef HAVE_CUDA
          const size_t output_elements = M * N;
-         const bool use_gpu = device_valid || other.device_valid || zmatrix_should_use_gpu(output_elements);
+         // GPU dispatch is explicit: at least one input must have been moved
+         // with toGpu(). The other input is uploaded only to satisfy this
+         // explicitly selected operation.
+         const bool use_gpu = device_valid || other.device_valid;
          if (use_gpu) {
              zmatrix_gpu_debug("matmul", output_elements);
              ensure_device();
              other.ensure_device();
-             result.ensure_device();
+             result.allocate_device_for_write();
              gpu_matmul_device(d_data, other.d_data, result.d_data, M, K, N);
              result.mark_device_modified();
              return result;
@@ -1307,6 +1391,13 @@ struct ZTensor {
         }
 
 #ifdef HAVE_CUDA
+        if (device_valid) {
+            ZTensor result({cols, rows});
+            result.allocate_device_for_write();
+            gpu_transpose_device(d_data, result.d_data, rows, cols);
+            result.mark_device_modified();
+            return result;
+        }
         // FIX: transpose() lia data.data() diretamente sem sincronizar;
         // se o tensor estivesse residente só na GPU, lia memória de host
         // desatualizada. Todas as outras operações já faziam ensure_host()
@@ -1557,6 +1648,10 @@ ZTensor column(size_t col_idx) const {
     // Retorna um tensor contendo APENAS os índices que atendem à condição (val <= threshold)
         ZTensor find_indices_where(size_t feature_index, float threshold) const {
             if (shape.size() != 2) throw std::runtime_error("requer tensor 2D");
+            if (feature_index >= shape[1]) throw std::out_of_range("feature index out of bounds");
+#ifdef HAVE_CUDA
+            ensure_host();
+#endif
 
             const size_t rows = shape[0];
             const size_t cols = shape[1];
@@ -1587,6 +1682,10 @@ ZTensor column(size_t col_idx) const {
         if (feature_index >= shape[1]) throw std::out_of_range("Coluna fora dos limites");
         if (shape[0] != y.size()) throw std::invalid_argument("X e y devem ter o mesmo número de linhas");
 
+#ifdef HAVE_CUDA
+        ensure_host();
+        y.ensure_host();
+#endif
         const size_t rows = shape[0];
         const size_t cols = shape[1];
         const float* p_X = this->data.data();
@@ -1993,13 +2092,16 @@ ZTensor column(size_t col_idx) const {
     // --- Argmax ---
         size_t argmax() const {
     #ifdef HAVE_CUDA
-            const_cast<ZTensor*>(this)->ensure_host();
     #endif
             const size_t N = size();
             if (N == 0) {
                 throw std::runtime_error("argmax: não pode ser aplicado em tensor vazio");
             }
 
+#ifdef HAVE_CUDA
+            if (device_valid) return gpu_arg_value_device(d_data, N, 1);
+            ensure_host();
+#endif
             const float* p = data.data();
             size_t global_max_idx = 0;
             float global_max_val = p[0];
@@ -2053,13 +2155,16 @@ ZTensor column(size_t col_idx) const {
             // NOTA: ensure_host() já é 'const' (opera sobre os campos mutable
             // d_data/device_valid/host_valid), então o const_cast usado em
             // argmax() não é necessário aqui — chamada direta é suficiente.
-            ensure_host();
     #endif
             const size_t N = size();
             if (N == 0) {
                 throw std::runtime_error("argmin: não pode ser aplicado em tensor vazio");
             }
 
+#ifdef HAVE_CUDA
+            if (device_valid) return gpu_arg_value_device(d_data, N, 0);
+            ensure_host();
+#endif
             const float* p = data.data();
             size_t global_min_idx = 0;
             float global_min_val = p[0];
@@ -2593,10 +2698,6 @@ ZTensor column(size_t col_idx) const {
                 throw std::out_of_range("axis fora dos limites para argmax/argmin");
             }
 
-    #ifdef HAVE_CUDA
-            ensure_host();
-    #endif
-
             std::vector<size_t> out_shape = shape;
             out_shape.erase(out_shape.begin() + axis);
 
@@ -2604,6 +2705,20 @@ ZTensor column(size_t col_idx) const {
             const size_t axis_dim = shape[axis];
             const size_t out_size = result.size();
             if (out_size == 0) return result;
+
+#ifdef HAVE_CUDA
+            if (device_valid) {
+                size_t outer = 1;
+                size_t inner = 1;
+                for (int i = 0; i < axis; ++i) outer *= shape[static_cast<size_t>(i)];
+                for (size_t i = static_cast<size_t>(axis) + 1; i < shape.size(); ++i) inner *= shape[i];
+                result.allocate_device_for_write();
+                gpu_arg_axis_device(d_data, result.d_data, outer, axis_dim, inner, find_max ? 1 : 0);
+                result.mark_device_modified();
+                return result;
+            }
+            ensure_host();
+#endif
 
             float* out_data = result.data.data();
 
@@ -2984,6 +3099,9 @@ ZTensor column(size_t col_idx) const {
                 for (size_t i = 0; i < N; ++i)
                     a[i] *= inv;
             }
+#ifdef HAVE_CUDA
+            mark_host_modified();
+#endif
             return;
         }
 
@@ -3046,6 +3164,13 @@ ZTensor column(size_t col_idx) const {
        const size_t N = size();
        if (N == 0) return;
 #ifdef HAVE_CUDA
+       if (device_valid || other.device_valid) {
+           ensure_device();
+           other.ensure_device();
+           gpu_div_device(d_data, other.d_data, N);
+           mark_device_modified();
+           return;
+       }
        ensure_host();
        other.ensure_host();
 #endif
@@ -3092,6 +3217,11 @@ ZTensor column(size_t col_idx) const {
         const size_t N = size();
         if (N == 0) return;
 #ifdef HAVE_CUDA
+        if (device_valid) {
+            gpu_pow_device(d_data, exponent, N);
+            mark_device_modified();
+            return;
+        }
         ensure_host();
 #endif
         float * __restrict__ a = data.data();
@@ -3156,6 +3286,11 @@ ZTensor column(size_t col_idx) const {
         if (total_size == 0) return;
 
 #ifdef HAVE_CUDA
+        if (device_valid) {
+            gpu_log_device(d_data, total_size);
+            mark_device_modified();
+            return;
+        }
         ensure_host();
 #endif
         float* p_this = this->data.data(); // Ponteiro para os dados DO PRÓPRIO objeto
@@ -3232,6 +3367,7 @@ ZTensor column(size_t col_idx) const {
           if (N == 0) return 0.0;
 
 #ifdef HAVE_CUDA
+          if (device_valid) return static_cast<double>(gpu_sum_value_device(d_data, N));
           ensure_host();
 #endif
           const float* a = data.data();
@@ -3274,6 +3410,7 @@ ZTensor column(size_t col_idx) const {
          const size_t N = size();
          if (N == 0) return std::numeric_limits<float>::quiet_NaN();
 #ifdef HAVE_CUDA
+         if (device_valid) return gpu_min_value_device(d_data, N);
          ensure_host();
 #endif
          const float* p = data.data();
@@ -3310,6 +3447,7 @@ ZTensor column(size_t col_idx) const {
          const size_t N = size();
          if (N == 0) return std::numeric_limits<float>::quiet_NaN();
 #ifdef HAVE_CUDA
+         if (device_valid) return gpu_max_value_device(d_data, N);
          ensure_host();
 #endif
          const float* p = data.data();
@@ -3734,6 +3872,9 @@ ZTensor column(size_t col_idx) const {
 
                 const ZTensor* grad_result = result_raw->getGrad();
                 if (!grad_result) return;
+#ifdef HAVE_CUDA
+                grad_result->ensure_host();
+#endif
 
                 if (a_req) {
                     a_ptr_raw->accumulate_grad(*grad_result);
@@ -3834,6 +3975,11 @@ ZTensor column(size_t col_idx) const {
 
                 const ZTensor* grad_result = result_raw->getGrad();
                 if (!grad_result) return;
+#ifdef HAVE_CUDA
+                grad_result->ensure_host();
+                a_copy->ensure_host();
+                b_copy->ensure_host();
+#endif
 
                 const size_t N = grad_result->size();
 
@@ -3936,6 +4082,9 @@ ZTensor column(size_t col_idx) const {
 
                 const ZTensor* grad_result = result_raw->getGrad();
                 if (!grad_result) return;
+#ifdef HAVE_CUDA
+                grad_result->ensure_host();
+#endif
 
                 // grad_input[i] = grad_result[0] para cada i
                 float grad_val = grad_result->data[0];
@@ -4345,7 +4494,7 @@ zend_module_entry zmatrix_module_entry = {
     NULL,                   // RINIT
     NULL,                   // RSHUTDOWN
     PHP_MINFO(zmatrix),     // MINFO
-    "0.3.0",                // Versão da extensão (exemplo)
+    ZMATRIX_VERSION,         // Versão da extensão
     STANDARD_MODULE_PROPERTIES
 };
 

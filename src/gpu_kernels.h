@@ -5,6 +5,8 @@
 
 extern "C" {
     int gpu_available();
+    void gpu_require_available();
+    const char* gpu_driver_path();
     void gpu_add(float* a, const float* b, size_t n);
     void gpu_sub(float* a, const float* b, size_t n);
     void gpu_mul(float* a, const float* b, size_t n);
@@ -22,6 +24,7 @@ extern "C" {
     void gpu_add_device(float* d_a, const float* d_b, size_t n);
     void gpu_sub_device(float* d_a, const float* d_b, size_t n);
     void gpu_mul_device(float* d_a, const float* d_b, size_t n);
+    void gpu_div_device(float* d_a, const float* d_b, size_t n);
     void gpu_relu_device(float* d_a, size_t n);
     void gpu_leaky_relu_device(float* d_a, float alpha, size_t n);
     void gpu_leaky_relu_derivative_device(float* d_a, float alpha, size_t n);
@@ -33,6 +36,19 @@ extern "C" {
     void gpu_scalar_sub_device(float* d_a, float value, size_t n);
     void gpu_scalar_mul_device(float* d_a, float value, size_t n);
     void gpu_scalar_div_device(float* d_a, float value, size_t n);
+    void gpu_pow_device(float* d_a, float exponent, size_t n);
+    void gpu_log_device(float* d_a, size_t n);
+    void gpu_fill_device(float* d_a, float value, size_t n);
+    void gpu_transpose_device(const float* d_input, float* d_output, size_t rows, size_t cols);
+    void gpu_sum_axis_device(const float* d_input, float* d_output, size_t outer, size_t axis_size, size_t inner);
+    void gpu_mean_axis_device(const float* d_input, float* d_output, size_t outer, size_t axis_size, size_t inner);
+    void gpu_min_axis_device(const float* d_input, float* d_output, size_t outer, size_t axis_size, size_t inner);
+    void gpu_max_axis_device(const float* d_input, float* d_output, size_t outer, size_t axis_size, size_t inner);
+    void gpu_arg_axis_device(const float* d_input, float* d_output, size_t outer, size_t axis_size, size_t inner, int find_max);
+    float gpu_sum_value_device(const float* d_input, size_t n);
+    float gpu_min_value_device(const float* d_input, size_t n);
+    float gpu_max_value_device(const float* d_input, size_t n);
+    size_t gpu_arg_value_device(const float* d_input, size_t n, int find_max);
     void gpu_softmax(const float* A, float* B, const int* shape, int dims, int axis);
     void gpu_sin(const float* A, float* B, int N);
     void gpu_cos(const float* A, float* B, int N);

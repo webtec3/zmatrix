@@ -106,7 +106,8 @@ PHP_METHOD(ZTensor, add)
         float scalar = (Z_TYPE_P(other_zv) == IS_LONG
             ? (float)Z_LVAL_P(other_zv)
             : (float)Z_DVAL_P(other_zv));
-        A.scalar_add(scalar);
+        try { A.scalar_add(scalar); }
+        catch (const std::exception& e) { zend_throw_exception(zend_ce_exception, e.what(), 0); RETURN_THROWS(); }
         ZVAL_ZVAL(return_value, ZEND_THIS, 1, 0);
         return;
     }
@@ -121,8 +122,12 @@ PHP_METHOD(ZTensor, add)
 
     // 4) Vetor‑1D de tamanho 1 → escalar
     if (shapeB.size()==1 && shapeB[0]==1) {
+#ifdef HAVE_CUDA
+        B.ensure_host();
+#endif
         float scalar = B.data.data()[0];
-        A.scalar_add(scalar);
+        try { A.scalar_add(scalar); }
+        catch (const std::exception& e) { zend_throw_exception(zend_ce_exception, e.what(), 0); RETURN_THROWS(); }
         ZVAL_ZVAL(return_value, ZEND_THIS, 1, 0);
         return;
     }
@@ -141,6 +146,9 @@ PHP_METHOD(ZTensor, add)
         if (shapeA.size()==2 && shapeB.size()==1 && shapeB[0]==shapeA[1]) {
             size_t M=shapeA[0], N=shapeA[1];
             ZTensor C(shapeA);
+#ifdef HAVE_CUDA
+            B.ensure_host();
+#endif
             float *cd=C.data.data(), *bd=(float*)B.data.data();
             for(size_t i=0;i<M;++i){
                 memcpy(cd+i*N, bd, N*sizeof(float));
@@ -155,6 +163,9 @@ PHP_METHOD(ZTensor, add)
         if (shapeB.size() == 2 && shapeA.size() == 1 && shapeA[0] == shapeB[1]) {
             size_t M = shapeB[0], N = shapeB[1];
             ZTensor expandedA(shapeB);
+#ifdef HAVE_CUDA
+            A.ensure_host();
+#endif
             float *dst = expandedA.data.data();
             const float *src = A.data.data();
             for (size_t i = 0; i < M; ++i) {
@@ -198,7 +209,8 @@ PHP_METHOD(ZTensor, sub)
         float scalar = (Z_TYPE_P(other_zv)==IS_LONG
             ? (float)Z_LVAL_P(other_zv)
             : (float)Z_DVAL_P(other_zv));
-        A.scalar_subtract(scalar);
+        try { A.scalar_subtract(scalar); }
+        catch (const std::exception& e) { zend_throw_exception(zend_ce_exception, e.what(), 0); RETURN_THROWS(); }
         ZVAL_ZVAL(return_value, ZEND_THIS, 1, 0);
         return;
     }
@@ -213,8 +225,12 @@ PHP_METHOD(ZTensor, sub)
 
     // 4) Vetor‑1D de tamanho 1 → escalar
     if(shapeB.size()==1 && shapeB[0]==1) {
+#ifdef HAVE_CUDA
+        B.ensure_host();
+#endif
         float scalar=B.data.data()[0];
-        A.scalar_subtract(scalar);
+        try { A.scalar_subtract(scalar); }
+        catch (const std::exception& e) { zend_throw_exception(zend_ce_exception, e.what(), 0); RETURN_THROWS(); }
         ZVAL_ZVAL(return_value, ZEND_THIS, 1, 0);
         return;
     }
@@ -231,6 +247,9 @@ PHP_METHOD(ZTensor, sub)
         if (shapeA.size() == 2 && shapeB.size() == 1 && shapeB[0] == shapeA[1]) {
             size_t M = shapeA[0], N = shapeA[1];
             ZTensor C(shapeA);
+#ifdef HAVE_CUDA
+            B.ensure_host();
+#endif
             float *cd = C.data.data(), *bd = B.data.data();
             for (size_t i = 0; i < M; ++i) {
                 memcpy(cd + i * N, bd, N * sizeof(float));
@@ -244,6 +263,9 @@ PHP_METHOD(ZTensor, sub)
         if (shapeA.size() == 1 && shapeB.size() == 2 && shapeA[0] == shapeB[1]) {
             size_t M = shapeB[0], N = shapeB[1];
             ZTensor C(shapeB);
+#ifdef HAVE_CUDA
+            A.ensure_host();
+#endif
             float *cd = C.data.data();
             const float *ad = A.data.data();
             for (size_t i = 0; i < M; ++i) {
@@ -285,7 +307,8 @@ PHP_METHOD(ZTensor, mul)
         float scalar = (Z_TYPE_P(other_zv) == IS_LONG)
             ? (float)Z_LVAL_P(other_zv)
             : (float)Z_DVAL_P(other_zv);
-        A.multiply_scalar(scalar);
+        try { A.multiply_scalar(scalar); }
+        catch (const std::exception& e) { zend_throw_exception(zend_ce_exception, e.what(), 0); RETURN_THROWS(); }
         ZVAL_ZVAL(return_value, ZEND_THIS, 1, 0);
         return;
     }
@@ -300,8 +323,12 @@ PHP_METHOD(ZTensor, mul)
 
     // 2a) B é vetor 1D de tamanho 1 → escalar
     if (shapeB.size() == 1 && shapeB[0] == 1) {
+#ifdef HAVE_CUDA
+        B.ensure_host();
+#endif
         float scalar = B.data.data()[0];
-        A.multiply_scalar(scalar);
+        try { A.multiply_scalar(scalar); }
+        catch (const std::exception& e) { zend_throw_exception(zend_ce_exception, e.what(), 0); RETURN_THROWS(); }
         ZVAL_ZVAL(return_value, ZEND_THIS, 1, 0);
         return;
     }
@@ -319,6 +346,9 @@ PHP_METHOD(ZTensor, mul)
         if (shapeA.size() == 2 && shapeB.size() == 1 && shapeB[0] == shapeA[1]) {
             size_t M = shapeA[0], N = shapeA[1];
             ZTensor C(shapeA);
+#ifdef HAVE_CUDA
+            B.ensure_host();
+#endif
             float *cdat = C.data.data();
             const float *bdat = B.data.data();
             for (size_t i = 0; i < M; ++i) {
@@ -333,6 +363,9 @@ PHP_METHOD(ZTensor, mul)
         if (shapeA.size() == 1 && shapeB.size() == 2 && shapeA[0] == shapeB[1]) {
             size_t M = shapeB[0], N = shapeB[1];
             ZTensor C(shapeB);
+#ifdef HAVE_CUDA
+            A.ensure_host();
+#endif
             float *cdat = C.data.data();
             const float *adat = A.data.data();
             for (size_t i = 0; i < M; ++i) {
@@ -767,7 +800,8 @@ PHP_METHOD(ZTensor, divide)
         float scalar = (Z_TYPE_P(other_zv) == IS_LONG)
             ? static_cast<float>(Z_LVAL_P(other_zv))
             : static_cast<float>(Z_DVAL_P(other_zv));
-        A.scalar_divide(scalar);
+        try { A.scalar_divide(scalar); }
+        catch (const std::exception& e) { zend_throw_exception(zend_ce_exception, e.what(), 0); RETURN_THROWS(); }
         ZVAL_ZVAL(return_value, ZEND_THIS, 1, 0);
         return;
     }
@@ -782,8 +816,12 @@ PHP_METHOD(ZTensor, divide)
 
     // 4) Vetor‑1D de tamanho 1 → trate como escalar
     if (shapeB.size() == 1 && shapeB[0] == 1) {
+#ifdef HAVE_CUDA
+        B.ensure_host();
+#endif
         float scalar = B.data.data()[0];
-        A.scalar_divide(scalar);
+        try { A.scalar_divide(scalar); }
+        catch (const std::exception& e) { zend_throw_exception(zend_ce_exception, e.what(), 0); RETURN_THROWS(); }
         ZVAL_ZVAL(return_value, ZEND_THIS, 1, 0);
         return;
     }
@@ -801,6 +839,9 @@ PHP_METHOD(ZTensor, divide)
         if (shapeA.size() == 2 && shapeB.size() == 1 && shapeB[0] == shapeA[1]) {
             size_t M = shapeA[0], N = shapeA[1];
             ZTensor C(shapeA);
+#ifdef HAVE_CUDA
+            B.ensure_host();
+#endif
             float *cdat = C.data.data();
             const float *bdat = B.data.data();
             for (size_t i = 0; i < M; ++i) {
@@ -815,6 +856,9 @@ PHP_METHOD(ZTensor, divide)
         if (shapeA.size() == 1 && shapeB.size() == 2 && shapeA[0] == shapeB[1]) {
             size_t M = shapeB[0], N = shapeB[1];
             ZTensor C(shapeB);
+#ifdef HAVE_CUDA
+            A.ensure_host();
+#endif
             float *cdat = C.data.data();
             const float *adat = A.data.data();
             for (size_t i = 0; i < M; ++i) {
@@ -1424,6 +1468,10 @@ PHP_METHOD(ZTensor, dot)
                  RETURN_DOUBLE(0.0);
             }
 
+#ifdef HAVE_CUDA
+            tensor_A->ensure_host();
+            tensor_B.ensure_host();
+#endif
             float sum_product = 0.0f;
             const float* a_data = tensor_A->data.data();
             const float* b_data = tensor_B.data.data();
@@ -1482,6 +1530,10 @@ PHP_METHOD(ZTensor, dot)
             }
 
 
+#ifdef HAVE_CUDA
+            tensor_A->ensure_host();
+            tensor_B.ensure_host();
+#endif
             const float* a_data = tensor_A->data.data();
             const float* b_data = tensor_B.data.data();
             float* c_data = result_tensor.data.data();
@@ -1647,6 +1699,9 @@ PHP_METHOD(ZTensor, clip)
     try {
         ZTensor result = *input_tensor;  // cópia do tensor de entrada
 
+#ifdef HAVE_CUDA
+        result.ensure_host();
+#endif
         const size_t N = result.size();
         float * __restrict__ a = result.data.data();
         const float fmin = static_cast<float>(min_val);
@@ -1668,6 +1723,9 @@ PHP_METHOD(ZTensor, clip)
             a[i] = std::max(fmin, std::min(fmax, a[i]));
         }
         #endif
+#ifdef HAVE_CUDA
+        result.mark_host_modified();
+#endif
         zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
     } catch (const std::exception& e) {
         zend_throw_exception(zend_ce_exception, e.what(), 0);
@@ -1773,6 +1831,9 @@ PHP_METHOD(ZTensor, broadcast)
         try {
             ZTensor &self_tensor = *self_obj->tensor;
             ZTensor &bias_tensor = *bias_ptr;
+#ifdef HAVE_CUDA
+            bias_tensor.ensure_host();
+#endif
 
             const std::vector<size_t> &shapeA = self_tensor.shape;
             const std::vector<size_t> &shapeB = bias_tensor.shape;
@@ -2029,6 +2090,9 @@ PHP_METHOD(ZTensor, minimum)
     try {
         ZTensor &A = *A_ptr;
         size_t N = A.size();
+#ifdef HAVE_CUDA
+        A.ensure_host();
+#endif
         ZTensor result(A.shape);
         float *res_data = result.data.data();
         const float *a_data = A.data.data();
@@ -2078,6 +2142,9 @@ PHP_METHOD(ZTensor, maximum)
     try {
         ZTensor &A = *A_ptr;
         size_t N = A.size();
+#ifdef HAVE_CUDA
+        A.ensure_host();
+#endif
         ZTensor result(A.shape);
         float *res_data = result.data.data();
         const float *a_data = A.data.data();
@@ -2154,6 +2221,9 @@ PHP_METHOD(ZTensor, scalarDivide)
         if (shapeA.size() == 2 && shapeB.size() == 1 && shapeB[0] == shapeA[1]) {
             size_t M = shapeA[0], N = shapeA[1];
             ZTensor C(shapeA);
+#ifdef HAVE_CUDA
+            B.ensure_host();
+#endif
             float *cd = C.data.data();
             const float *bd = B.data.data();
             for (size_t i = 0; i < M; ++i) {
@@ -2264,6 +2334,9 @@ PHP_METHOD(ZTensor, tile)
 
     try {
         const ZTensor &input = *obj->tensor;
+#ifdef HAVE_CUDA
+        input.ensure_host();
+#endif
         const auto &inShape = input.shape;
 
         if (inShape.empty()) {
@@ -2523,7 +2596,9 @@ PHP_METHOD(ZTensor, freeDevice)
         RETURN_THROWS();
     }
     try {
+#ifdef HAVE_CUDA
         self_obj->tensor->free_device();
+#endif
     } catch (const std::exception& e) {
         zend_throw_exception(zend_ce_exception, e.what(), 0);
         RETURN_THROWS();
