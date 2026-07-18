@@ -120,6 +120,15 @@ static size_t cap_b = 0;
 static bool cache_inited = false;
 static std::mutex cache_mutex;
 
+// Reductions are synchronous at the PHP boundary, so a small serialized cache
+// safely removes cudaMalloc/cudaFree from repeated global reductions without
+// introducing a general-purpose allocator or changing stream semantics.
+static void* reduction_temporary = nullptr;
+static size_t reduction_temporary_capacity = 0;
+static float* reduction_output = nullptr;
+static std::mutex reduction_cache_mutex;
+static bool reduction_cache_inited = false;
+
 static void release_cache() {
     if (cache_a) {
         cudaFree(cache_a);
@@ -130,6 +139,21 @@ static void release_cache() {
         cudaFree(cache_b);
         cache_b = nullptr;
         cap_b = 0;
+    }
+}
+
+static void release_reduction_cache() {
+    if (reduction_temporary) cudaFree(reduction_temporary);
+    if (reduction_output) cudaFree(reduction_output);
+    reduction_temporary = nullptr;
+    reduction_temporary_capacity = 0;
+    reduction_output = nullptr;
+}
+
+static inline void init_reduction_cache() {
+    if (!reduction_cache_inited) {
+        reduction_cache_inited = true;
+        std::atexit(release_reduction_cache);
     }
 }
 
@@ -176,6 +200,27 @@ static inline bool ensure_buffer(size_t n, float *&buf, size_t &cap) {
     CUDA_CHECK_CONTEXT(cudaPeekAtLastError(), context); \
     CUDA_CHECK_CONTEXT(cudaDeviceSynchronize(), context); \
 } while (0)
+
+template <typename T>
+class ScopedCudaBuffer {
+public:
+    ScopedCudaBuffer(size_t count, const char* context) {
+        CUDA_CHECK_CONTEXT(cudaMalloc(reinterpret_cast<void**>(&pointer_), count * sizeof(T)), context);
+    }
+    ~ScopedCudaBuffer() noexcept {
+        if (pointer_) cudaFree(pointer_);
+    }
+    ScopedCudaBuffer(const ScopedCudaBuffer&) = delete;
+    ScopedCudaBuffer& operator=(const ScopedCudaBuffer&) = delete;
+    T* get() const noexcept { return pointer_; }
+    void release_checked(const char* context) {
+        T* pointer = pointer_;
+        pointer_ = nullptr;
+        CUDA_CHECK_CONTEXT(cudaFree(pointer), context);
+    }
+private:
+    T* pointer_ = nullptr;
+};
 
 static const char* cublas_status_name(cublasStatus_t status) {
     switch (status) {
@@ -396,6 +441,26 @@ __global__ void kernel_log(float* a, size_t n) {
     if (i < n) a[i] = logf(a[i]);
 }
 
+__global__ void kernel_sqrt(float* a, size_t n) {
+    size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) a[i] = sqrtf(a[i]);
+}
+
+__global__ void kernel_clip(float* a, float min_value, float max_value, size_t n) {
+    size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) {
+        // Keep the exact std::max(min, std::min(max, value)) CPU ordering,
+        // including NaN values in the tensor or in either bound.
+        const float inner = (a[i] < max_value) ? a[i] : max_value;
+        a[i] = (min_value < inner) ? inner : min_value;
+    }
+}
+
+__global__ void kernel_softmax_derivative(float* a, size_t n) {
+    size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) a[i] = a[i] * (1.0f - a[i]);
+}
+
 __global__ void kernel_fill(float* a, float value, size_t n) {
     size_t i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < n) a[i] = value;
@@ -409,6 +474,11 @@ __global__ void kernel_find_zero(const float* values, size_t n, int* found) {
 __global__ void kernel_find_nonpositive(const float* values, size_t n, int* found) {
     size_t i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < n && values[i] <= 0.0f) atomicExch(found, 1);
+}
+
+__global__ void kernel_find_negative(const float* values, size_t n, int* found) {
+    size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n && values[i] < 0.0f) atomicExch(found, 1);
 }
 
 template <int TILE>
@@ -516,6 +586,63 @@ __global__ void kernel_reduce_axis_hierarchical(const float* input, float* outpu
         output[out_index] = (mode == REDUCE_ARGMIN || mode == REDUCE_ARGMAX)
             ? static_cast<float>(shared_indices[0])
             : value;
+    }
+}
+
+__global__ void kernel_softmax_rows(float* values, size_t rows, size_t cols, int one_dimensional) {
+    const size_t row_index = blockIdx.x;
+    if (row_index >= rows) return;
+    const size_t base = row_index * cols;
+    __shared__ float shared_values[256];
+    __shared__ size_t shared_indices[256];
+    __shared__ float shared_maximum;
+
+    float local_max = 0.0f;
+    size_t local_index = SIZE_MAX;
+    for (size_t column = threadIdx.x; column < cols; column += blockDim.x) {
+        const float candidate = values[base + column];
+        if (reduction_candidate_wins(candidate, column, local_max, local_index, REDUCE_MAX)) {
+            local_max = candidate;
+            local_index = column;
+        }
+    }
+    shared_values[threadIdx.x] = local_max;
+    shared_indices[threadIdx.x] = local_index;
+    __syncthreads();
+
+    for (unsigned int offset = blockDim.x / 2; offset > 0; offset >>= 1) {
+        if (threadIdx.x < offset &&
+            reduction_candidate_wins(shared_values[threadIdx.x + offset], shared_indices[threadIdx.x + offset],
+                                     shared_values[threadIdx.x], shared_indices[threadIdx.x], REDUCE_MAX)) {
+            shared_values[threadIdx.x] = shared_values[threadIdx.x + offset];
+            shared_indices[threadIdx.x] = shared_indices[threadIdx.x + offset];
+        }
+        __syncthreads();
+    }
+    if (threadIdx.x == 0) shared_maximum = shared_values[0];
+    __syncthreads();
+    const float maximum = shared_maximum;
+
+    float local_sum = 0.0f;
+    for (size_t column = threadIdx.x; column < cols; column += blockDim.x) {
+        const float exponential = expf(values[base + column] - maximum);
+        values[base + column] = exponential;
+        local_sum += exponential;
+    }
+    shared_values[threadIdx.x] = local_sum;
+    __syncthreads();
+    for (unsigned int offset = blockDim.x / 2; offset > 0; offset >>= 1) {
+        if (threadIdx.x < offset) shared_values[threadIdx.x] += shared_values[threadIdx.x + offset];
+        __syncthreads();
+    }
+
+    const float sum = shared_values[0];
+    const bool use_uniform = !one_dimensional && (sum == 0.0f || !isfinite(sum));
+    const float factor = use_uniform ? (1.0f / static_cast<float>(cols)) : (1.0f / sum);
+    if (use_uniform || sum != 0.0f) {
+        for (size_t column = threadIdx.x; column < cols; column += blockDim.x) {
+            values[base + column] = use_uniform ? factor : values[base + column] * factor;
+        }
     }
 }
 
@@ -858,23 +985,16 @@ extern "C" void gpu_div_device(float* d_a, const float* d_b, size_t n) {
     if (n == 0) return;
     launch_1d(n, blocks, threads);
 
-    int* d_found = nullptr;
-    CUDA_CHECK_CONTEXT(cudaMalloc(reinterpret_cast<void**>(&d_found), sizeof(int)), "divide validation allocation");
-    try {
-        CUDA_CHECK_CONTEXT(cudaMemset(d_found, 0, sizeof(int)), "divide validation reset");
-        kernel_find_zero<<<blocks, threads>>>(d_b, n, d_found);
-        CUDA_KERNEL_CHECK("divide validation");
-        int found = 0;
-        CUDA_CHECK_CONTEXT(cudaMemcpy(&found, d_found, sizeof(int), cudaMemcpyDeviceToHost), "divide validation result");
-        CUDA_CHECK_CONTEXT(cudaFree(d_found), "divide validation free");
-        d_found = nullptr;
-        if (found) throw std::runtime_error("Divisao por zero detectada");
-        kernel_div<<<blocks, threads>>>(d_a, d_b, n);
-        CUDA_KERNEL_CHECK("divide");
-    } catch (...) {
-        if (d_found) cudaFree(d_found);
-        throw;
-    }
+    ScopedCudaBuffer<int> found_buffer(1, "divide validation allocation");
+    CUDA_CHECK_CONTEXT(cudaMemset(found_buffer.get(), 0, sizeof(int)), "divide validation reset");
+    kernel_find_zero<<<blocks, threads>>>(d_b, n, found_buffer.get());
+    CUDA_KERNEL_CHECK("divide validation");
+    int found = 0;
+    CUDA_CHECK_CONTEXT(cudaMemcpy(&found, found_buffer.get(), sizeof(int), cudaMemcpyDeviceToHost), "divide validation result");
+    found_buffer.release_checked("divide validation free");
+    if (found) throw std::runtime_error("Divisao por zero detectada");
+    kernel_div<<<blocks, threads>>>(d_a, d_b, n);
+    CUDA_KERNEL_CHECK("divide");
 }
 
 extern "C" void gpu_relu_device(float* d_a, size_t n) {
@@ -978,23 +1098,63 @@ extern "C" void gpu_log_device(float* d_a, size_t n) {
     if (n == 0) return;
     launch_1d(n, blocks, threads);
 
-    int* d_found = nullptr;
-    CUDA_CHECK_CONTEXT(cudaMalloc(reinterpret_cast<void**>(&d_found), sizeof(int)), "log validation allocation");
-    try {
-        CUDA_CHECK_CONTEXT(cudaMemset(d_found, 0, sizeof(int)), "log validation reset");
-        kernel_find_nonpositive<<<blocks, threads>>>(d_a, n, d_found);
-        CUDA_KERNEL_CHECK("log validation");
-        int found = 0;
-        CUDA_CHECK_CONTEXT(cudaMemcpy(&found, d_found, sizeof(int), cudaMemcpyDeviceToHost), "log validation result");
-        CUDA_CHECK_CONTEXT(cudaFree(d_found), "log validation free");
-        d_found = nullptr;
-        if (found) throw std::runtime_error("Logaritmo de valor nao positivo.");
-        kernel_log<<<blocks, threads>>>(d_a, n);
-        CUDA_KERNEL_CHECK("log");
-    } catch (...) {
-        if (d_found) cudaFree(d_found);
-        throw;
+    ScopedCudaBuffer<int> found_buffer(1, "log validation allocation");
+    CUDA_CHECK_CONTEXT(cudaMemset(found_buffer.get(), 0, sizeof(int)), "log validation reset");
+    kernel_find_nonpositive<<<blocks, threads>>>(d_a, n, found_buffer.get());
+    CUDA_KERNEL_CHECK("log validation");
+    int found = 0;
+    CUDA_CHECK_CONTEXT(cudaMemcpy(&found, found_buffer.get(), sizeof(int), cudaMemcpyDeviceToHost), "log validation result");
+    found_buffer.release_checked("log validation free");
+    if (found) throw std::runtime_error("Logaritmo de valor nao positivo.");
+    kernel_log<<<blocks, threads>>>(d_a, n);
+    CUDA_KERNEL_CHECK("log");
+}
+
+extern "C" void gpu_sqrt_device(float* d_a, size_t n) {
+    int threads = 0, blocks = 0;
+    if (n == 0) return;
+    launch_1d(n, blocks, threads);
+
+    ScopedCudaBuffer<int> found_buffer(1, "sqrt validation allocation");
+    CUDA_CHECK_CONTEXT(cudaMemset(found_buffer.get(), 0, sizeof(int)), "sqrt validation reset");
+    kernel_find_negative<<<blocks, threads>>>(d_a, n, found_buffer.get());
+    CUDA_KERNEL_CHECK("sqrt validation");
+    int found = 0;
+    CUDA_CHECK_CONTEXT(cudaMemcpy(&found, found_buffer.get(), sizeof(int), cudaMemcpyDeviceToHost), "sqrt validation result");
+    found_buffer.release_checked("sqrt validation free");
+    if (found) throw std::runtime_error("Raiz quadrada de valor negativo.");
+    kernel_sqrt<<<blocks, threads>>>(d_a, n);
+    CUDA_KERNEL_CHECK("sqrt");
+}
+
+extern "C" void gpu_clip_device(float* d_a, float min_value, float max_value, size_t n) {
+    if (std::isnan(min_value) || std::isnan(max_value) || min_value > max_value) {
+        throw std::invalid_argument("clip min must be <= max and neither bound may be NaN");
     }
+    if (n == 0) return;
+    int threads = 0, blocks = 0;
+    launch_1d(n, blocks, threads);
+    kernel_clip<<<blocks, threads>>>(d_a, min_value, max_value, n);
+    CUDA_KERNEL_CHECK("clip");
+}
+
+extern "C" void gpu_softmax_device(float* d_a, size_t rows, size_t cols, int one_dimensional) {
+    if (!d_a) throw std::invalid_argument("softmax: null device pointer");
+    if (rows == 0 || cols == 0) return;
+    if (rows > static_cast<size_t>(std::numeric_limits<unsigned int>::max())) {
+        throw std::overflow_error("softmax: row grid exceeds CUDA limit");
+    }
+    constexpr int threads = 256;
+    kernel_softmax_rows<<<static_cast<unsigned int>(rows), threads>>>(d_a, rows, cols, one_dimensional);
+    CUDA_KERNEL_CHECK("softmax");
+}
+
+extern "C" void gpu_softmax_derivative_device(float* d_a, size_t n) {
+    if (n == 0) return;
+    int threads = 0, blocks = 0;
+    launch_1d(n, blocks, threads);
+    kernel_softmax_derivative<<<blocks, threads>>>(d_a, n);
+    CUDA_KERNEL_CHECK("softmax derivative");
 }
 
 extern "C" void gpu_fill_device(float* d_a, float value, size_t n) {
@@ -1060,9 +1220,13 @@ extern "C" void gpu_arg_axis_device(const float* input, float* output, size_t ou
 
 static float reduce_value_device(const float* input, size_t n, int mode, const char* context) {
     if (!input || n == 0) throw std::invalid_argument(std::string(context) + ": empty input");
-    float* output = nullptr;
-    CUDA_CHECK_CONTEXT(cudaMalloc(reinterpret_cast<void**>(&output), sizeof(float)), context);
-    try {
+    std::lock_guard<std::mutex> cache_lock(reduction_cache_mutex);
+    init_reduction_cache();
+    if (!reduction_output) {
+        CUDA_CHECK_CONTEXT(cudaMalloc(reinterpret_cast<void**>(&reduction_output), sizeof(float)), context);
+    }
+    float* output = reduction_output;
+    {
         const char* requested = std::getenv("ZMATRIX_REDUCTION_IMPL");
         // Default hybrid: CUB for global sum, the custom hierarchical kernel
         // for operations whose NaN/tie contract CUB does not preserve.
@@ -1074,25 +1238,27 @@ static float reduce_value_device(const float* input, size_t n, int mode, const c
             void* temporary = nullptr;
             size_t temporary_bytes = 0;
             CUDA_CHECK_CONTEXT(cub::DeviceReduce::Sum(temporary, temporary_bytes, input, output, n), context);
-            CUDA_CHECK_CONTEXT(cudaMalloc(&temporary, temporary_bytes), context);
-            try {
-                CUDA_CHECK_CONTEXT(cub::DeviceReduce::Sum(temporary, temporary_bytes, input, output, n), context);
-                CUDA_KERNEL_CHECK(context);
-                CUDA_CHECK_CONTEXT(cudaFree(temporary), context);
-            } catch (...) {
-                if (temporary) cudaFree(temporary);
-                throw;
+            if (temporary_bytes > reduction_temporary_capacity) {
+                void* replacement = nullptr;
+                CUDA_CHECK_CONTEXT(cudaMalloc(&replacement, temporary_bytes), context);
+                if (reduction_temporary) {
+                    cudaError_t free_status = cudaFree(reduction_temporary);
+                    if (free_status != cudaSuccess) {
+                        cudaFree(replacement);
+                        throw std::runtime_error(std::string(context) + ": reduction cache resize free failed: " + cudaGetErrorString(free_status));
+                    }
+                }
+                reduction_temporary = replacement;
+                reduction_temporary_capacity = temporary_bytes;
             }
+            CUDA_CHECK_CONTEXT(cub::DeviceReduce::Sum(reduction_temporary, reduction_temporary_capacity, input, output, n), context);
+            CUDA_KERNEL_CHECK(context);
         } else {
             launch_reduce_axis(input, output, 1, n, 1, mode, context);
         }
         float result = 0.0f;
         CUDA_CHECK_CONTEXT(cudaMemcpy(&result, output, sizeof(float), cudaMemcpyDeviceToHost), context);
-        CUDA_CHECK_CONTEXT(cudaFree(output), context);
         return result;
-    } catch (...) {
-        if (output) cudaFree(output);
-        throw;
     }
 }
 
@@ -1112,19 +1278,16 @@ extern "C" size_t gpu_arg_value_device(const float* input, size_t n, int find_ma
     if (!input || n == 0) throw std::invalid_argument("arg reduction: empty input");
     // CUB ArgMin/ArgMax are intentionally not used: their NaN handling does
     // not preserve the established CPU semantics or first-index tie rule.
-    float* output = nullptr;
-    CUDA_CHECK_CONTEXT(cudaMalloc(reinterpret_cast<void**>(&output), sizeof(float)), "arg reduction allocation");
-    try {
-        launch_reduce_axis(input, output, 1, n, 1, find_max ? REDUCE_ARGMAX : REDUCE_ARGMIN,
-            find_max ? "argmax value" : "argmin value");
-        float result = 0.0f;
-        CUDA_CHECK_CONTEXT(cudaMemcpy(&result, output, sizeof(float), cudaMemcpyDeviceToHost), "arg reduction result");
-        CUDA_CHECK_CONTEXT(cudaFree(output), "arg reduction free");
-        return static_cast<size_t>(result);
-    } catch (...) {
-        if (output) cudaFree(output);
-        throw;
+    std::lock_guard<std::mutex> cache_lock(reduction_cache_mutex);
+    init_reduction_cache();
+    if (!reduction_output) {
+        CUDA_CHECK_CONTEXT(cudaMalloc(reinterpret_cast<void**>(&reduction_output), sizeof(float)), "arg reduction allocation");
     }
+    launch_reduce_axis(input, reduction_output, 1, n, 1, find_max ? REDUCE_ARGMAX : REDUCE_ARGMIN,
+        find_max ? "argmax value" : "argmin value");
+    float result = 0.0f;
+    CUDA_CHECK_CONTEXT(cudaMemcpy(&result, reduction_output, sizeof(float), cudaMemcpyDeviceToHost), "arg reduction result");
+    return static_cast<size_t>(result);
 }
 // ========== GPU MATMUL FORWARD DECLARATIONS ==========
 extern "C" void gpu_matmul_device(const float* d_a, const float* d_b, float* d_c, size_t m, size_t k, size_t n);

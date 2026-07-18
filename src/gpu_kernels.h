@@ -38,6 +38,10 @@ extern "C" {
     void gpu_scalar_div_device(float* d_a, float value, size_t n);
     void gpu_pow_device(float* d_a, float exponent, size_t n);
     void gpu_log_device(float* d_a, size_t n);
+    void gpu_sqrt_device(float* d_a, size_t n);
+    void gpu_clip_device(float* d_a, float min_value, float max_value, size_t n);
+    void gpu_softmax_device(float* d_a, size_t rows, size_t cols, int one_dimensional);
+    void gpu_softmax_derivative_device(float* d_a, size_t n);
     void gpu_fill_device(float* d_a, float value, size_t n);
     void gpu_transpose_device(const float* d_input, float* d_output, size_t rows, size_t cols);
     void gpu_sum_axis_device(const float* d_input, float* d_output, size_t outer, size_t axis_size, size_t inner);
