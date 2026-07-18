@@ -41,8 +41,14 @@ extern "C" {
     void gpu_sqrt_device(float* d_a, size_t n);
     void gpu_clip_device(float* d_a, float min_value, float max_value, size_t n);
     void gpu_softmax_device(float* d_a, size_t rows, size_t cols, int one_dimensional);
-    void gpu_softmax_derivative_device(float* d_a, size_t n);
-    void gpu_fill_device(float* d_a, float value, size_t n);
+void gpu_softmax_derivative_device(float* d_a, size_t n);
+void gpu_greater_device(const float* d_a, const float* d_b, float* d_output, size_t n, size_t broadcast_width, float scalar, int use_scalar);
+void gpu_broadcast_device(const float* d_input, float* d_output, const size_t* output_shape, const size_t* output_strides, const size_t* input_shape, const size_t* input_strides, size_t output_rank, size_t input_rank, size_t output_size);
+void gpu_tile_device(const float* d_input, float* d_output, size_t input_size, size_t output_size);
+void gpu_cumsum_device(const float* d_input, float* d_output, size_t rows, size_t cols, int axis, int one_dimensional);
+float gpu_dot_value_device(const float* d_a, const float* d_b, size_t n);
+void gpu_matvec_device(const float* d_matrix, const float* d_vector, float* d_output, size_t rows, size_t cols);
+void gpu_fill_device(float* d_a, float value, size_t n);
     void gpu_transpose_device(const float* d_input, float* d_output, size_t rows, size_t cols);
     void gpu_sum_axis_device(const float* d_input, float* d_output, size_t outer, size_t axis_size, size_t inner);
     void gpu_mean_axis_device(const float* d_input, float* d_output, size_t outer, size_t axis_size, size_t inner);

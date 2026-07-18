@@ -128,6 +128,9 @@ static size_t reduction_temporary_capacity = 0;
 static float* reduction_output = nullptr;
 static std::mutex reduction_cache_mutex;
 static bool reduction_cache_inited = false;
+static cublasHandle_t sgemm_handle = nullptr;
+static std::mutex sgemm_handle_mutex;
+static void release_sgemm_handle();
 
 static void release_cache() {
     if (cache_a) {
@@ -461,6 +464,62 @@ __global__ void kernel_softmax_derivative(float* a, size_t n) {
     if (i < n) a[i] = a[i] * (1.0f - a[i]);
 }
 
+__global__ void kernel_greater(const float* a, const float* b, float* output,
+                               size_t n, size_t broadcast_width, float scalar,
+                               int use_scalar) {
+    const size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= n) return;
+    const float rhs = use_scalar ? scalar : b[broadcast_width ? (i % broadcast_width) : i];
+    output[i] = a[i] > rhs ? 1.0f : 0.0f;
+}
+
+__global__ void kernel_broadcast_materialize(const float* input, float* output,
+                                             const size_t* output_shape,
+                                             const size_t* output_strides,
+                                             const size_t* input_shape,
+                                             const size_t* input_strides,
+                                             size_t output_rank, size_t input_rank,
+                                             size_t output_size) {
+    const size_t linear = blockIdx.x * blockDim.x + threadIdx.x;
+    if (linear >= output_size) return;
+    const size_t rank_difference = output_rank - input_rank;
+    size_t input_offset = 0;
+    for (size_t input_axis = 0; input_axis < input_rank; ++input_axis) {
+        const size_t output_axis = rank_difference + input_axis;
+        const size_t coordinate = (linear / output_strides[output_axis]) % output_shape[output_axis];
+        if (input_shape[input_axis] != 1) input_offset += coordinate * input_strides[input_axis];
+    }
+    output[linear] = input[input_offset];
+}
+
+__global__ void kernel_tile(const float* input, float* output,
+                            size_t input_size, size_t output_size) {
+    const size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < output_size) output[i] = input[i % input_size];
+}
+
+__global__ void kernel_cumsum_axis(const float* input, float* output,
+                                   size_t rows, size_t cols, int axis) {
+    const size_t segment = blockIdx.x * blockDim.x + threadIdx.x;
+    if (axis == 1) {
+        if (segment >= rows) return;
+        double running = 0.0;
+        const size_t base = segment * cols;
+        for (size_t column = 0; column < cols; ++column) {
+            running += input[base + column];
+            output[base + column] = static_cast<float>(running);
+        }
+    } else {
+        if (segment >= cols) return;
+        double running = 0.0;
+        for (size_t row = 0; row < rows; ++row) {
+            const size_t index = row * cols + segment;
+            running += input[index];
+            output[index] = static_cast<float>(running);
+        }
+    }
+}
+
 __global__ void kernel_fill(float* a, float value, size_t n) {
     size_t i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < n) a[i] = value;
@@ -661,7 +720,11 @@ __global__ void kernel_arg_value(const float* input, size_t n, size_t* output, i
 
 static inline void launch_1d(size_t n, int &blocks, int &threads) {
     threads = 256;
-    blocks = static_cast<int>((n + threads - 1) / threads);
+    const size_t block_count = n == 0 ? 0 : ((n - 1) / static_cast<size_t>(threads)) + 1;
+    if (block_count > static_cast<size_t>(std::numeric_limits<int>::max())) {
+        throw std::overflow_error("CUDA 1D grid exceeds supported int range");
+    }
+    blocks = static_cast<int>(block_count);
 }
 
 extern "C" void gpu_add(float* a, const float* b, size_t n) {
@@ -1157,6 +1220,126 @@ extern "C" void gpu_softmax_derivative_device(float* d_a, size_t n) {
     CUDA_KERNEL_CHECK("softmax derivative");
 }
 
+extern "C" void gpu_greater_device(const float* d_a, const float* d_b, float* d_output,
+                                    size_t n, size_t broadcast_width, float scalar,
+                                    int use_scalar) {
+    if (n == 0) return;
+    if (!d_a || !d_output || (!use_scalar && !d_b)) {
+        throw std::invalid_argument("greater: null device pointer");
+    }
+    int threads = 0, blocks = 0;
+    launch_1d(n, blocks, threads);
+    kernel_greater<<<blocks, threads>>>(d_a, d_b, d_output, n, broadcast_width, scalar, use_scalar);
+    CUDA_KERNEL_CHECK("greater");
+}
+
+extern "C" void gpu_broadcast_device(const float* d_input, float* d_output,
+                                      const size_t* output_shape, const size_t* output_strides,
+                                      const size_t* input_shape, const size_t* input_strides,
+                                      size_t output_rank, size_t input_rank, size_t output_size) {
+    if (output_size == 0) return;
+    if (!d_input || !d_output || !output_shape || !output_strides || !input_shape || !input_strides) {
+        throw std::invalid_argument("broadcast: null pointer");
+    }
+    if (input_rank == 0 || input_rank > output_rank) {
+        throw std::invalid_argument("broadcast: invalid rank");
+    }
+    const size_t metadata_count = 2 * output_rank + 2 * input_rank;
+    ScopedCudaBuffer<size_t> metadata(metadata_count, "broadcast metadata allocation");
+    size_t* d_output_shape = metadata.get();
+    size_t* d_output_strides = d_output_shape + output_rank;
+    size_t* d_input_shape = d_output_strides + output_rank;
+    size_t* d_input_strides = d_input_shape + input_rank;
+    CUDA_CHECK_CONTEXT(cudaMemcpy(d_output_shape, output_shape, output_rank * sizeof(size_t), cudaMemcpyHostToDevice), "broadcast output shape upload");
+    CUDA_CHECK_CONTEXT(cudaMemcpy(d_output_strides, output_strides, output_rank * sizeof(size_t), cudaMemcpyHostToDevice), "broadcast output strides upload");
+    CUDA_CHECK_CONTEXT(cudaMemcpy(d_input_shape, input_shape, input_rank * sizeof(size_t), cudaMemcpyHostToDevice), "broadcast input shape upload");
+    CUDA_CHECK_CONTEXT(cudaMemcpy(d_input_strides, input_strides, input_rank * sizeof(size_t), cudaMemcpyHostToDevice), "broadcast input strides upload");
+    int threads = 0, blocks = 0;
+    launch_1d(output_size, blocks, threads);
+    kernel_broadcast_materialize<<<blocks, threads>>>(d_input, d_output, d_output_shape,
+        d_output_strides, d_input_shape, d_input_strides, output_rank, input_rank, output_size);
+    CUDA_KERNEL_CHECK("broadcast materialization");
+    metadata.release_checked("broadcast metadata free");
+}
+
+extern "C" void gpu_tile_device(const float* d_input, float* d_output,
+                                 size_t input_size, size_t output_size) {
+    if (output_size == 0) return;
+    if (!d_input || !d_output || input_size == 0) throw std::invalid_argument("tile: invalid device buffer");
+    int threads = 0, blocks = 0;
+    launch_1d(output_size, blocks, threads);
+    kernel_tile<<<blocks, threads>>>(d_input, d_output, input_size, output_size);
+    CUDA_KERNEL_CHECK("tile");
+}
+
+extern "C" void gpu_cumsum_device(const float* d_input, float* d_output,
+                                   size_t rows, size_t cols, int axis,
+                                   int one_dimensional) {
+    if (rows == 0 || cols == 0) return;
+    if (!d_input || !d_output) throw std::invalid_argument("cumsum: null device pointer");
+    if (one_dimensional) {
+        const size_t n = rows * cols;
+        void* temporary = nullptr;
+        size_t temporary_bytes = 0;
+        CUDA_CHECK_CONTEXT(cub::DeviceScan::InclusiveSum(temporary, temporary_bytes, d_input, d_output, n), "cumsum CUB size query");
+        ScopedCudaBuffer<unsigned char> storage(temporary_bytes, "cumsum CUB allocation");
+        temporary = storage.get();
+        CUDA_CHECK_CONTEXT(cub::DeviceScan::InclusiveSum(temporary, temporary_bytes, d_input, d_output, n), "cumsum CUB scan");
+        CUDA_KERNEL_CHECK("cumsum CUB execution");
+        storage.release_checked("cumsum CUB free");
+        return;
+    }
+    if (axis != 0 && axis != 1) throw std::out_of_range("cumsum: invalid CUDA axis");
+    const size_t segments = axis == 1 ? rows : cols;
+    int threads = 0, blocks = 0;
+    launch_1d(segments, blocks, threads);
+    kernel_cumsum_axis<<<blocks, threads>>>(d_input, d_output, rows, cols, axis);
+    CUDA_KERNEL_CHECK("cumsum axis");
+}
+
+extern "C" float gpu_dot_value_device(const float* d_a, const float* d_b, size_t n) {
+    if (n == 0) return 0.0f;
+    if (!d_a || !d_b) throw std::invalid_argument("dot: null device pointer");
+    if (n > static_cast<size_t>(std::numeric_limits<int>::max())) {
+        throw std::overflow_error("dot length exceeds cuBLAS int range");
+    }
+    std::lock_guard<std::mutex> lock(sgemm_handle_mutex);
+    if (!sgemm_handle) {
+        CUBLAS_CHECK_CONTEXT(cublasCreate(&sgemm_handle), "create cuBLAS handle for dot");
+        std::atexit(release_sgemm_handle);
+    }
+    CUBLAS_CHECK_CONTEXT(cublasSetPointerMode(sgemm_handle, CUBLAS_POINTER_MODE_HOST), "dot host result mode");
+    float result = 0.0f;
+    CUBLAS_CHECK_CONTEXT(cublasSdot(sgemm_handle, static_cast<int>(n), d_a, 1, d_b, 1, &result), "vector dot");
+    CUDA_CHECK_CONTEXT(cudaDeviceSynchronize(), "vector dot execution");
+    return result;
+}
+
+extern "C" void gpu_matvec_device(const float* d_matrix, const float* d_vector,
+                                   float* d_output, size_t rows, size_t cols) {
+    if (rows == 0 || cols == 0) return;
+    if (!d_matrix || !d_vector || !d_output) throw std::invalid_argument("matvec: null device pointer");
+    if (rows > static_cast<size_t>(std::numeric_limits<int>::max()) ||
+        cols > static_cast<size_t>(std::numeric_limits<int>::max())) {
+        throw std::overflow_error("matvec dimensions exceed cuBLAS int range");
+    }
+    std::lock_guard<std::mutex> lock(sgemm_handle_mutex);
+    if (!sgemm_handle) {
+        CUBLAS_CHECK_CONTEXT(cublasCreate(&sgemm_handle), "create cuBLAS handle for matvec");
+        std::atexit(release_sgemm_handle);
+    }
+    CUBLAS_CHECK_CONTEXT(cublasSetPointerMode(sgemm_handle, CUBLAS_POINTER_MODE_HOST), "matvec host scalar mode");
+    const float alpha = 1.0f;
+    const float beta = 0.0f;
+    // A_row[rows,cols] is seen as A_col[cols,rows]. Transposing that
+    // column-major view computes y[rows] = A_row * x[cols] without copying A.
+    CUBLAS_CHECK_CONTEXT(cublasSgemv(sgemm_handle, CUBLAS_OP_T,
+        static_cast<int>(cols), static_cast<int>(rows), &alpha,
+        d_matrix, static_cast<int>(cols), d_vector, 1, &beta, d_output, 1),
+        "SGEMV row-major A*x");
+    CUDA_CHECK_CONTEXT(cudaDeviceSynchronize(), "SGEMV execution");
+}
+
 extern "C" void gpu_fill_device(float* d_a, float value, size_t n) {
     int threads = 0, blocks = 0;
     if (n == 0) return;
@@ -1291,9 +1474,6 @@ extern "C" size_t gpu_arg_value_device(const float* input, size_t n, int find_ma
 }
 // ========== GPU MATMUL FORWARD DECLARATIONS ==========
 extern "C" void gpu_matmul_device(const float* d_a, const float* d_b, float* d_c, size_t m, size_t k, size_t n);
-
-static cublasHandle_t sgemm_handle = nullptr;
-static std::mutex sgemm_handle_mutex;
 
 static void release_sgemm_handle() {
     std::lock_guard<std::mutex> lock(sgemm_handle_mutex);
