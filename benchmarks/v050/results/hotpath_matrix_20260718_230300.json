@@ -1,0 +1,564 @@
+{
+    "environment": {
+        "timestamp": "2026-07-18T23:03:00+00:00",
+        "warmups": 3,
+        "repetitions": 7,
+        "php": "8.4.16",
+        "zmatrix": "0.4.0-float",
+        "commit": "7175d2143914d0e8e7813902a18ee6b50cb19217",
+        "binary_sha256": "e84f0984b68533e77c0f6b259f0b122ddab7e16fcbe91c5318e0235d80cc9495"
+    },
+    "results": [
+        {
+            "operation": "greater_scalar",
+            "size": "1024 elements",
+            "cold_ms": 5.21873,
+            "median_ms": 0.17215,
+            "p25_ms": 0.17193,
+            "p75_ms": 0.182875,
+            "samples_ms": [
+                0.22396,
+                0.17688,
+                0.17215,
+                0.18887,
+                0.16962,
+                0.17182,
+                0.17204
+            ],
+            "effective_gbps": 0.02379320360151031,
+            "validated": true
+        },
+        {
+            "operation": "greater_scalar",
+            "size": "65536 elements",
+            "cold_ms": 0.20163,
+            "median_ms": 0.17842,
+            "p25_ms": 0.162965,
+            "p75_ms": 0.188595,
+            "samples_ms": [
+                0.08481,
+                0.231,
+                0.19646,
+                0.16951,
+                0.18073,
+                0.15642,
+                0.17842
+            ],
+            "effective_gbps": 1.4692523259724248,
+            "validated": true
+        },
+        {
+            "operation": "greater_scalar",
+            "size": "1048576 elements",
+            "cold_ms": 1.44144,
+            "median_ms": 1.30603,
+            "p25_ms": 1.237665,
+            "p75_ms": 1.31439,
+            "samples_ms": [
+                1.31824,
+                1.31054,
+                1.2265,
+                1.30603,
+                2.64407,
+                1.24883,
+                1.14532
+            ],
+            "effective_gbps": 3.211491313369524,
+            "validated": true
+        },
+        {
+            "operation": "greater_scalar",
+            "size": "16777216 elements",
+            "cold_ms": 6.36691,
+            "median_ms": 6.67513,
+            "p25_ms": 6.2327650000000006,
+            "p75_ms": 9.655525,
+            "samples_ms": [
+                6.67513,
+                14.19572,
+                6.25361,
+                9.52589,
+                6.20609,
+                9.78516,
+                6.21192
+            ],
+            "effective_gbps": 10.05356659720485,
+            "validated": true
+        },
+        {
+            "operation": "tile",
+            "size": "256x256 x2",
+            "cold_ms": 0.10659,
+            "median_ms": 0.10065,
+            "p25_ms": 0.09856000000000001,
+            "p75_ms": 0.104335,
+            "samples_ms": [
+                0.10263,
+                0.10604,
+                0.12342,
+                0.09526,
+                0.09933,
+                0.10065,
+                0.09779
+            ],
+            "effective_gbps": 5.209021361152509,
+            "validated": true
+        },
+        {
+            "operation": "tile",
+            "size": "256x256 x4",
+            "cold_ms": 0.79486,
+            "median_ms": 0.60995,
+            "p25_ms": 0.347985,
+            "p75_ms": 0.7288600000000001,
+            "samples_ms": [
+                0.8525,
+                0.36982,
+                0.7029,
+                0.12749,
+                0.75482,
+                0.32615,
+                0.60995
+            ],
+            "effective_gbps": 1.719117960488565,
+            "validated": true
+        },
+        {
+            "operation": "tile",
+            "size": "256x256 x8",
+            "cold_ms": 1.12112,
+            "median_ms": 1.31637,
+            "p25_ms": 1.2947,
+            "p75_ms": 1.4068450000000001,
+            "samples_ms": [
+                5.69492,
+                1.188,
+                1.36059,
+                1.31637,
+                1.30009,
+                1.28931,
+                1.4531
+            ],
+            "effective_gbps": 1.5931326298836954,
+            "validated": true
+        },
+        {
+            "operation": "tile",
+            "size": "256x256 x16",
+            "cold_ms": 1.41768,
+            "median_ms": 1.48698,
+            "p25_ms": 1.24058,
+            "p75_ms": 1.83106,
+            "samples_ms": [
+                1.26995,
+                1.15621,
+                1.21121,
+                1.48698,
+                2.04743,
+                1.61469,
+                4.90358
+            ],
+            "effective_gbps": 2.8206862230830274,
+            "validated": true
+        },
+        {
+            "operation": "tile",
+            "size": "1024x1024 x2",
+            "cold_ms": 1.5081,
+            "median_ms": 1.55221,
+            "p25_ms": 1.513215,
+            "p75_ms": 2.162655,
+            "samples_ms": [
+                1.55221,
+                1.48951,
+                1.39821,
+                2.53022,
+                2.43661,
+                1.53692,
+                1.8887
+            ],
+            "effective_gbps": 5.40429967594591,
+            "validated": true
+        },
+        {
+            "operation": "tile",
+            "size": "1024x1024 x4",
+            "cold_ms": 1.91026,
+            "median_ms": 2.04501,
+            "p25_ms": 1.96405,
+            "p75_ms": 2.205995,
+            "samples_ms": [
+                1.91763,
+                2.32452,
+                2.01047,
+                2.04501,
+                1.89035,
+                2.23388,
+                2.17811
+            ],
+            "effective_gbps": 8.203977486662659,
+            "validated": true
+        },
+        {
+            "operation": "tile",
+            "size": "1024x1024 x8",
+            "cold_ms": 3.43079,
+            "median_ms": 3.14556,
+            "p25_ms": 3.07747,
+            "p75_ms": 3.371335,
+            "samples_ms": [
+                4.17978,
+                3.14556,
+                3.08671,
+                3.04865,
+                3.47193,
+                3.27074,
+                3.06823
+            ],
+            "effective_gbps": 10.66723635854983,
+            "validated": true
+        },
+        {
+            "operation": "tile",
+            "size": "1024x1024 x16",
+            "cold_ms": 6.72386,
+            "median_ms": 5.74167,
+            "p25_ms": 5.64278,
+            "p75_ms": 6.51728,
+            "samples_ms": [
+                7.93188,
+                6.25691,
+                5.62859,
+                6.77765,
+                5.74167,
+                5.50319,
+                5.65697
+            ],
+            "effective_gbps": 11.688039194171731,
+            "validated": true
+        },
+        {
+            "operation": "tile",
+            "size": "2048x2048 x2",
+            "cold_ms": 3.18329,
+            "median_ms": 3.10794,
+            "p25_ms": 2.99112,
+            "p75_ms": 3.215685,
+            "samples_ms": [
+                3.38063,
+                3.10794,
+                2.95746,
+                3.25985,
+                3.17152,
+                3.01829,
+                2.96395
+            ],
+            "effective_gbps": 10.796357716043424,
+            "validated": true
+        },
+        {
+            "operation": "tile",
+            "size": "2048x2048 x4",
+            "cold_ms": 5.83066,
+            "median_ms": 5.58866,
+            "p25_ms": 5.509845,
+            "p75_ms": 5.847655,
+            "samples_ms": [
+                5.45105,
+                5.58866,
+                5.59856,
+                6.47548,
+                5.56864,
+                5.4472,
+                6.09675
+            ],
+            "effective_gbps": 12.008041999334369,
+            "validated": true
+        },
+        {
+            "operation": "tile",
+            "size": "2048x2048 x8",
+            "cold_ms": 10.54328,
+            "median_ms": 10.12352,
+            "p25_ms": 10.07875,
+            "p75_ms": 10.21185,
+            "samples_ms": [
+                10.2399,
+                10.12352,
+                10.9813,
+                9.88185,
+                10.1838,
+                10.09987,
+                10.05763
+            ],
+            "effective_gbps": 13.258009862182327,
+            "validated": true
+        },
+        {
+            "operation": "tile",
+            "size": "2048x2048 x16",
+            "cold_ms": 26.14315,
+            "median_ms": 19.62367,
+            "p25_ms": 19.290975,
+            "p75_ms": 20.628905000000003,
+            "samples_ms": [
+                19.6581,
+                21.59971,
+                26.24116,
+                19.16145,
+                19.09369,
+                19.62367,
+                19.4205
+            ],
+            "effective_gbps": 13.679166842899418,
+            "validated": true
+        },
+        {
+            "operation": "cumsum_1d",
+            "size": "1024 elements",
+            "cold_ms": 0.69245,
+            "median_ms": 0.2541,
+            "p25_ms": 0.23996499999999998,
+            "p75_ms": 0.260425,
+            "samples_ms": [
+                0.2541,
+                0.33099,
+                0.25597,
+                0.26488,
+                0.24156,
+                0.23837,
+                0.23804
+            ],
+            "effective_gbps": 0.01611963793781976,
+            "validated": true
+        },
+        {
+            "operation": "cumsum_1d",
+            "size": "65536 elements",
+            "cold_ms": 0.26345,
+            "median_ms": 0.23837,
+            "p25_ms": 0.237765,
+            "p75_ms": 0.24035,
+            "samples_ms": [
+                0.23749,
+                0.2398,
+                0.2409,
+                0.23837,
+                0.24926,
+                0.2376,
+                0.23793
+            ],
+            "effective_gbps": 1.0997357049964342,
+            "validated": true
+        },
+        {
+            "operation": "cumsum_1d",
+            "size": "1048576 elements",
+            "cold_ms": 1.21583,
+            "median_ms": 1.2045,
+            "p25_ms": 1.0142550000000001,
+            "p75_ms": 1.284415,
+            "samples_ms": [
+                1.04533,
+                1.77661,
+                1.35982,
+                1.20901,
+                0.98318,
+                1.2045,
+                0.93797
+            ],
+            "effective_gbps": 3.4821951017019517,
+            "validated": true
+        },
+        {
+            "operation": "cumsum_1d",
+            "size": "8388608 elements",
+            "cold_ms": 3.45191,
+            "median_ms": 2.90202,
+            "p25_ms": 2.894375,
+            "p75_ms": 3.1249900000000004,
+            "samples_ms": [
+                3.02368,
+                2.89399,
+                2.90202,
+                3.99839,
+                3.2263,
+                2.89476,
+                2.85373
+            ],
+            "effective_gbps": 11.562439955617123,
+            "validated": true
+        },
+        {
+            "operation": "cumsum_axis_0",
+            "size": "256x256",
+            "cold_ms": 0.37532,
+            "median_ms": 0.2321,
+            "p25_ms": 0.17643999999999999,
+            "p75_ms": 0.806135,
+            "samples_ms": [
+                0.16995,
+                0.18293,
+                1.33925,
+                0.2321,
+                0.16159,
+                7.02548,
+                0.27302
+            ],
+            "effective_gbps": 1.1294442050840157,
+            "validated": true
+        },
+        {
+            "operation": "cumsum_axis_1",
+            "size": "256x256",
+            "cold_ms": 0.2035,
+            "median_ms": 0.19338,
+            "p25_ms": 0.19217,
+            "p75_ms": 0.19437,
+            "samples_ms": [
+                0.19393,
+                0.19481,
+                0.19294,
+                0.19338,
+                0.1914,
+                0.18898,
+                0.20141
+            ],
+            "effective_gbps": 1.3555900299927606,
+            "validated": true
+        },
+        {
+            "operation": "cumsum_axis_0",
+            "size": "1024x1024",
+            "cold_ms": 1.63823,
+            "median_ms": 1.28029,
+            "p25_ms": 1.1180400000000001,
+            "p75_ms": 1.66452,
+            "samples_ms": [
+                1.60028,
+                1.11309,
+                1.11705,
+                1.11903,
+                2.97209,
+                1.28029,
+                1.72876
+            ],
+            "effective_gbps": 3.2760577681619014,
+            "validated": true
+        },
+        {
+            "operation": "cumsum_axis_1",
+            "size": "1024x1024",
+            "cold_ms": 1.10583,
+            "median_ms": 1.0604,
+            "p25_ms": 1.043955,
+            "p75_ms": 1.37203,
+            "samples_ms": [
+                1.04566,
+                1.01387,
+                1.72183,
+                1.56772,
+                1.17634,
+                1.0604,
+                1.04225
+            ],
+            "effective_gbps": 3.955397963032818,
+            "validated": true
+        },
+        {
+            "operation": "cumsum_axis_0",
+            "size": "2048x2048",
+            "cold_ms": 2.50921,
+            "median_ms": 2.50173,
+            "p25_ms": 2.37094,
+            "p75_ms": 2.727945,
+            "samples_ms": [
+                2.28921,
+                2.69181,
+                2.50173,
+                2.39712,
+                2.76408,
+                2.34476,
+                2.9183
+            ],
+            "effective_gbps": 6.7062456779908315,
+            "validated": true
+        },
+        {
+            "operation": "cumsum_axis_1",
+            "size": "2048x2048",
+            "cold_ms": 2.18284,
+            "median_ms": 2.12916,
+            "p25_ms": 2.0724,
+            "p75_ms": 2.336345,
+            "samples_ms": [
+                4.05317,
+                2.33882,
+                2.05535,
+                2.12916,
+                2.035,
+                2.08945,
+                2.33387
+            ],
+            "effective_gbps": 7.879734731067651,
+            "validated": true
+        },
+        {
+            "operation": "matvec_both_resident",
+            "size": "2048x2048 @ 2048",
+            "cold_ms": 20.17499,
+            "median_ms": 0.17215,
+            "p25_ms": 0.163955,
+            "p75_ms": 0.17952,
+            "samples_ms": [
+                0.17215,
+                0.16665,
+                0.18403,
+                0.17501,
+                0.16126,
+                0.25982,
+                0.15917
+            ],
+            "effective_gbps": 0.04758640720302062,
+            "validated": true
+        },
+        {
+            "operation": "matvec_matrix_resident",
+            "size": "2048x2048 @ 2048",
+            "cold_ms": 0.28039,
+            "median_ms": 0.16038,
+            "p25_ms": 0.150315,
+            "p75_ms": 0.173195,
+            "samples_ms": [
+                0.15026,
+                0.21714,
+                0.17611,
+                0.17028,
+                0.16038,
+                0.14828,
+                0.15037
+            ],
+            "effective_gbps": 0.051078688115725156,
+            "validated": true
+        },
+        {
+            "operation": "matvec_vector_resident",
+            "size": "2048x2048 @ 2048",
+            "cold_ms": 27.47151,
+            "median_ms": 27.89347,
+            "p25_ms": 27.83165,
+            "p75_ms": 28.283859999999997,
+            "samples_ms": [
+                27.83286,
+                26.95231,
+                28.09433,
+                28.47339,
+                27.89347,
+                27.83044,
+                28.84827
+            ],
+            "effective_gbps": 0.0002936888096031078,
+            "validated": true
+        }
+    ]
+}
