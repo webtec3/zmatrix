@@ -12,14 +12,17 @@ function captureStats(array $values): array {
 }
 
 $root = dirname(__DIR__, 2);
+$stderrPath = tempnam(sys_get_temp_dir(), 'zmatrix-profile-');
+if ($stderrPath === false) throw new RuntimeException('unable to create profiling stderr file');
 $command = ['env', 'ZMATRIX_CUDA_PROFILE=1', 'ZMATRIX_CUDA_ALLOCATOR=' . (getenv('ZMATRIX_CUDA_ALLOCATOR') ?: 'auto'),
     PHP_BINARY, '-n', '-d', 'extension=' . $root . '/modules/zmatrix.so', __DIR__ . '/hotpath_profile.php'];
 $pipes = [];
-$process = proc_open($command, [['pipe', 'r'], ['pipe', 'w'], ['pipe', 'w']], $pipes, $root);
+$process = proc_open($command, [['pipe', 'r'], ['pipe', 'w'], ['file', $stderrPath, 'w']], $pipes, $root);
 if (!is_resource($process)) throw new RuntimeException('unable to start profiling child');
 fclose($pipes[0]); $stdout = stream_get_contents($pipes[1]); fclose($pipes[1]);
-$stderr = stream_get_contents($pipes[2]); fclose($pipes[2]);
 $status = proc_close($process);
+$stderr = file_get_contents($stderrPath) ?: '';
+unlink($stderrPath);
 if ($status !== 0) throw new RuntimeException("profiling child failed: $stderr");
 
 $wrappers = $phpWrappers = $lifecycle = $device = [];
