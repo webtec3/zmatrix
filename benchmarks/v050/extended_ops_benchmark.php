@@ -81,6 +81,30 @@ $cases = [
         'op' => fn(array $x) => $x[0]->dot($x[1]),
         'validate' => fn($gpu, $cpu) => sameTree($gpu->toArray(), $cpu->toArray(), 0.01, 1.0e-4),
     ],
+    'chain_greater_cumsum_clip' => [
+        'size' => '1048576 elements',
+        'factory' => fn() => [ZTensor::linspace(-2, 2, 1048576)],
+        'op' => fn(array $x) => ZTensor::clip($x[0]->greater(0)->cumsum(), 0, 1048576),
+        'validate' => fn($gpu, $cpu) => sameTree($gpu->toArray(), $cpu->toArray(), 0.05, 5.0e-5),
+    ],
+    'chain_broadcast_greater_cumsum' => [
+        'size' => '1024x1024 <- 1x1024',
+        'factory' => fn() => [ZTensor::zeros([1024, 1024]), ZTensor::linspace(-1, 1, 1024)->reshape([1, 1024])],
+        'op' => fn(array $x) => $x[0]->broadcast($x[1])->greater(0)->cumsum(1),
+        'validate' => fn($gpu, $cpu) => sameTree($gpu->toArray(), $cpu->toArray(), 0.05, 5.0e-5),
+    ],
+    'chain_matvec_clip_softmax' => [
+        'size' => '2048x2048 @ 2048',
+        'factory' => fn() => [ZTensor::ones([2048, 2048]), ZTensor::linspace(-1, 1, 2048)],
+        'op' => fn(array $x) => ZTensor::clip($x[0]->dot($x[1]), -10, 10)->softmax(),
+        'validate' => fn($gpu, $cpu) => sameTree($gpu->toArray(), $cpu->toArray(), 0.01, 1.0e-4),
+    ],
+    'chain_tile_sqrt_sum' => [
+        'size' => '1024x1024 x2',
+        'factory' => fn() => [ZTensor::linspace(0, 4, 1048576)->reshape([1024, 1024])],
+        'op' => fn(array $x) => ZTensor::tile($x[0], 2)->sqrt()->sum(),
+        'validate' => fn($gpu, $cpu) => sameTree($gpu->toArray(), $cpu->toArray(), 2.0, 5.0e-5),
+    ],
 ];
 
 $results = [];
@@ -133,20 +157,6 @@ foreach ($cases as $name => $case) {
     gc_collect_cycles();
     echo "completed $name\n";
 }
-
-$chainBase = ZTensor::linspace(-2, 2, 1048576)->toGpu();
-$chainCpu = ZTensor::linspace(-2, 2, 1048576)->greater(0)->cumsum();
-$chainSamples = [];
-for ($i = -WARMUPS; $i < REPETITIONS; ++$i) {
-    [$elapsed, $chain] = milliseconds(fn() => $chainBase->greater(0)->cumsum());
-    if (!$chain->isOnGpu()) throw new RuntimeException('resident chain lost device residency');
-    if ($i >= 0) $chainSamples[] = $elapsed;
-}
-if (!sameTree($chain->toArray(), $chainCpu->toArray(), 0.05, 5.0e-5)) {
-    throw new RuntimeException('resident chain validation failed');
-}
-$results['resident_chain'] = ['size' => '1048576 elements, greater->cumsum', 'validated' => true,
-    'stats' => ['gpu' => summarize($chainSamples)]];
 
 $commit = command('git rev-parse HEAD');
 $binary = __DIR__ . '/../../modules/zmatrix.so';
