@@ -1,0 +1,48 @@
+{
+    "version": "0.4.0-float",
+    "php": "8.4.16",
+    "results": {
+        "128": {
+            "transpose_view": {
+                "median_ms": 0.00055,
+                "mean_ms": 0.0005287096774193549,
+                "min_ms": 0.00044,
+                "max_ms": 0.00066
+            },
+            "transpose_then_materialize": {
+                "median_ms": 0.26092,
+                "mean_ms": 0.30927387096774195,
+                "min_ms": 0.2519,
+                "max_ms": 1.57223
+            }
+        },
+        "512": {
+            "transpose_view": {
+                "median_ms": 0.00044,
+                "mean_ms": 0.00048258064516129036,
+                "min_ms": 0.00044,
+                "max_ms": 0.00066
+            },
+            "transpose_then_materialize": {
+                "median_ms": 6.14317,
+                "mean_ms": 7.537373870967743,
+                "min_ms": 5.31542,
+                "max_ms": 17.16748
+            }
+        },
+        "1024": {
+            "transpose_view": {
+                "median_ms": 0.00044,
+                "mean_ms": 0.0004790322580645162,
+                "min_ms": 0.00044,
+                "max_ms": 0.00066
+            },
+            "transpose_then_materialize": {
+                "median_ms": 74.47473,
+                "mean_ms": 67.43898451612901,
+                "min_ms": 39.50716,
+                "max_ms": 89.80345
+            }
+        }
+    }
+}
