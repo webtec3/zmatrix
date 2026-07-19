@@ -8,8 +8,22 @@ build_dir="$(mktemp -d /tmp/zmatrix-asan-build.XXXXXX)"
 rsync -r \
     --exclude=.git \
     --exclude=.libs \
+    --exclude=autom4te.cache \
+    --exclude=build \
+    --exclude=config.h \
+    --exclude=config.h.in \
+    --exclude=config.log \
+    --exclude=config.nice \
+    --exclude=config.status \
+    --exclude=configure \
+    --exclude=configure~ \
+    --exclude=libtool \
+    --exclude=Makefile \
+    --exclude=Makefile.fragments \
+    --exclude=Makefile.objects \
     --exclude=modules \
     --exclude=gpu_kernels.o \
+    --exclude=zmatrix.la \
     --exclude=.venv \
     "$source_dir/" "$build_dir/"
 
