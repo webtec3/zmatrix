@@ -552,11 +552,8 @@ __global__ void kernel_sqrt(float* a, size_t n) {
 
 __global__ void kernel_clip(float* a, float min_value, float max_value, size_t n) {
     size_t i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i < n) {
-        // Keep the exact std::max(min, std::min(max, value)) CPU ordering,
-        // including NaN values in the tensor or in either bound.
-        const float inner = (a[i] < max_value) ? a[i] : max_value;
-        a[i] = (min_value < inner) ? inner : min_value;
+    if (i < n && !isnan(a[i])) {
+        a[i] = fminf(max_value, fmaxf(min_value, a[i]));
     }
 }
 

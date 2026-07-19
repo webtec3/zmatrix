@@ -1715,8 +1715,7 @@ PHP_METHOD(ZTensor, ones)
     }
 
     try {
-        ZTensor result(shape);
-        std::fill(result.data.begin(), result.data.end(), 1.0f);
+        ZTensor result = ZTensor::full(shape, 1.0f);
         zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
     } catch (const std::exception& e) {
         zend_throw_exception(zend_ce_exception, e.what(), 0);
@@ -1747,7 +1746,7 @@ PHP_METHOD(ZTensor, clip)
         const float fmin = static_cast<float>(min_val);
         const float fmax = static_cast<float>(max_val);
         result.clip_values(fmin, fmax);
-        zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
+        zmatrix_return_tensor_obj(std::move(result), return_value, zmatrix_ce_ZTensor);
     } catch (const std::exception& e) {
         zend_throw_exception(zend_ce_exception, e.what(), 0);
         RETURN_THROWS();

@@ -1,6 +1,7 @@
 #ifndef ZMATRIX_SIMD_DISPATCH_H
 #define ZMATRIX_SIMD_DISPATCH_H
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 
@@ -308,6 +309,35 @@ inline void relu_derivative_f32(float* a, size_t n) {
 #else
     for (size_t i = 0; i < n; ++i) {
         a[i] = (a[i] > 0.0f) ? 1.0f : 0.0f;
+    }
+#endif
+}
+
+inline void clip_f32(float* a, float min_value, float max_value, size_t n) {
+#if HAS_AVX2
+    const size_t vec_size = 8;
+    const size_t aligned_n = (n / vec_size) * vec_size;
+    const __m256 vmin = _mm256_set1_ps(min_value);
+    const __m256 vmax = _mm256_set1_ps(max_value);
+
+    for (size_t i = 0; i < aligned_n; i += vec_size) {
+        __m256 va = _mm256_loadu_ps(&a[i]);
+        __m256 clamped = _mm256_min_ps(vmax, _mm256_max_ps(vmin, va));
+        const __m256 nan_mask = _mm256_cmp_ps(va, va, _CMP_UNORD_Q);
+        clamped = _mm256_blendv_ps(clamped, va, nan_mask);
+        _mm256_storeu_ps(&a[i], clamped);
+    }
+
+    for (size_t i = aligned_n; i < n; ++i) {
+        if (!std::isnan(a[i])) {
+            a[i] = std::max(min_value, std::min(max_value, a[i]));
+        }
+    }
+#else
+    for (size_t i = 0; i < n; ++i) {
+        if (!std::isnan(a[i])) {
+            a[i] = std::max(min_value, std::min(max_value, a[i]));
+        }
     }
 #endif
 }

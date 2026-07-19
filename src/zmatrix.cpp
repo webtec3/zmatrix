@@ -30,6 +30,7 @@
 #include <cstdio>
 #include <sstream>
 #include <unordered_set>
+#include <utility>
 #ifdef HAVE_CUDA
 #include <cuda_runtime.h>
 #endif
@@ -1049,14 +1050,14 @@ struct ZTensor {
         if (N > ZMATRIX_PARALLEL_THRESHOLD) {
 #pragma omp parallel for schedule(static)
             for (size_t i = 0; i < N; ++i) {
-                values[i] = std::max(min_value, std::min(max_value, values[i]));
+                if (!std::isnan(values[i])) {
+                    values[i] = std::max(min_value, std::min(max_value, values[i]));
+                }
             }
         } else
 #endif
         {
-            for (size_t i = 0; i < N; ++i) {
-                values[i] = std::max(min_value, std::min(max_value, values[i]));
-            }
+            zmatrix_simd::clip_f32(values, min_value, max_value, N);
         }
 #ifdef HAVE_CUDA
         mark_host_modified();
@@ -3130,6 +3131,7 @@ ZTensor column(size_t col_idx) const {
             const size_t axis_dim = shape[axis];
             const size_t out_size = result.size();
             if (out_size == 0) return result;
+            if (axis_dim == 0) return result;
 
 #ifdef HAVE_CUDA
             if (device_valid) {
@@ -3145,64 +3147,41 @@ ZTensor column(size_t col_idx) const {
             ensure_host();
 #endif
 
+            const float* input_data = data.data();
             float* out_data = result.data.data();
+            size_t outer = 1;
+            size_t inner = 1;
+            for (int d = 0; d < axis; ++d) outer *= shape[static_cast<size_t>(d)];
+            for (size_t d = static_cast<size_t>(axis) + 1; d < shape.size(); ++d) inner *= shape[d];
 
-            // FIX: faltava paralelização aqui. Cada iteração já usa seu próprio
-            // 'idx' local (declarado dentro do loop), sem estado compartilhado
-            // mutável — mesmo padrão de soma(), que já usa este exato threshold.
+            const auto reduce_one = [&](size_t i) {
+                const size_t outer_index = i / inner;
+                const size_t inner_index = i % inner;
+                const size_t base = outer_index * axis_dim * inner + inner_index;
+
+                float best_val = input_data[base];
+                size_t best_idx = 0;
+                for (size_t k = 1; k < axis_dim; ++k) {
+                    const float v = input_data[base + k * inner];
+                    if (find_max ? (v > best_val) : (v < best_val)) {
+                        best_val = v;
+                        best_idx = k;
+                    }
+                }
+                out_data[i] = static_cast<float>(best_idx);
+            };
+
     #if HAS_OPENMP
             if (out_size > ZMATRIX_PARALLEL_THRESHOLD) {
                 #pragma omp parallel for schedule(static)
                 for (size_t i = 0; i < out_size; ++i) {
-                    std::vector<size_t> idx(shape.size(), 0);
-                    size_t tmp = i;
-                    for (int d = (int)shape.size() - 1, j = (int)out_shape.size() - 1; d >= 0; --d) {
-                        if ((size_t)d == (size_t)axis) {
-                            idx[d] = 0;
-                        } else {
-                            idx[d] = tmp % out_shape[j];
-                            tmp /= out_shape[j];
-                            --j;
-                        }
-                    }
-                    float best_val = 0.0f;
-                    size_t best_idx = 0;
-                    for (size_t k = 0; k < axis_dim; ++k) {
-                        idx[axis] = k;
-                        float v = at(idx);
-                        if (k == 0 || (find_max ? (v > best_val) : (v < best_val))) {
-                            best_val = v;
-                            best_idx = k;
-                        }
-                    }
-                    out_data[i] = static_cast<float>(best_idx);
+                    reduce_one(i);
                 }
             } else
     #endif
             {
                 for (size_t i = 0; i < out_size; ++i) {
-                    std::vector<size_t> idx(shape.size(), 0);
-                    size_t tmp = i;
-                    for (int d = (int)shape.size() - 1, j = (int)out_shape.size() - 1; d >= 0; --d) {
-                        if ((size_t)d == (size_t)axis) {
-                            idx[d] = 0;
-                        } else {
-                            idx[d] = tmp % out_shape[j];
-                            tmp /= out_shape[j];
-                            --j;
-                        }
-                    }
-                    float best_val = 0.0f;
-                    size_t best_idx = 0;
-                    for (size_t k = 0; k < axis_dim; ++k) {
-                        idx[axis] = k;
-                        float v = at(idx);
-                        if (k == 0 || (find_max ? (v > best_val) : (v < best_val))) {
-                            best_val = v;
-                            best_idx = k;
-                        }
-                    }
-                    out_data[i] = static_cast<float>(best_idx);
+                    reduce_one(i);
                 }
             }
             return result;
@@ -4761,6 +4740,37 @@ static void zmatrix_return_tensor_obj(
 }
 
 // --- Fim Funções Auxiliares ---
+
+static void zmatrix_return_tensor_obj(
+    ZTensor&& result_tensor,
+    zval *return_value,
+    zend_class_entry *tensor_ce
+) {
+    try {
+        object_init_ex(return_value, tensor_ce);
+
+        zmatrix_ztensor_object *intern = Z_MATRIX_ZTENSOR_P(return_value);
+        if (UNEXPECTED(!intern)) {
+            zend_throw_exception(zend_ce_exception, "Failed to initialize ZTensor object", 0);
+            ZVAL_NULL(return_value);
+            return;
+        }
+
+        intern->tensor = new ZTensor(std::move(result_tensor));
+        if (intern->tensor->grad_fn) {
+            intern->tensor->grad_fn->result_ptr_raw = intern->tensor;
+        }
+    }
+    catch (const std::bad_alloc& e) {
+        zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_ALLOC_FAILED, 0);
+        ZVAL_NULL(return_value);
+    }
+    catch (const std::exception& e) {
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+        ZVAL_NULL(return_value);
+    }
+}
+
 #include "zmatrix_methods.h"
 // ==========================================================================
 // Tabela de Métodos da Classe ZMatrix\ZTensor
