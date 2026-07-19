@@ -200,6 +200,51 @@ static std::mt19937& get_global_mt19937() {
 // Forward declaration
 struct ZTensor;
 
+class SharedTensorBuffer {
+public:
+    using Storage = std::vector<float>;
+    using iterator = Storage::iterator;
+    using const_iterator = Storage::const_iterator;
+
+    explicit SharedTensorBuffer(ZTensor* owner = nullptr);
+    SharedTensorBuffer(const SharedTensorBuffer& other, ZTensor* owner);
+    SharedTensorBuffer(SharedTensorBuffer&& other, ZTensor* owner) noexcept;
+
+    void bind(ZTensor* owner) noexcept { owner_ = owner; }
+    void share_from(const SharedTensorBuffer& other) noexcept;
+    void deep_copy_from(const SharedTensorBuffer& other);
+    void move_from(SharedTensorBuffer& other) noexcept;
+
+    float* data();
+    const float* data() const;
+    float& operator[](size_t index);
+    const float& operator[](size_t index) const;
+    iterator begin();
+    iterator end();
+    const_iterator begin() const;
+    const_iterator end() const;
+
+    size_t size() const noexcept { return storage_->size(); }
+    bool empty() const noexcept { return storage_->empty(); }
+    void clear() { storage_->clear(); }
+    void resize(size_t size) { storage_->resize(size); }
+    void resize(size_t size, float value) { storage_->resize(size, value); }
+
+    float* raw_data() noexcept { return storage_->data(); }
+    const float* raw_data() const noexcept { return storage_->data(); }
+    float& raw_at(size_t index) { return (*storage_)[index]; }
+    const float& raw_at(size_t index) const { return (*storage_)[index]; }
+
+    SharedTensorBuffer& operator=(const SharedTensorBuffer& other) noexcept;
+    SharedTensorBuffer& operator=(const Storage& values);
+    SharedTensorBuffer& operator=(Storage&& values);
+    operator Storage() const;
+
+private:
+    ZTensor* owner_ = nullptr;
+    std::shared_ptr<Storage> storage_;
+};
+
 // --- Autograd Node Structure (reverse-mode, eager-mode) ---
 struct AutogradNode {
     // Parents (operandos que geraram este nó)
@@ -408,7 +453,8 @@ struct ZTensor {
         }
     }
 
-    std::vector<float> data; // <--- MUDANÇA: double para float
+    SharedTensorBuffer data;
+ // <--- MUDANÇA: double para float
     std::vector<size_t> shape;
     std::vector<size_t> strides;
     size_t offset = 0;
@@ -431,7 +477,7 @@ struct ZTensor {
     // CPU-visible construction keeps the original zero-initialized behavior.
     ZTensor(const std::vector<size_t>& _shape) : ZTensor(_shape, false) {}
 
-    ZTensor(const std::vector<size_t>& _shape, bool defer_host_allocation) : shape(_shape) {
+    ZTensor(const std::vector<size_t>& _shape, bool defer_host_allocation) : data(this), shape(_shape) {
             const size_t total_size = checked_element_count(shape);
 
             if (total_size > 0) {
@@ -483,17 +529,18 @@ struct ZTensor {
 #endif
 
     // Construtor Padrão (inalterado)
-    ZTensor() = default;
+    ZTensor() : data(this) {}
 
     ZTensor(const ZTensor& other)
         : requires_grad(other.requires_grad),
           grad_fn(other.grad_fn),
-          data(other.data),
+          data(this),
           shape(other.shape),
           strides(other.strides),
           offset(other.offset),
           owns_data(other.owns_data)
     {
+        data.deep_copy_from(other.data);
 #ifdef HAVE_CUDA
         d_data = nullptr;
         d_capacity = 0;
@@ -538,7 +585,7 @@ struct ZTensor {
             grad = std::make_unique<ZTensor>(*other.grad);
         }
 #endif
-        data = other.data;
+        data.deep_copy_from(other.data);
         shape = other.shape;
         strides = other.strides;
         offset = other.offset;
@@ -580,7 +627,7 @@ struct ZTensor {
     ZTensor(ZTensor&& other) noexcept
         : requires_grad(other.requires_grad),
           grad_fn(std::move(other.grad_fn)),
-          data(std::move(other.data)),
+          data(std::move(other.data), this),
           shape(std::move(other.shape)),
           strides(std::move(other.strides)),
           offset(other.offset),
@@ -608,7 +655,7 @@ struct ZTensor {
 #ifdef HAVE_CUDA
         release_device_noexcept();
 #endif
-        data = std::move(other.data);
+        data.move_from(other.data);
         shape = std::move(other.shape);
         strides = std::move(other.strides);
         offset = other.offset;
@@ -693,6 +740,7 @@ struct ZTensor {
     }
 
     void ensure_device() const {
+            const_cast<ZTensor*>(this)->materialize_host_inplace();
             gpu_require_available();
             std::lock_guard<std::mutex> lock(device_mutex); // FIX: thread-safety
             if (device_valid) return;
@@ -901,7 +949,7 @@ struct ZTensor {
     // --- Métodos Utilitários ---
     size_t get_linear_index(const std::vector<size_t>& indices) const {
         if (indices.size() != shape.size()) { throw std::invalid_argument("Number of indices does not match tensor dimensionality"); }
-        size_t linear_idx = 0;
+        size_t linear_idx = offset;
         for (size_t i = 0; i < indices.size(); ++i) {
             if (indices[i] >= shape[i]) { throw std::out_of_range("Index out of bounds"); }
             size_t term = indices[i] * strides[i];
@@ -920,7 +968,7 @@ struct ZTensor {
         if (index >= data.size()) {
             throw std::out_of_range("Calculated index exceeds data size");
         }
-        return data[index];
+        return data.raw_at(index);
     }
     const float& at(const std::vector<size_t>& indices) const {
 #ifdef HAVE_CUDA
@@ -931,8 +979,95 @@ struct ZTensor {
          if (index >= data.size()) {
              throw std::out_of_range("Calculated index exceeds data size");
          }
-        return data[index];
+        return data.raw_at(index);
     }
+    bool is_contiguous() const noexcept {
+        if (shape.empty() || size() == 0) return true;
+        if (strides.size() != shape.size()) return false;
+
+        size_t expected = 1;
+        for (size_t axis = shape.size(); axis-- > 0;) {
+            if (shape[axis] != 1 && strides[axis] != expected) return false;
+            if (shape[axis] != 0) expected *= shape[axis];
+        }
+        return true;
+    }
+
+    size_t physical_index_from_linear(size_t linear) const {
+        size_t physical = offset;
+        for (size_t axis = shape.size(); axis-- > 0;) {
+            const size_t coordinate = linear % shape[axis];
+            linear /= shape[axis];
+            physical += coordinate * strides[axis];
+        }
+        return physical;
+    }
+
+    static std::vector<size_t> contiguous_strides(const std::vector<size_t>& tensor_shape) {
+        std::vector<size_t> result(tensor_shape.size());
+        size_t stride = 1;
+        for (size_t axis = tensor_shape.size(); axis-- > 0;) {
+            result[axis] = stride;
+            if (tensor_shape[axis] != 0 &&
+                stride > std::numeric_limits<size_t>::max() / tensor_shape[axis]) {
+                throw std::overflow_error(ZMATRIX_ERR_OVERFLOW);
+            }
+            stride *= tensor_shape[axis];
+        }
+        return result;
+    }
+
+    void materialize_host_inplace() {
+        if (is_contiguous() && offset == 0) return;
+#ifdef HAVE_CUDA
+        ensure_host();
+#endif
+        const size_t count = size();
+        std::vector<float> materialized(count);
+        const float* source = data.raw_data();
+        for (size_t i = 0; i < count; ++i) {
+            materialized[i] = source[physical_index_from_linear(i)];
+        }
+        data = std::move(materialized);
+        strides = contiguous_strides(shape);
+        offset = 0;
+        owns_data = true;
+#ifdef HAVE_CUDA
+        release_device_noexcept();
+        host_valid = true;
+#endif
+    }
+
+    float* contiguous_data() {
+        materialize_host_inplace();
+        return data.raw_data() + offset;
+    }
+
+    const float* contiguous_data() const {
+        const_cast<ZTensor*>(this)->materialize_host_inplace();
+        return data.raw_data() + offset;
+    }
+
+    ZTensor contiguous() const {
+#ifdef HAVE_CUDA
+        ensure_host();
+#endif
+        ZTensor result(shape);
+        const size_t count = size();
+        const float* source = data.raw_data();
+        float* destination = result.data.raw_data();
+        if (is_contiguous()) {
+            if (count > 0) {
+                std::memcpy(destination, source + offset, count * sizeof(float));
+            }
+            return result;
+        }
+        for (size_t i = 0; i < count; ++i) {
+            destination[i] = source[physical_index_from_linear(i)];
+        }
+        return result;
+    }
+
     bool same_shape(const ZTensor& other) const { return shape == other.shape; }
     size_t size() const {
         return checked_element_count(shape);
@@ -1579,6 +1714,10 @@ struct ZTensor {
             throw std::invalid_argument(ZMATRIX_ERR_SHAPE_MISMATCH);
         }
 
+        if (!is_contiguous()) {
+            return contiguous().reshape(new_shape);
+        }
+
         // 3. Criar objeto de resultado e reutilizar dados
         ZTensor result;
         result.shape = new_shape;
@@ -1591,10 +1730,9 @@ struct ZTensor {
         #ifdef HAVE_CUDA
         ensure_host();
         #endif
-        // NOTA: std::vector::operator= faz cópia profunda (não é uma view
-        // compartilhada). O comentário anterior alegando compartilhamento
-        // de buffer estava incorreto — esta é uma cópia real dos dados.
-        result.data = this->data;
+        result.data.share_from(this->data);
+        result.offset = offset;
+        result.owns_data = false;
 
         // 4. Calcular strides para o novo shape
         result.strides.resize(new_shape.size());
@@ -1785,36 +1923,17 @@ struct ZTensor {
         ensure_host();
 #endif
 
-        ZTensor result({cols, rows});
-        const float* p_in = this->data.data();
-        float* p_out = result.data.data();
-
-        constexpr int TILE_SIZE = 32;
-
-    #if HAS_OPENMP
-        const size_t total = rows * cols;
-        if (total > 10000) {
-#pragma omp parallel for collapse(2) schedule(static)
-            for (size_t ii = 0; ii < rows; ii += TILE_SIZE) {
-                for (size_t jj = 0; jj < cols; jj += TILE_SIZE) {
-                    for (size_t i = ii; i < std::min(ii + TILE_SIZE, rows); ++i) {
-                        for (size_t j = jj; j < std::min(jj + TILE_SIZE, cols); ++j) {
-                            p_out[j * rows + i] = p_in[i * cols + j];
-                        }
-                    }
-                }
-            }
-            return result;
-        }
-    #endif
-
-        // fallback sequencial
-        for (size_t i = 0; i < rows; ++i) {
-            for (size_t j = 0; j < cols; ++j) {
-                p_out[j * rows + i] = p_in[i * cols + j];
-            }
-        }
-
+        ZTensor result;
+        result.data.share_from(data);
+        result.shape = {cols, rows};
+        result.strides = {strides[1], strides[0]};
+        result.offset = offset;
+        result.owns_data = false;
+#ifdef HAVE_CUDA
+        result.host_valid = true;
+        result.device_valid = false;
+        result.device_write_pending = false;
+#endif
         return result;
     }
 
@@ -4533,6 +4652,88 @@ ZTensor column(size_t col_idx) const {
     }
 
 };
+SharedTensorBuffer::SharedTensorBuffer(ZTensor* owner)
+    : owner_(owner), storage_(std::make_shared<Storage>()) {}
+
+SharedTensorBuffer::SharedTensorBuffer(const SharedTensorBuffer& other, ZTensor* owner)
+    : owner_(owner), storage_(other.storage_) {}
+
+SharedTensorBuffer::SharedTensorBuffer(SharedTensorBuffer&& other, ZTensor* owner) noexcept
+    : owner_(owner), storage_(std::move(other.storage_)) {
+    if (!storage_) storage_ = std::make_shared<Storage>();
+    other.storage_ = std::make_shared<Storage>();
+}
+
+void SharedTensorBuffer::share_from(const SharedTensorBuffer& other) noexcept {
+    storage_ = other.storage_;
+}
+
+void SharedTensorBuffer::deep_copy_from(const SharedTensorBuffer& other) {
+    storage_ = std::make_shared<Storage>(*other.storage_);
+}
+
+void SharedTensorBuffer::move_from(SharedTensorBuffer& other) noexcept {
+    storage_ = std::move(other.storage_);
+    if (!storage_) storage_ = std::make_shared<Storage>();
+    other.storage_ = std::make_shared<Storage>();
+}
+
+float* SharedTensorBuffer::data() {
+    return owner_ ? owner_->contiguous_data() : storage_->data();
+}
+
+const float* SharedTensorBuffer::data() const {
+    return owner_ ? owner_->contiguous_data() : storage_->data();
+}
+
+float& SharedTensorBuffer::operator[](size_t index) {
+    return data()[index];
+}
+
+const float& SharedTensorBuffer::operator[](size_t index) const {
+    return data()[index];
+}
+
+SharedTensorBuffer::iterator SharedTensorBuffer::begin() {
+    (void)data();
+    return storage_->begin();
+}
+
+SharedTensorBuffer::iterator SharedTensorBuffer::end() {
+    (void)data();
+    return storage_->end();
+}
+
+SharedTensorBuffer::const_iterator SharedTensorBuffer::begin() const {
+    (void)data();
+    return storage_->begin();
+}
+
+SharedTensorBuffer::const_iterator SharedTensorBuffer::end() const {
+    (void)data();
+    return storage_->end();
+}
+
+SharedTensorBuffer& SharedTensorBuffer::operator=(const SharedTensorBuffer& other) noexcept {
+    if (this != &other) storage_ = other.storage_;
+    return *this;
+}
+
+SharedTensorBuffer& SharedTensorBuffer::operator=(const Storage& values) {
+    storage_ = std::make_shared<Storage>(values);
+    return *this;
+}
+
+SharedTensorBuffer& SharedTensorBuffer::operator=(Storage&& values) {
+    storage_ = std::make_shared<Storage>(std::move(values));
+    return *this;
+}
+
+SharedTensorBuffer::operator Storage() const {
+    (void)data();
+    return *storage_;
+}
+
 // --- Fim da Definição de ZTensor ---
 
 

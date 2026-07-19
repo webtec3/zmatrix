@@ -402,7 +402,7 @@ PHP_METHOD(ZTensor, transpose)
     ZEND_PARSE_PARAMETERS_NONE();
     zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
     if (!self_obj->tensor) { zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0); RETURN_THROWS(); }
-    try { ZTensor result = self_obj->tensor->transpose(); zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor); }
+    try { ZTensor result = self_obj->tensor->transpose(); zmatrix_return_tensor_obj(std::move(result), return_value, zmatrix_ce_ZTensor); }
     catch (const std::exception& e) { zend_throw_exception(zend_ce_exception, e.what(), 0); RETURN_THROWS(); }
 }
 
