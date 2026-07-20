@@ -404,12 +404,13 @@ final class ZTensor
     }
 
     /**
-     * Adds another tensor (or array) to this tensor, element-wise.
+     * Adds another tensor (or array) to this tensor, element-wise (in-place).
      *
      * Both tensors must have the exact same shape or be broadcastable.
+     * This operation modifies the receiver and does not modify a ZTensor operand.
      *
      * @param ZTensor|float|int|array<int|float> $other The other tensor or array to add.
-     * @return ZTensor A new tensor with the addition result.
+     * @return ZTensor The modified receiver itself.
      * @throws RuntimeException If shapes are incompatible (ZMATRIX_ERR_SHAPE_MISMATCH)
      * or if another internal error occurs.
      */
@@ -418,12 +419,13 @@ final class ZTensor
     }
 
     /**
-     * Subtracts another tensor (or array) from this tensor, element-wise.
+     * Subtracts another tensor (or array) from this tensor, element-wise (in-place).
      *
      * Both tensors must have the exact same shape or be broadcastable.
+     * This operation modifies the receiver and does not modify a ZTensor operand.
      *
      * @param ZTensor|float|int|array<int|float> $other The other tensor or array to subtract.
-     * @return ZTensor A new tensor containing the subtraction result.
+     * @return ZTensor The modified receiver itself.
      * @throws RuntimeException If shapes are incompatible (ZMATRIX_ERR_SHAPE_MISMATCH)
      * or if another internal error occurs.
      */
@@ -436,6 +438,7 @@ final class ZTensor
      *
      * If axis is null, returns the global sum of all elements.
      * If axis is provided, reduces the tensor along the given axis.
+     * The receiver is not modified.
      *
      * Negative axis values are supported (e.g., -1 = last axis).
      *
@@ -445,7 +448,7 @@ final class ZTensor
      *   $t->sum(-1);      // sum along last axis
      *
      * @param int|null $axis Axis to reduce, or null for global sum
-     * @return ZTensor
+     * @return ZTensor A new tensor containing the reduction result.
      *
      * @throws \TypeError   If axis is not int|null
      * @throws \Exception  If axis is out of bounds or tensor is empty
@@ -455,12 +458,13 @@ final class ZTensor
     }
 
     /**
-     * Multiplies this tensor by another tensor (or array), element-wise (Hadamard product).
+     * Multiplies this tensor by another tensor (or array), element-wise (Hadamard product, in-place).
      *
      * Both tensors must have the exact same shape or be broadcastable.
+     * This operation modifies the receiver and does not modify a ZTensor operand.
      *
      * @param ZTensor|float|int|array<int|float> $other The other tensor or array to be multiplied.
-     * @return ZTensor A new tensor containing the result of the element-wise multiplication.
+     * @return ZTensor The modified receiver itself.
      * @throws RuntimeException If shapes are incompatible (ZMATRIX_ERR_SHAPE_MISMATCH)
      * or if another internal error occurs.
      */
@@ -469,10 +473,10 @@ final class ZTensor
     }
 
     /**
-     * Multiplies each element of this tensor by a scalar value.
+     * Multiplies each element of this tensor by a scalar value (in-place).
      *
      * @param float $scalar The scalar value to multiply by.
-     * @return ZTensor A new tensor with each element multiplied by the scalar.
+     * @return ZTensor The modified receiver itself.
      * @throws RuntimeException If an internal error occurs.
      */
     public function scalarMultiply(float $scalar): ZTensor
@@ -480,10 +484,10 @@ final class ZTensor
     }
 
     /**
-     * Divides each element of this tensor by a scalar value.
+     * Divides each element of this tensor by a scalar value or tensor (in-place).
      *
      * @param float|ZTensor $scalar The scalar value or tensor to divide by.
-     * @return ZTensor A new tensor with each element divided by the scalar.
+     * @return ZTensor The modified receiver itself. A ZTensor operand is not modified.
      * @throws RuntimeException If an internal error occurs.
      */
     public function scalarDivide(float|ZTensor $scalar): ZTensor
@@ -491,10 +495,34 @@ final class ZTensor
     }
 
     /**
+     * Applies one fused Adam update on CPU or CUDA (in-place).
+     *
+     * The receiver, firstMoment and secondMoment are modified. Gradient is
+     * read-only. All four tensors must have identical shapes and must not
+     * share the same native buffer. CUDA is used only when all four tensors
+     * are already device-resident, contiguous and have no view offset; no
+     * implicit H2D upload is performed. Bias corrections are the precomputed
+     * scalars `1 - beta1^t` and `1 - beta2^t`.
+     */
+    public function adamUpdate(
+        ZTensor $gradient,
+        ZTensor $firstMoment,
+        ZTensor $secondMoment,
+        float $learningRate,
+        float $beta1,
+        float $beta2,
+        float $epsilon,
+        float $biasCorrection1,
+        float $biasCorrection2,
+    ): ZTensor {
+    }
+
+    /**
      * Computes the transpose of this tensor.
      *
      * Currently implemented only for 2D tensors (matrices).
      * For an M x N matrix, it returns a new N x M matrix.
+     * The receiver is not modified.
      *
      * @return ZTensor A new tensor representing the transpose.
      * @throws RuntimeException If the tensor is not 2D (ZMATRIX_ERR_UNSUPPORTED_OP)
@@ -505,9 +533,9 @@ final class ZTensor
     }
 
     /**
-     * Computes the absolute value of each element in the tensor.
+     * Computes the absolute value of each element in the tensor (in-place).
      *
-     * @return ZTensor A new tensor with the absolute values of the elements.
+     * @return ZTensor The modified receiver itself.
      * @throws RuntimeException If an internal error occurs.
      */
     public function abs(): ZTensor
@@ -622,6 +650,7 @@ final class ZTensor
 
     /**
      * Calculates the sum of all elements in the tensor.
+     * The receiver is not modified.
      *
      * @return float The total sum of the elements. Returns 0.0 for an empty tensor.
      * @throws RuntimeException If an internal error occurs.
@@ -632,6 +661,7 @@ final class ZTensor
 
     /**
      * Calculates the average of all elements in the tensor.
+     * The receiver is not modified.
      *
      * @return float The average of the elements. Returns NAN if the tensor is empty.
      * @throws RuntimeException If an internal error occurs.
@@ -681,12 +711,17 @@ final class ZTensor
     }
 
     /**
-     * Reshapes this tensor to a new format without copying data.
+     * Reshapes this tensor to a new format.
+     *
+     * Returns a new PHP object and may share native storage with the source when
+     * the source is contiguous. Mutating either tensor can therefore be visible
+     * through the other. Use copy()->reshape(...) or reshape(...)->copy() when
+     * independent mutable storage is required.
      *
      * @param int[] $shape An array with the new dimensions.
      * Must have the same total product of elements.
      * Can contain zeros to generate an empty tensor.
-     * @return ZTensor A new tensor with the same data buffer, just a different view.
+     * @return ZTensor A tensor view with the requested shape when possible.
      * @throws RuntimeException If the number of elements does not match or dimensions are invalid.
      */
     public function reshape(array $shape): ZTensor
@@ -694,16 +729,18 @@ final class ZTensor
     }
 
     /**
-     * Extrai uma fatia (subarray) do tensor sem copiar dados
+     * Extracts a slice (subarray) from the tensor.
      *
-     * Cria uma VIEW do mesmo buffer com offset e shape ajustados.
-     * Operação de custo O(1) - sem cópia de dados.
+     * Returns a distinct, semantically independent tensor. Mutating the returned
+     * tensor does not change the source tensor, and the source is not modified by
+     * this operation. No physical buffer-sharing or O(1) guarantee is part of
+     * this API.
      *
-     * @param int $axis Eixo ao longo do qual fazer slice
-     * @param int $start Índice inicial (inclusivo)
-     * @param int $end Índice final (exclusivo)
-     * @return ZTensor Uma VIEW do tensor com dimensão [axis] reduzida a [end-start]
-     * @throws RuntimeException Se axis >= ndim ou se start >= end ou end > shape[axis]
+     * @param int $axis Axis along which to slice.
+     * @param int $start Inclusive start index.
+     * @param int $end Exclusive end index.
+     * @return ZTensor A new tensor whose selected dimension has size end-start.
+     * @throws RuntimeException If the axis or range is invalid.
      */
     public function slice(int $axis, int $start, int $end): ZTensor
     {
@@ -773,6 +810,7 @@ final class ZTensor
      * Currently implemented only for 2D tensors (matrices).
      * Multiplies this tensor (A) by another tensor (B), resulting in C = A * B.
      * The number of columns in A must be equal to the number of rows in B.
+     * Neither operand is modified.
      *
      * @param ZTensor|array<int|float> $other The matrix (2D tensor or PHP array) to be multiplied.
      * @return ZTensor A new tensor containing the result of the matrix multiplication.
@@ -784,10 +822,11 @@ final class ZTensor
     }
 
     /**
-     * Divides this tensor by another tensor or array, element-wise.
+     * Divides this tensor by another tensor or array, element-wise (in-place).
+     * A ZTensor operand is not modified.
      *
      * @param ZTensor|float|int|array<int|float> $other Another tensor or array.
-     * @return ZTensor
+     * @return ZTensor The modified receiver itself.
      * @throws RuntimeException
      */
     public function divide(ZTensor|array|float|int $other): ZTensor
@@ -795,10 +834,10 @@ final class ZTensor
     }
 
     /**
-     * Raises each element of this tensor to a power.
+     * Raises each element of this tensor to a power (in-place).
      *
      * @param float $exponent Exponent for the operation.
-     * @return ZTensor
+     * @return ZTensor The modified receiver itself.
      * @throws RuntimeException
      */
     public function pow(float $exponent): ZTensor
@@ -806,9 +845,9 @@ final class ZTensor
     }
 
     /**
-     * Exponentiation: exp(x) for each element.
+     * Exponentiation: exp(x) for each element (in-place).
      *
-     * @return ZTensor
+     * @return ZTensor The modified receiver itself.
      * @throws RuntimeException
      */
     public function exp(): ZTensor
@@ -816,9 +855,9 @@ final class ZTensor
     }
 
     /**
-     * Natural logarithm: log(x) for each element.
+     * Natural logarithm: log(x) for each element (in-place).
      *
-     * @return ZTensor
+     * @return ZTensor The modified receiver itself.
      * @throws RuntimeException
      */
     public function log(): ZTensor
@@ -826,9 +865,9 @@ final class ZTensor
     }
 
     /**
-     * Square root: sqrt(x) for each element.
+     * Square root: sqrt(x) for each element (in-place).
      *
-     * @return ZTensor
+     * @return ZTensor The modified receiver itself.
      * @throws RuntimeException
      */
     public function sqrt(): ZTensor
@@ -916,10 +955,11 @@ final class ZTensor
     /**
      * Returns the index of the maximum value or the indices of the maximum values
      * along the specified axis.
+     * The receiver is not modified.
      *
      * @param int|null $axis Axis to reduce. If null, returns a scalar index.
      *
-     * @return int|ZTensor
+     * @return int|ZTensor A scalar index, or a new tensor of indices for an axis reduction.
      *
      * @throws \Exception
      */
@@ -1162,6 +1202,9 @@ final class ZTensor
     /**
      * Returns a column from the tensor.
      *
+     * The returned tensor is semantically independent: mutating it does not
+     * change the source tensor.
+     *
      * @param int $col_idx Zero-based column index.
      *
      * @return ZTensor A new tensor containing the selected column.
@@ -1178,7 +1221,8 @@ final class ZTensor
     /**
      * Returns a row from the tensor.
      *
-     * Extracts the specified row and returns it as a new tensor.
+     * Extracts the specified row and returns it as a new, semantically
+     * independent tensor. Mutating the result does not change the source.
      *
      * @param int $row_idx Zero-based row index.
      *
@@ -1222,6 +1266,7 @@ final class ZTensor
      * Returns a new tensor containing the elements at the specified indices.
      *
      * Gathers elements from the tensor according to the provided index list.
+     * The result is semantically independent: mutating it does not change the source.
      *
      * @param array<int> $indices List of zero-based indices to gather.
      *

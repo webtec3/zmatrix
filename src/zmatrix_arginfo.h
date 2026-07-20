@@ -210,6 +210,18 @@ ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_scalarDivide, 0, 0, 1)
    ZEND_ARG_INFO(0, scalar) // pode ser float|int|ZTensor|array
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_ztensor_adam_update, 0, 9, ZMatrix\\ZTensor, 0)
+    ZEND_ARG_OBJ_INFO(0, gradient, ZMatrix\\ZTensor, 0)
+    ZEND_ARG_OBJ_INFO(0, firstMoment, ZMatrix\\ZTensor, 0)
+    ZEND_ARG_OBJ_INFO(0, secondMoment, ZMatrix\\ZTensor, 0)
+    ZEND_ARG_TYPE_INFO(0, learningRate, IS_DOUBLE, 0)
+    ZEND_ARG_TYPE_INFO(0, beta1, IS_DOUBLE, 0)
+    ZEND_ARG_TYPE_INFO(0, beta2, IS_DOUBLE, 0)
+    ZEND_ARG_TYPE_INFO(0, epsilon, IS_DOUBLE, 0)
+    ZEND_ARG_TYPE_INFO(0, biasCorrection1, IS_DOUBLE, 0)
+    ZEND_ARG_TYPE_INFO(0, biasCorrection2, IS_DOUBLE, 0)
+ZEND_END_ARG_INFO()
+
 ZEND_BEGIN_ARG_INFO_EX(arginfo_ztensor_copy, 0, 0, 0)
 ZEND_END_ARG_INFO()
 

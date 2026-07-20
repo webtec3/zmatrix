@@ -789,3 +789,19 @@ if ($modeShape === [1]) {
 
 echo PHP_EOL;
 echo "🚀 TODOS OS TESTES DE MODE PASSARAM!" . PHP_EOL;
+
+
+$a = new ZTensor([1000, 1000]);
+$b = new ZTensor([1000, 1000]);
+
+// Com GPU: ~2ms
+// Com CPU: ~50ms
+
+$tensor = ZTensor::arr([
+    [1, 2, 3, 4],
+    [5, 6, 7, 8]
+]);
+$reshaped = $tensor->reshape([4, 2]);
+print_r($reshaped->copy());
+// Verificar tensor está em GPU
+var_dump($b->isOnGpu());  // bool(true) se GPU foi usado

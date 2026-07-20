@@ -9,6 +9,7 @@ extern "C" const char* gpu_driver_path();
 extern "C" int gpu_memory_pools_supported();
 extern "C" int gpu_device_allocate(void** pointer, size_t bytes, int request_async, int* used_async);
 extern "C" int gpu_device_free(void* pointer, int allocation_was_async);
+extern "C" int gpu_device_memory_info(size_t* free_bytes, size_t* total_bytes);
 extern "C" void gpu_add(float* a, const float* b, size_t n);
 extern "C" void gpu_sub(float* a, const float* b, size_t n);
 extern "C" void gpu_mul(float* a, const float* b, size_t n);
@@ -41,6 +42,21 @@ extern "C" void gpu_scalar_add_device(float* d_a, float value, size_t n);
 extern "C" void gpu_scalar_sub_device(float* d_a, float value, size_t n);
 extern "C" void gpu_scalar_mul_device(float* d_a, float value, size_t n);
 extern "C" void gpu_scalar_div_device(float* d_a, float value, size_t n);
+extern "C" void gpu_adam_update_device(
+    float* d_parameter,
+    const float* d_gradient,
+    float* d_first_moment,
+    float* d_second_moment,
+    float learning_rate,
+    float beta1,
+    float beta2,
+    float epsilon,
+    float one_minus_beta1,
+    float one_minus_beta2,
+    float bias_correction1,
+    float bias_correction2,
+    size_t n
+);
 extern "C" void gpu_pow_device(float* d_a, float exponent, size_t n);
 extern "C" void gpu_log_device(float* d_a, size_t n);
 extern "C" void gpu_sqrt_device(float* d_a, size_t n);

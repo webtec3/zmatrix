@@ -1,184 +1,71 @@
-# ZMatrix v0.5.0 - Stable Core Release
+# ZMatrix v0.5.0-float — Release Candidate
 
-**Release Date:** January 16, 2026  
-**Status:** ✅ Production Ready  
-**Git Tag:** `v0.5.0`
+Data da revisão candidata: 2026-07-18  
+Status: tecnicamente concluída, ainda não publicada  
+Tag `v0.5.0`: não criada
 
-## 🎯 Major Changes
+## Resumo
 
-### 1. sum() Method Refactor (BREAKING CHANGE)
-**Problem:** Original API confusing with mandatory `other` parameter and unclear semantics.
+A versão 0.5.0 torna o backend CUDA matematicamente auditável, preserva a coerência host/device e adiciona uma estratégia de reduções baseada em medições. A CPU continua sendo o backend padrão; CUDA somente é usada após `toGpu()` explícito.
 
-**Solution:** Complete API redesign to match NumPy/PyTorch conventions.
+Não há alteração incompatível na API pública.
 
-**Before:**
-```php
-$result = $t->sum($other_tensor, 0);  // Modifies output, confusing
-```
+## Mudanças do backend
 
-**After:**
-```php
-$global_sum = $t->sum();        // Returns scalar tensor {1}
-$axis_sum = $t->sum(0);         // Returns tensor with reduced axis
-$last_axis = $t->sum(-1);       // NumPy-style negative indexing
-```
+- SGEMM cuBLAS row-major corrigido e validado para matrizes quadradas, retangulares, linha e coluna;
+- resultado SGEMM permanece residente e não realiza H2D de C com `beta = 0`;
+- máquina de estados host/device centralizada e auditada;
+- erros CUDA/cuBLAS propagados como exceções contextualizadas;
+- resolução do driver WSL prioriza `/usr/lib/wsl/lib/libcuda.so.1`;
+- kernels CUDA adicionados para divide, pow, log, fill, transpose e reduções;
+- transpose tiled `32x32` com shared memory;
+- estratégia híbrida de redução:
+  - CUB para soma global;
+  - kernel hierárquico próprio para min, max, argmin, argmax e eixos;
+  - semântica CPU preservada para NaN, infinitos e primeiro índice em empates;
+- build e execução CPU-only preservados.
 
-**Implementation Details:**
-- Serial validation of axis parameter BEFORE any OpenMP operations
-- Type checking: Throws `TypeError` for non-integer axis
-- Bounds checking: Validates 0 ≤ axis < ndim
-- Negative axis normalization: Converts -1 → ndim-1
-- Always returns new ZTensor (immutable)
+## Validação
 
-**Test Results:**
-- ✅ Global reduction: `[1,2,3,4,5,6]→[21]`
-- ✅ Axis 0: `[[1,2,3],[4,5,6]]→[5,7,9]`
-- ✅ Axis 1: `[[1,2,3],[4,5,6]]→[6,15]`
-- ✅ Negative axis: `sum(-1) == sum(1)` ✓
-- ✅ Exception handling: Invalid axis → caught
-- ✅ Type checking: Non-integer axis → caught
-- ✅ Immutability: Original tensor unchanged
+- PHPT cobre os 60 métodos públicos;
+- suítes específicas cobrem SGEMM, elementwise, transpose e reduções;
+- testes de coerência cobrem CPU/H2D/kernel/D2H, cópia e falhas;
+- ASan, UBSan e Valgrind foram executados no caminho CPU-only durante a auditoria;
+- benchmarks rejeitam medições sem comparação com a referência CPU;
+- diferenças numéricas registram erro absoluto, relativo e ULP quando aplicável.
 
-### 2. OpenMP Stability Hardening
+## Resultados no hardware de referência
 
-**PATCH 1: ztensor_arginfo.h (Lines 111-115)**
-- Changed return type from `MAY_BE_LONG|MAY_BE_DOUBLE` to `ZTensor` object
-- Removed `keepdims` parameter (not implemented)
-- Updated arginfo: `ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX`
+Ambiente: RTX 3060 12 GiB, driver 576.02, WSL2, CUDA 12.0, PHP 8.4.16.
 
-**PATCH 2: PHP_METHOD(ZTensor, sum) (Lines 1654-1726)**
-- Moved all validation to serial context BEFORE `#pragma omp`
-- Type checking: `if (Z_TYPE_P(axis_zv) != IS_LONG)`
-- Empty tensor check: `if (ndim == 0)`
-- Bounds validation: Normalizes negative axis
-- Two code paths: global sum (`axis_val == -1`) and axis reduction
-- All paths return via `zmatrix_return_tensor_obj()`
+| Cenário | Resultado observado |
+|---|---:|
+| SGEMM `4096²`, GPU residente | 6,32× sobre CPU |
+| SGEMM `4096²`, end-to-end | 3,91× sobre CPU |
+| Crossover elementwise `512²+` | aproximadamente 5 operações |
+| Soma global `1024²`, híbrida/serial válida | 111,66× |
+| Soma global `2048²`, híbrida/hierárquica válida | 20,35× |
 
-**PATCH 5: scalar_divide Validation (Lines 827-830)**
-- Added division-by-zero check BEFORE OpenMP loop
-- Exception: `std::invalid_argument("Cannot divide by zero")`
-- Prevents undefined behavior in parallel context
+Esses resultados são referências experimentais específicas desse hardware e não representam garantia geral de desempenho.
 
-**Test:**
-```
-✅ scalarDivide(2.0) → OK
-✅ scalarDivide(0.0) → Exception caught: "Cannot divide by zero"
-```
+## Integridade e reprodução
 
-### 3. CUDA Error Handling
+- metodologia: `benchmarks/v050/README.md`;
+- dados brutos: `benchmarks/v050/results/baseline_*.json` e `.csv`;
+- relatório: `benchmarks/v050/results/PERFORMANCE_DECISION_MAP.md`;
+- mapa estruturado: `decision_map.json` e `decision_map.csv`;
+- trace: `benchmarks/v050/profiles/zmatrix_systems.qdstrm.gz`.
 
-**PATCH 4: ensure_device() (Lines 421-452)**
-- Added try-catch around CUDA operations
-- Proper cleanup on cudaFree failure
-- Resets `d_data = nullptr` on error
-- Sets `device_valid = false` for retry logic
-- Improved error messages with `cudaGetErrorString()`
+O corpus completo registra `0.4.0-float` porque foi coletado antes do bump administrativo. Os dados não foram alterados; o backend funcional medido corresponde ao RC. A revisão candidata é novamente compilada e submetida a um benchmark mínimo após o bump.
 
-### 4. Object Initialization Safety
+## Limitações conhecidas
 
-**PATCH 3: zmatrix_return_tensor_obj() (Lines 2555-2582)**
-- Added null pointer check: `if (UNEXPECTED(!intern))`
-- Better error handling for object initialization failures
-- Ensures exception-safe tensor creation
+- o trace Nsight Systems foi coletado, porém não importado por ausência do importer compatível;
+- Nsight Compute não oferece profiling para essa configuração WSL;
+- não há ainda executor CUDA, grafo de eventos, múltiplas streams ou pool `cudaMallocAsync`;
+- sincronizações globais continuam preservando o contrato síncrono PHP;
+- operações CUDA ainda não cobrem toda a API CPU.
 
-## ✅ Validation Results
+## Publicação
 
-### Code Quality
-- ✅ All patches compile without errors (with CUDA support)
-- ✅ No new warnings introduced
-- ✅ Backward compatible (except breaking change in sum() API)
-
-### Functional Testing
-- ✅ sum() with global/axis/negative-axis reduction
-- ✅ Exception handling for invalid axes
-- ✅ Type checking for axis parameter
-- ✅ Division-by-zero protection
-- ✅ Tensor operations immutability
-
-### Method Validation
-- ✅ mul(): Confirmed `same_shape()` validation BEFORE OpenMP loop
-- ✅ matmul(): Confirmed K-dimension validation BEFORE BLAS call
-
-## 📋 Files Modified
-
-| File | Lines | Change |
-|------|-------|--------|
-| `ztensor_arginfo.h` | 111-115 | Updated arginfo for sum() |
-| `src/zmatrix_methods.h` | 1654-1726 | New PHP_METHOD(ZTensor, sum) |
-| `src/zmatrix.cpp` | 421-452 | Enhanced ensure_device() |
-| `src/zmatrix.cpp` | 827-830 | Added scalar_divide validation |
-| `src/zmatrix.cpp` | 2555-2582 | Enhanced zmatrix_return_tensor_obj |
-
-## 🚀 Deployment Checklist
-
-- ✅ Code reviewed and tested
-- ✅ All compilation errors resolved
-- ✅ CUDA support verified
-- ✅ OpenMP safety hardened
-- ✅ Exception handling improved
-- ✅ API documentation updated in code
-- ✅ Git commit created
-- ✅ Version tag applied
-
-## 🔄 Migration Guide
-
-### For Users
-
-**Breaking Change: sum() Method**
-
-If you're using the old sum() API:
-```php
-// OLD (no longer works)
-$result = $t->sum($other_tensor, 0);
-
-// NEW
-$result = $t->sum(0);  // Just pass the axis
-```
-
-**New Features:**
-```php
-// Global sum - returns scalar tensor {1}
-$total = $t->sum();
-
-// Reduce along axis 0
-$row_sums = $t->sum(0);
-
-// Reduce along axis 1
-$col_sums = $t->sum(1);
-
-// NumPy-style negative indexing
-$last_axis_sums = $t->sum(-1);  // Same as sum(1) for 2D
-```
-
-## 📊 Performance
-
-- No performance regression expected
-- Division-by-zero check: O(1) single conditional
-- Validation before parallel: Serial overhead minimal (~1-2%)
-- CUDA error handling: No runtime cost increase
-
-## 🐛 Bug Fixes
-
-- Fixed: Confusing sum() API with ambiguous parameters
-- Fixed: Potential undefined behavior from exceptions in OpenMP loops
-- Fixed: Division-by-zero crash in scalar_divide()
-- Fixed: Incomplete CUDA error cleanup in ensure_device()
-
-## 📝 Release Notes
-
-### v0.5.0 - Stable Core (2026-01-16)
-
-**Category:** Maintenance + API Cleanup  
-**Severity:** BREAKING (sum() method signature)  
-**Priority:** High (API stability)  
-
-**Summary:**
-Complete refactor of sum() method to provide NumPy/PyTorch-compatible API. Hardened OpenMP exception safety with serial validation before parallel operations. Improved CUDA error handling with proper resource cleanup.
-
-**Impact:** All code using sum() method must be updated. Core numerical operations remain compatible.
-
----
-
-**Release prepared by:** GitHub Copilot (Claude Haiku 4.5)  
-**QA Status:** ✅ All tests passing  
-**Production Status:** ✅ Ready for deployment
+Este documento descreve um Release Candidate. A tag `v0.5.0` e a release somente podem ser criadas após aprovação explícita das evidências do build limpo.

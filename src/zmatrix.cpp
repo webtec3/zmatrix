@@ -134,17 +134,98 @@ static inline bool zmatrix_gpu_debug_enabled() {
     return (v != nullptr) && (v[0] == '1');
 }
 
-static bool zmatrix_async_allocator_requested() {
-    static const bool requested = [] {
-        const char* value = std::getenv("ZMATRIX_CUDA_ALLOCATOR");
-        if (!value || !*value || std::string(value) == "auto") return true;
-        return std::string(value) == "async";
-    }();
-    return requested;
+enum class ZMatrixAllocatorMode { Legacy, Async, Auto };
+
+static const char* zmatrix_allocator_mode_name(ZMatrixAllocatorMode mode) noexcept {
+    switch (mode) {
+        case ZMatrixAllocatorMode::Legacy: return "legacy";
+        case ZMatrixAllocatorMode::Async: return "async";
+        case ZMatrixAllocatorMode::Auto: return "auto";
+    }
+    return "unknown";
 }
+
+struct ZMatrixAllocatorState {
+    ZMatrixAllocatorMode requested = ZMatrixAllocatorMode::Auto;
+    ZMatrixAllocatorMode effective = ZMatrixAllocatorMode::Legacy;
+    bool memory_pool_supported = false;
+    bool fallback_occurred = false;
+    std::string fallback_reason;
+    int device_id = -1;
+};
+
+static bool zmatrix_test_mode_enabled() noexcept {
+    const char* value = std::getenv("ZMATRIX_CUDA_TEST_MODE");
+    return value && std::strcmp(value, "1") == 0;
+}
+
+static bool zmatrix_allocator_telemetry_enabled() noexcept {
+    const char* value = std::getenv("ZMATRIX_CUDA_TEST_TELEMETRY");
+    return zmatrix_cuda_profile_enabled() || (value && std::strcmp(value, "1") == 0);
+}
+
+static void zmatrix_emit_allocator_state(const ZMatrixAllocatorState& state) noexcept {
+    if (!zmatrix_allocator_telemetry_enabled()) return;
+    std::fprintf(stderr,
+        "[zmatrix][cuda-allocator] {\"requested_allocator\":\"%s\","
+        "\"effective_allocator\":\"%s\",\"memory_pool_supported\":%s,"
+        "\"fallback_occurred\":%s,\"fallback_reason\":\"%s\","
+        "\"device_id\":%d,\"stream\":\"default\"}\n",
+        zmatrix_allocator_mode_name(state.requested), zmatrix_allocator_mode_name(state.effective),
+        state.memory_pool_supported ? "true" : "false", state.fallback_occurred ? "true" : "false",
+        state.fallback_reason.c_str(), state.device_id);
+}
+
+static ZMatrixAllocatorMode zmatrix_parse_allocator_mode() {
+    const char* value = std::getenv("ZMATRIX_CUDA_ALLOCATOR");
+    if (!value) return ZMatrixAllocatorMode::Auto;
+    if (std::strcmp(value, "legacy") == 0) return ZMatrixAllocatorMode::Legacy;
+    if (std::strcmp(value, "async") == 0) return ZMatrixAllocatorMode::Async;
+    if (std::strcmp(value, "auto") == 0) return ZMatrixAllocatorMode::Auto;
+    throw std::runtime_error(std::string("Invalid ZMATRIX_CUDA_ALLOCATOR value '") + value +
+        "'; expected exactly legacy, async, or auto");
+}
+
+static ZMatrixAllocatorState& zmatrix_allocator_state() {
+    static ZMatrixAllocatorState state = [] {
+        ZMatrixAllocatorState selected;
+        selected.requested = zmatrix_parse_allocator_mode();
+        if (cudaGetDevice(&selected.device_id) != cudaSuccess) selected.device_id = -1;
+        selected.memory_pool_supported = gpu_memory_pools_supported() != 0;
+        const char* force_no_pool = std::getenv("ZMATRIX_CUDA_FORCE_NO_MEMORY_POOL");
+        if (force_no_pool) {
+            if (std::strcmp(force_no_pool, "1") != 0 || !zmatrix_test_mode_enabled()) {
+                throw std::runtime_error(
+                    "ZMATRIX_CUDA_FORCE_NO_MEMORY_POOL=1 is test-only and requires ZMATRIX_CUDA_TEST_MODE=1");
+            }
+            selected.memory_pool_supported = false;
+        }
+        if (selected.requested == ZMatrixAllocatorMode::Legacy) {
+            selected.effective = ZMatrixAllocatorMode::Legacy;
+        } else if (selected.memory_pool_supported) {
+            selected.effective = ZMatrixAllocatorMode::Async;
+        } else if (selected.requested == ZMatrixAllocatorMode::Async) {
+            throw std::runtime_error(
+                "ZMATRIX_CUDA_ALLOCATOR=async requested, but CUDA memory pools are unsupported");
+        } else {
+            selected.effective = ZMatrixAllocatorMode::Legacy;
+            selected.fallback_occurred = true;
+            selected.fallback_reason = "memory pools unsupported";
+        }
+        zmatrix_emit_allocator_state(selected);
+        return selected;
+    }();
+    return state;
+}
+
+static std::mutex zmatrix_allocator_mutex;
 
 static std::atomic<size_t> zmatrix_device_allocations{0};
 static std::atomic<size_t> zmatrix_device_frees{0};
+static std::atomic<size_t> zmatrix_legacy_allocations{0};
+static std::atomic<size_t> zmatrix_legacy_frees{0};
+static std::atomic<size_t> zmatrix_async_allocations{0};
+static std::atomic<size_t> zmatrix_async_frees{0};
 static std::atomic<size_t> zmatrix_tensor_destructors{0};
 
 static void zmatrix_profile_lifecycle(const char* event, size_t bytes, const char* mode,
@@ -158,12 +239,18 @@ static void zmatrix_profile_lifecycle(const char* event, size_t bytes, const cha
 }
 
 static cudaError_t zmatrix_device_allocate(float** pointer, size_t bytes, bool& used_async) {
+    std::lock_guard<std::mutex> allocator_lock(zmatrix_allocator_mutex);
+    ZMatrixAllocatorState& allocator = zmatrix_allocator_state();
     const auto start = std::chrono::steady_clock::now();
     int async_flag = 0;
     const int status = gpu_device_allocate(reinterpret_cast<void**>(pointer), bytes,
-        zmatrix_async_allocator_requested() ? 1 : 0, &async_flag);
+        allocator.effective == ZMatrixAllocatorMode::Async ? 1 : 0, &async_flag);
     used_async = async_flag != 0;
-    if (status == static_cast<int>(cudaSuccess)) ++zmatrix_device_allocations;
+    if (status == static_cast<int>(cudaSuccess)) {
+        ++zmatrix_device_allocations;
+        if (used_async) ++zmatrix_async_allocations;
+        else ++zmatrix_legacy_allocations;
+    }
     zmatrix_profile_lifecycle("allocate", bytes, used_async ? "async" : "legacy",
         zmatrix_elapsed_ms(start), status);
     return static_cast<cudaError_t>(status);
@@ -173,7 +260,11 @@ static cudaError_t zmatrix_device_free(float* pointer, bool allocation_was_async
                                        size_t bytes) noexcept {
     const auto start = std::chrono::steady_clock::now();
     const int status = gpu_device_free(pointer, allocation_was_async ? 1 : 0);
-    if (status == static_cast<int>(cudaSuccess)) ++zmatrix_device_frees;
+    if (status == static_cast<int>(cudaSuccess)) {
+        ++zmatrix_device_frees;
+        if (allocation_was_async) ++zmatrix_async_frees;
+        else ++zmatrix_legacy_frees;
+    }
     zmatrix_profile_lifecycle("free", bytes, allocation_was_async ? "async" : "legacy",
         zmatrix_elapsed_ms(start), status);
     return static_cast<cudaError_t>(status);
@@ -1073,6 +1164,146 @@ struct ZTensor {
         return checked_element_count(shape);
      }
     bool empty() const { return this->size() == 0; }
+    void adam_update(
+        const ZTensor& gradient,
+        ZTensor& first_moment,
+        ZTensor& second_moment,
+        float learning_rate,
+        float beta1,
+        float beta2,
+        float epsilon,
+        float one_minus_beta1,
+        float one_minus_beta2,
+        float bias_correction1,
+        float bias_correction2
+    ) {
+        if (shape != gradient.shape || shape != first_moment.shape || shape != second_moment.shape) {
+            throw std::invalid_argument("adamUpdate requires parameter, gradient, m and v with identical shapes");
+        }
+        if (!std::isfinite(learning_rate) || learning_rate < 0.0f) {
+            throw std::invalid_argument("adamUpdate learningRate must be finite and non-negative");
+        }
+        if (!std::isfinite(beta1) || beta1 < 0.0f || beta1 >= 1.0f ||
+            !std::isfinite(beta2) || beta2 < 0.0f || beta2 >= 1.0f) {
+            throw std::invalid_argument("adamUpdate beta1 and beta2 must be finite and in [0, 1)");
+        }
+        if (!std::isfinite(epsilon) || epsilon <= 0.0f) {
+            throw std::invalid_argument("adamUpdate epsilon must be finite and greater than zero");
+        }
+        if (!std::isfinite(bias_correction1) || bias_correction1 <= 0.0f ||
+            !std::isfinite(bias_correction2) || bias_correction2 <= 0.0f) {
+            throw std::invalid_argument("adamUpdate bias corrections must be finite and greater than zero");
+        }
+
+        const size_t count = size();
+        if (count == 0) return;
+
+#ifdef HAVE_CUDA
+        const bool gpu_resident_path =
+            device_valid && gradient.device_valid &&
+            first_moment.device_valid && second_moment.device_valid &&
+            is_contiguous() && gradient.is_contiguous() &&
+            first_moment.is_contiguous() && second_moment.is_contiguous() &&
+            offset == 0 && gradient.offset == 0 &&
+            first_moment.offset == 0 && second_moment.offset == 0;
+
+        if (gpu_resident_path) {
+            if (d_data == gradient.d_data || d_data == first_moment.d_data ||
+                d_data == second_moment.d_data || gradient.d_data == first_moment.d_data ||
+                gradient.d_data == second_moment.d_data || first_moment.d_data == second_moment.d_data) {
+                throw std::invalid_argument("adamUpdate tensors must not share the same native buffer");
+            }
+
+            gpu_adam_update_device(
+                d_data,
+                gradient.d_data,
+                first_moment.d_data,
+                second_moment.d_data,
+                learning_rate,
+                beta1,
+                beta2,
+                epsilon,
+                one_minus_beta1,
+                one_minus_beta2,
+                bias_correction1,
+                bias_correction2,
+                count
+            );
+            mark_device_modified();
+            first_moment.mark_device_modified();
+            second_moment.mark_device_modified();
+            return;
+        }
+
+        // Mixed residency deliberately follows the CPU path. adamUpdate()
+        // never performs an implicit H2D upload merely to select CUDA.
+        ensure_host();
+        gradient.ensure_host();
+        first_moment.ensure_host();
+        second_moment.ensure_host();
+#endif
+
+        const float* parameter_storage = data.raw_data();
+        const float* gradient_storage = gradient.data.raw_data();
+        const float* first_storage = first_moment.data.raw_data();
+        const float* second_storage = second_moment.data.raw_data();
+        if (parameter_storage == gradient_storage || parameter_storage == first_storage ||
+            parameter_storage == second_storage || gradient_storage == first_storage ||
+            gradient_storage == second_storage || first_storage == second_storage) {
+            throw std::invalid_argument("adamUpdate tensors must not share the same native buffer");
+        }
+
+        float* parameter_data = data.raw_data();
+        const float* gradient_data = gradient.data.raw_data();
+        float* first_data = first_moment.data.raw_data();
+        float* second_data = second_moment.data.raw_data();
+        const bool contiguous =
+            is_contiguous() && gradient.is_contiguous() &&
+            first_moment.is_contiguous() && second_moment.is_contiguous();
+
+        auto update_element = [&](size_t parameter_index, size_t gradient_index,
+                                  size_t first_index, size_t second_index) {
+            const float grad = gradient_data[gradient_index];
+            const float first_scaled = first_data[first_index] * beta1;
+            const float gradient_first_scaled = grad * one_minus_beta1;
+            const float next_first = first_scaled + gradient_first_scaled;
+            const float gradient_squared = grad * grad;
+            const float second_scaled = second_data[second_index] * beta2;
+            const float gradient_second_scaled = gradient_squared * one_minus_beta2;
+            const float next_second = second_scaled + gradient_second_scaled;
+            const float first_hat = next_first / bias_correction1;
+            const float second_hat = next_second / bias_correction2;
+            const float denominator = std::sqrt(second_hat) + epsilon;
+            const float normalized = first_hat / denominator;
+            const float update = normalized * learning_rate;
+
+            first_data[first_index] = next_first;
+            second_data[second_index] = next_second;
+            parameter_data[parameter_index] = parameter_data[parameter_index] - update;
+        };
+
+        if (contiguous) {
+            for (size_t i = 0; i < count; ++i) {
+                update_element(offset + i, gradient.offset + i, first_moment.offset + i, second_moment.offset + i);
+            }
+        } else {
+            for (size_t i = 0; i < count; ++i) {
+                update_element(
+                    physical_index_from_linear(i),
+                    gradient.physical_index_from_linear(i),
+                    first_moment.physical_index_from_linear(i),
+                    second_moment.physical_index_from_linear(i)
+                );
+            }
+        }
+
+#ifdef HAVE_CUDA
+        mark_host_modified();
+        first_moment.mark_host_modified();
+        second_moment.mark_host_modified();
+#endif
+    }
+
 
     // --- Métodos de Operações (com float) ---
 
@@ -5050,6 +5281,7 @@ static const zend_function_entry zmatrix_ztensor_methods[] = {
     PHP_ME(ZTensor, maximum,          arginfo_ztensor_maximum,          ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)
     PHP_ME(ZTensor, mode,             arginfo_ztensor_mode,             ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, scalarDivide,     arginfo_ztensor_scalarDivide,     ZEND_ACC_PUBLIC)
+    PHP_ME(ZTensor, adamUpdate,       arginfo_ztensor_adam_update,      ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, copy,             arginfo_ztensor_copy,             ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, safe,             arginfo_ztensor_static_safe,      ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)
     PHP_ME(ZTensor, tile,             arginfo_ztensor_static_tile,      ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)

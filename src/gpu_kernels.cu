@@ -16,6 +16,7 @@
 #include <mutex>
 #include <cctype>
 #include <algorithm>
+#include <atomic>
 #include <fstream>
 #include <limits>
 #include <stdexcept>
@@ -26,6 +27,27 @@ static void* cuda_driver_handle = nullptr;
 static std::string cuda_driver_loaded_path;
 static std::string cuda_driver_error;
 static std::once_flag cuda_driver_load_once;
+
+// Deterministic, one-shot allocation failure injection for debug/test
+// subprocesses. It is intentionally unavailable unless test mode is explicit.
+static bool cuda_test_should_fail_allocation() {
+    const char* test_mode = std::getenv("ZMATRIX_CUDA_TEST_MODE");
+    const char* configured = std::getenv("ZMATRIX_CUDA_TEST_FAIL_ALLOC_AFTER");
+    if (!configured || !*configured) return false;
+    if (!test_mode || std::string(test_mode) != "1") {
+        throw std::runtime_error(
+            "ZMATRIX_CUDA_TEST_FAIL_ALLOC_AFTER is test-only and requires ZMATRIX_CUDA_TEST_MODE=1");
+    }
+    char* end = nullptr;
+    const unsigned long long target = std::strtoull(configured, &end, 10);
+    if (!end || *end != '\0') {
+        throw std::runtime_error("ZMATRIX_CUDA_TEST_FAIL_ALLOC_AFTER must be an unsigned integer");
+    }
+    static std::atomic<unsigned long long> ordinal{0};
+    static std::atomic<bool> injected{false};
+    const unsigned long long current = ordinal.fetch_add(1);
+    return current == target && !injected.exchange(true);
+}
 
 static bool running_on_wsl() {
     std::ifstream release("/proc/sys/kernel/osrelease");
@@ -265,16 +287,14 @@ extern "C" int gpu_device_allocate(void** pointer, size_t bytes, int request_asy
     if (!pointer || !used_async) return static_cast<int>(cudaErrorInvalidValue);
     *pointer = nullptr;
     *used_async = 0;
+    if (cuda_test_should_fail_allocation()) return static_cast<int>(cudaErrorMemoryAllocation);
     if (request_async && gpu_memory_pools_supported()) {
         const cudaError_t async_status = cudaMallocAsync(pointer, bytes, nullptr);
         if (async_status == cudaSuccess) {
             *used_async = 1;
             return static_cast<int>(cudaSuccess);
         }
-        if (async_status != cudaErrorNotSupported && async_status != cudaErrorInvalidValue) {
-            return static_cast<int>(async_status);
-        }
-        cudaGetLastError();
+        return static_cast<int>(async_status);
     }
     return static_cast<int>(cudaMalloc(pointer, bytes));
 }
@@ -287,11 +307,19 @@ extern "C" int gpu_device_free(void* pointer, int allocation_was_async) {
     return static_cast<int>(status);
 }
 
+extern "C" int gpu_device_memory_info(size_t* free_bytes, size_t* total_bytes) {
+    if (!free_bytes || !total_bytes) return static_cast<int>(cudaErrorInvalidValue);
+    return static_cast<int>(cudaMemGetInfo(free_bytes, total_bytes));
+}
+
 // Caller holds reduction_cache_mutex. Synchronous reductions and scans reuse
 // this single CUB workspace and therefore cannot overlap in the current model.
 static void* ensure_cub_temporary_unlocked(size_t required_bytes, const char* context) {
     if (required_bytes <= reduction_temporary_capacity && reduction_temporary) return reduction_temporary;
     void* replacement = nullptr;
+    if (cuda_test_should_fail_allocation()) {
+        throw std::runtime_error(std::string(context) + ": injected CUDA allocation failure");
+    }
     CUDA_CHECK_CONTEXT(cudaMalloc(&replacement, required_bytes), context);
     if (reduction_temporary) {
         const cudaError_t free_status = cudaFree(reduction_temporary);
@@ -309,6 +337,9 @@ template <typename T>
 class ScopedCudaBuffer {
 public:
     ScopedCudaBuffer(size_t count, const char* context) {
+        if (cuda_test_should_fail_allocation()) {
+            throw std::runtime_error(std::string(context) + ": injected CUDA allocation failure");
+        }
         CUDA_CHECK_CONTEXT(cudaMalloc(reinterpret_cast<void**>(&pointer_), count * sizeof(T)), context);
     }
     ~ScopedCudaBuffer() noexcept {
@@ -528,6 +559,44 @@ __global__ void kernel_scalar_div(float* a, float value, size_t n) {
     if (i < n) {
         a[i] /= value;
     }
+}
+
+__global__ void kernel_adam_update(
+    float* parameter,
+    const float* gradient,
+    float* first_moment,
+    float* second_moment,
+    float learning_rate,
+    float beta1,
+    float beta2,
+    float epsilon,
+    float one_minus_beta1,
+    float one_minus_beta2,
+    float bias_correction1,
+    float bias_correction2,
+    size_t n
+) {
+    const size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= n) return;
+
+    // Keep the same operation order as the canonical CPU implementation.
+    const float grad = gradient[i];
+    const float first_scaled = first_moment[i] * beta1;
+    const float gradient_first_scaled = grad * one_minus_beta1;
+    const float next_first = first_scaled + gradient_first_scaled;
+    const float gradient_squared = grad * grad;
+    const float second_scaled = second_moment[i] * beta2;
+    const float gradient_second_scaled = gradient_squared * one_minus_beta2;
+    const float next_second = second_scaled + gradient_second_scaled;
+    const float first_hat = next_first / bias_correction1;
+    const float second_hat = next_second / bias_correction2;
+    const float denominator = sqrtf(second_hat) + epsilon;
+    const float normalized = first_hat / denominator;
+    const float update = normalized * learning_rate;
+
+    first_moment[i] = next_first;
+    second_moment[i] = next_second;
+    parameter[i] = parameter[i] - update;
 }
 
 __global__ void kernel_div(float* a, const float* b, size_t n) {
@@ -1252,6 +1321,42 @@ extern "C" void gpu_scalar_div_device(float* d_a, float value, size_t n) {
     launch_1d(n, blocks, threads);
     kernel_scalar_div<<<blocks, threads>>>(d_a, value, n);
     CUDA_KERNEL_CHECK("scalar div");
+}
+
+extern "C" void gpu_adam_update_device(
+    float* d_parameter,
+    const float* d_gradient,
+    float* d_first_moment,
+    float* d_second_moment,
+    float learning_rate,
+    float beta1,
+    float beta2,
+    float epsilon,
+    float one_minus_beta1,
+    float one_minus_beta2,
+    float bias_correction1,
+    float bias_correction2,
+    size_t n
+) {
+    int threads = 0, blocks = 0;
+    if (n == 0) return;
+    launch_1d(n, blocks, threads);
+    kernel_adam_update<<<blocks, threads>>>(
+        d_parameter,
+        d_gradient,
+        d_first_moment,
+        d_second_moment,
+        learning_rate,
+        beta1,
+        beta2,
+        epsilon,
+        one_minus_beta1,
+        one_minus_beta2,
+        bias_correction1,
+        bias_correction2,
+        n
+    );
+    CUDA_KERNEL_CHECK("adamUpdate");
 }
 
 extern "C" void gpu_pow_device(float* d_a, float exponent, size_t n) {

@@ -36,6 +36,21 @@ extern "C" {
     void gpu_scalar_sub_device(float* d_a, float value, size_t n);
     void gpu_scalar_mul_device(float* d_a, float value, size_t n);
     void gpu_scalar_div_device(float* d_a, float value, size_t n);
+    void gpu_adam_update_device(
+        float* d_parameter,
+        const float* d_gradient,
+        float* d_first_moment,
+        float* d_second_moment,
+        float learning_rate,
+        float beta1,
+        float beta2,
+        float epsilon,
+        float one_minus_beta1,
+        float one_minus_beta2,
+        float bias_correction1,
+        float bias_correction2,
+        size_t n
+    );
     void gpu_pow_device(float* d_a, float exponent, size_t n);
     void gpu_log_device(float* d_a, size_t n);
     void gpu_sqrt_device(float* d_a, size_t n);

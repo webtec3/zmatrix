@@ -2119,6 +2119,62 @@ PHP_METHOD(ZTensor, scalarDivide)
     }
 }
 
+PHP_METHOD(ZTensor, adamUpdate)
+{
+    zval *gradient_zv;
+    zval *first_moment_zv;
+    zval *second_moment_zv;
+    double learning_rate;
+    double beta1;
+    double beta2;
+    double epsilon;
+    double bias_correction1;
+    double bias_correction2;
+
+    ZEND_PARSE_PARAMETERS_START(9, 9)
+        Z_PARAM_OBJECT_OF_CLASS(gradient_zv, zmatrix_ce_ZTensor)
+        Z_PARAM_OBJECT_OF_CLASS(first_moment_zv, zmatrix_ce_ZTensor)
+        Z_PARAM_OBJECT_OF_CLASS(second_moment_zv, zmatrix_ce_ZTensor)
+        Z_PARAM_DOUBLE(learning_rate)
+        Z_PARAM_DOUBLE(beta1)
+        Z_PARAM_DOUBLE(beta2)
+        Z_PARAM_DOUBLE(epsilon)
+        Z_PARAM_DOUBLE(bias_correction1)
+        Z_PARAM_DOUBLE(bias_correction2)
+    ZEND_PARSE_PARAMETERS_END();
+
+    zmatrix_ztensor_object *parameter_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
+    zmatrix_ztensor_object *gradient_obj = Z_MATRIX_ZTENSOR_P(gradient_zv);
+    zmatrix_ztensor_object *first_moment_obj = Z_MATRIX_ZTENSOR_P(first_moment_zv);
+    zmatrix_ztensor_object *second_moment_obj = Z_MATRIX_ZTENSOR_P(second_moment_zv);
+
+    if (!parameter_obj->tensor || !gradient_obj->tensor ||
+        !first_moment_obj->tensor || !second_moment_obj->tensor) {
+        zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0);
+        RETURN_THROWS();
+    }
+
+    try {
+        parameter_obj->tensor->adam_update(
+            *gradient_obj->tensor,
+            *first_moment_obj->tensor,
+            *second_moment_obj->tensor,
+            static_cast<float>(learning_rate),
+            static_cast<float>(beta1),
+            static_cast<float>(beta2),
+            static_cast<float>(epsilon),
+            static_cast<float>(1.0 - beta1),
+            static_cast<float>(1.0 - beta2),
+            static_cast<float>(bias_correction1),
+            static_cast<float>(bias_correction2)
+        );
+        ZVAL_ZVAL(return_value, ZEND_THIS, 1, 0);
+    } catch (const std::exception& e) {
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+        RETURN_THROWS();
+    }
+}
+
 PHP_METHOD(ZTensor, copy)
 {
     ZEND_PARSE_PARAMETERS_NONE();

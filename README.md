@@ -1,3 +1,11 @@
+# ZMatrix 0.5.0-float
+
+> **Release Candidate:** desenvolvimento e validação técnica concluídos. A tag `v0.5.0` e a release pública ainda não existem.
+
+A versão 0.5.0 corrige e valida o backend CUDA, preservando CPU como padrão e GPU somente após chamada explícita a `toGpu()`. Consulte o [CHANGELOG](CHANGELOG.md), as [Release Notes](docs/RELEASE_v0.5.0.md) e o [mapa experimental CPU × GPU](benchmarks/v050/results/PERFORMANCE_DECISION_MAP.md).
+
+Os números de desempenho publicados foram obtidos em uma RTX 3060 12 GiB sob WSL2 e são referências experimentais, não garantias para outros hardwares.
+
 ## 🔬 Autograd (Diferenciação Automática) — Infraestrutura Experimental
 
 ZMatrix agora suporta a infraestrutura para diferenciação automática (autograd), inspirada em PyTorch/Micrograd. A implementação inclui:
@@ -1723,3 +1731,31 @@ print_r($result->toArray());
 - O(1) time complexity
 - Works on both CPU and GPU tensors
 - Useful for batching, windowing, and tensor manipulation
+## Native fused Adam update
+
+`ZTensor::adamUpdate()` performs one classic Adam update in a fused CPU or CUDA backend without creating the intermediate tensors required by a PHP operation chain.
+
+~~~php
+$parameter->adamUpdate(
+    $gradient,
+    $firstMoment,
+    $secondMoment,
+    $learningRate,
+    $beta1,
+    $beta2,
+    $epsilon,
+    $biasCorrection1,
+    $biasCorrection2,
+);
+~~~
+
+Mutation contract:
+
+- the receiver (`parameter`) is modified in-place;
+- `firstMoment` and `secondMoment` are modified in-place;
+- `gradient` is read-only;
+- all tensors need identical shapes and independent native buffers;
+- `learningRate` may be zero, but cannot be negative or non-finite;
+- bias corrections are precomputed `1 - beta1^t` and `1 - beta2^t`.
+
+This operation implements classic Adam, not AdamW. CUDA is selected only when parameter, gradient, first moment and second moment are already device-resident, contiguous and have no view offset. The CUDA path performs one kernel launch, keeps all four tensors resident and never initiates an implicit H2D upload. Mixed residency and unsupported views use the CPU fallback.
