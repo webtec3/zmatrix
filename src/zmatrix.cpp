@@ -937,7 +937,7 @@ struct ZTensor {
                 throw std::runtime_error(ZMATRIX_ERR_ALLOC_FAILED);
             }
         }
-        cuda_check(cudaMemcpy(const_cast<float*>(data.data()), d_data, n * sizeof(float), cudaMemcpyDeviceToHost), "cudaMemcpy D2H");
+        cuda_check(cudaMemcpy(const_cast<float*>(data.raw_data()), d_data, n * sizeof(float), cudaMemcpyDeviceToHost), "cudaMemcpy D2H");
         mark_synchronized_unlocked();
         if (zmatrix_gpu_debug_enabled()) std::fprintf(stderr, "[zmatrix][gpu] D2H elements=%zu host_valid=1 device_valid=1\n", n);
     }
@@ -4882,6 +4882,144 @@ ZTensor column(size_t col_idx) const {
         return result;
     }
 
+    // --- GlobalAveragePool2D: reduz (N,C,H,W) para (N,C), calculando a
+        // média de cada plano espacial H*W por canal. Elimina a necessidade
+        // de uma camada Dense com C*H*W entradas depois de flatten() — a
+        // camada final passa a depender só de C. Saída já em (N,C), pronta
+        // para alimentar uma Dense diretamente, sem flatten() extra.
+        //
+        // Acumulador em double, mesmo padrão de sum()/mean() já existentes
+        // neste arquivo, para evitar deriva de precisão em planos grandes.
+        ZTensor global_average_pool2d() const {
+            if (shape.size() != 4) {
+                throw std::runtime_error("globalAveragePool2d(): requer tensor 4D (N,C,H,W)");
+            }
+            if (this->requires_grad) {
+                throw std::logic_error(
+                    "globalAveragePool2d(): requires_grad=true não é suportado nesta rodada (sem autograd). "
+                    "Use globalAveragePool2dBackward() para o gradiente manual."
+                );
+            }
+
+            const size_t N = shape[0], C = shape[1], H = shape[2], W = shape[3];
+            if (H == 0 || W == 0) {
+                throw std::invalid_argument("globalAveragePool2d(): H e W devem ser >= 1 (plano espacial vazio)");
+            }
+
+            auto checked_mul = [](size_t a, size_t b, const char* what) -> size_t {
+                if (a != 0 && b > std::numeric_limits<size_t>::max() / a) {
+                    throw std::overflow_error(std::string("globalAveragePool2d(): overflow calculando ") + what);
+                }
+                return a * b;
+            };
+            const size_t HW = checked_mul(H, W, "H*W");
+            const size_t NC = checked_mul(N, C, "N*C");
+
+    #ifdef HAVE_CUDA
+            ensure_host();
+    #endif
+
+            ZTensor result({N, C});
+            if (NC == 0) return result;
+
+            const float* in_data = data.data();
+            float* out_data = result.data.data();
+
+            // Cada saída (n,c) é escrita por exatamente uma thread — sem
+            // overlap, sem necessidade de atomic (mesmo padrão de col2im()
+            // por plano exclusivo).
+    #if HAS_OPENMP
+            if (NC * HW > ZMATRIX_PARALLEL_THRESHOLD) {
+                #pragma omp parallel for schedule(static)
+                for (size_t nc = 0; nc < NC; ++nc) {
+                    const float* plane = in_data + nc * HW;
+                    double acc = 0.0;
+                    for (size_t i = 0; i < HW; ++i) acc += static_cast<double>(plane[i]);
+                    out_data[nc] = static_cast<float>(acc / static_cast<double>(HW));
+                }
+            } else
+    #endif
+            {
+                for (size_t nc = 0; nc < NC; ++nc) {
+                    const float* plane = in_data + nc * HW;
+                    double acc = 0.0;
+                    for (size_t i = 0; i < HW; ++i) acc += static_cast<double>(plane[i]);
+                    out_data[nc] = static_cast<float>(acc / static_cast<double>(HW));
+                }
+            }
+            return result;
+        }
+
+        // --- GlobalAveragePool2D backward: distribui gradOutput (N,C)
+        // uniformemente pelos H*W elementos de cada plano (cada elemento
+        // recebe gradOutput[n,c] / (H*W)) — derivada exata de uma média.
+        // Estático: não depende de nenhum estado de instância, só do
+        // gradiente de saída e do shape original (mesmo padrão de
+        // maxPool2dBackward()).
+        static ZTensor global_average_pool2d_backward(const ZTensor& grad_output,
+                                                       const std::vector<size_t>& input_shape) {
+            if (input_shape.size() != 4) {
+                throw std::invalid_argument("globalAveragePool2dBackward(): inputShape deve ser 4D (N,C,H,W)");
+            }
+            if (grad_output.shape.size() != 2) {
+                throw std::invalid_argument("globalAveragePool2dBackward(): gradOutput deve ser 2D (N,C)");
+            }
+            if (grad_output.requires_grad) {
+                throw std::logic_error("globalAveragePool2dBackward(): não aceita gradOutput com requires_grad=true.");
+            }
+
+            const size_t N = input_shape[0], C = input_shape[1], H = input_shape[2], W = input_shape[3];
+            if (grad_output.shape[0] != N || grad_output.shape[1] != C) {
+                throw std::invalid_argument(
+                    "globalAveragePool2dBackward(): gradOutput (" + std::to_string(grad_output.shape[0]) + "x" +
+                    std::to_string(grad_output.shape[1]) + ") incompatível com inputShape (esperado " +
+                    std::to_string(N) + "x" + std::to_string(C) + ")"
+                );
+            }
+            if (H == 0 || W == 0) {
+                throw std::invalid_argument("globalAveragePool2dBackward(): H e W devem ser >= 1");
+            }
+
+            auto checked_mul = [](size_t a, size_t b, const char* what) -> size_t {
+                if (a != 0 && b > std::numeric_limits<size_t>::max() / a) {
+                    throw std::overflow_error(std::string("globalAveragePool2dBackward(): overflow calculando ") + what);
+                }
+                return a * b;
+            };
+            const size_t HW = checked_mul(H, W, "H*W");
+            const size_t NC = checked_mul(N, C, "N*C");
+
+    #ifdef HAVE_CUDA
+            grad_output.ensure_host();
+    #endif
+
+            ZTensor grad_input(input_shape);
+            if (NC == 0) return grad_input;
+
+            const float* go = grad_output.data.data();
+            float* gi = grad_input.data.data();
+            const float inv_hw = 1.0f / static_cast<float>(HW);
+
+    #if HAS_OPENMP
+            if (NC * HW > ZMATRIX_PARALLEL_THRESHOLD) {
+                #pragma omp parallel for schedule(static)
+                for (size_t nc = 0; nc < NC; ++nc) {
+                    const float value = go[nc] * inv_hw;
+                    float* plane = gi + nc * HW;
+                    for (size_t i = 0; i < HW; ++i) plane[i] = value;
+                }
+            } else
+    #endif
+            {
+                for (size_t nc = 0; nc < NC; ++nc) {
+                    const float value = go[nc] * inv_hw;
+                    float* plane = gi + nc * HW;
+                    for (size_t i = 0; i < HW; ++i) plane[i] = value;
+                }
+            }
+            return grad_input;
+        }
+
 };
 SharedTensorBuffer::SharedTensorBuffer(ZTensor* owner)
     : owner_(owner), storage_(std::make_shared<Storage>()) {}
@@ -5003,12 +5141,12 @@ zend_object *zmatrix_ztensor_create(zend_class_entry *class_type)
 void zmatrix_ztensor_free(zend_object *object)
 {
     zmatrix_ztensor_object *intern = zmatrix_ztensor_from_obj(object);
-   if (intern->tensor) {
-       if (intern->tensor->owns_data) {
-           delete intern->tensor;
-       }
-       intern->tensor = nullptr;
-   }
+    if (intern->tensor) {
+        // SharedTensorBuffer owns storage through shared_ptr. Every PHP wrapper
+        // owns its ZTensor metadata object, including views, and must destroy it.
+        delete intern->tensor;
+        intern->tensor = nullptr;
+    }
     zend_object_std_dtor(&intern->std);
 }
 
@@ -5173,36 +5311,6 @@ static void zmatrix_return_tensor_obj(
 
 // --- Fim Funções Auxiliares ---
 
-static void zmatrix_return_tensor_obj(
-    ZTensor&& result_tensor,
-    zval *return_value,
-    zend_class_entry *tensor_ce
-) {
-    try {
-        object_init_ex(return_value, tensor_ce);
-
-        zmatrix_ztensor_object *intern = Z_MATRIX_ZTENSOR_P(return_value);
-        if (UNEXPECTED(!intern)) {
-            zend_throw_exception(zend_ce_exception, "Failed to initialize ZTensor object", 0);
-            ZVAL_NULL(return_value);
-            return;
-        }
-
-        intern->tensor = new ZTensor(std::move(result_tensor));
-        if (intern->tensor->grad_fn) {
-            intern->tensor->grad_fn->result_ptr_raw = intern->tensor;
-        }
-    }
-    catch (const std::bad_alloc& e) {
-        zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_ALLOC_FAILED, 0);
-        ZVAL_NULL(return_value);
-    }
-    catch (const std::exception& e) {
-        zend_throw_exception(zend_ce_exception, e.what(), 0);
-        ZVAL_NULL(return_value);
-    }
-}
-
 #include "zmatrix_methods.h"
 // ==========================================================================
 // Tabela de Métodos da Classe ZMatrix\ZTensor
@@ -5219,7 +5327,7 @@ static const zend_function_entry zmatrix_ztensor_methods[] = {
     PHP_ME(ZTensor, transpose,        arginfo_ztensor_no_args,     ZEND_ACC_PUBLIC) // TODO: Add axes arg
     PHP_ME(ZTensor, abs,              arginfo_ztensor_no_args,     ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, sumtotal,         arginfo_ztensor_no_args,     ZEND_ACC_PUBLIC) // TODO: Add axis arg
-    PHP_ME(ZTensor, mean,             arginfo_ztensor_no_args,     ZEND_ACC_PUBLIC) // TODO: Add axis arg
+    PHP_ME(ZTensor, mean,             arginfo_ztensor_mean_flex,   ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, min,              arginfo_ztensor_no_args,     ZEND_ACC_PUBLIC) // TODO: Add axis arg
     PHP_ME(ZTensor, max,              arginfo_ztensor_no_args,     ZEND_ACC_PUBLIC) // TODO: Add axis arg
     PHP_ME(ZTensor, std,              arginfo_ztensor_no_args,     ZEND_ACC_PUBLIC) // TODO: Add axis arg
@@ -5234,7 +5342,16 @@ static const zend_function_entry zmatrix_ztensor_methods[] = {
     PHP_ME(ZTensor, full,             arginfo_ztensor_static_shape_value, ZEND_ACC_PUBLIC | ZEND_ACC_STATIC) // Novo método 'full'
     PHP_ME(ZTensor, identity,         arginfo_ztensor_static_identity,    ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)
     PHP_ME(ZTensor, random,           arginfo_ztensor_static_random,      ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)
+    PHP_ME(ZTensor, randomUniform,    arginfo_ztensor_random_uniform,     ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)
     PHP_ME(ZTensor, matmul,           arginfo_ztensor_matmul,             ZEND_ACC_PUBLIC)
+    PHP_ME(ZTensor, im2col,           arginfo_ztensor_im2col,             ZEND_ACC_PUBLIC)
+    PHP_ME(ZTensor, col2im,           arginfo_ztensor_col2im,             ZEND_ACC_PUBLIC)
+    PHP_ME(ZTensor, conv2d,           arginfo_ztensor_conv2d,             ZEND_ACC_PUBLIC)
+    PHP_ME(ZTensor, conv2dBackward,   arginfo_ztensor_conv2d_backward,    ZEND_ACC_PUBLIC)
+    PHP_ME(ZTensor, maxPool2d,        arginfo_ztensor_max_pool2d,         ZEND_ACC_PUBLIC)
+    PHP_ME(ZTensor, maxPool2dBackward, arginfo_ztensor_max_pool2d_backward, ZEND_ACC_PUBLIC)
+    PHP_ME(ZTensor, globalAveragePool2d,         arginfo_ztensor_global_avg_pool2d,          ZEND_ACC_PUBLIC)
+    PHP_ME(ZTensor, globalAveragePool2dBackward, arginfo_ztensor_global_avg_pool2d_backward, ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)
     PHP_ME(ZTensor, divide,           arginfo_ztensor_divide,             ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, pow,              arginfo_ztensor_pow,                ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, sigmoid,          arginfo_ztensor_no_args,     ZEND_ACC_PUBLIC)
@@ -5255,6 +5372,9 @@ static const zend_function_entry zmatrix_ztensor_methods[] = {
     PHP_ME(ZTensor, log,              arginfo_ztensor_log,                ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, sqrt,             arginfo_ztensor_sqrt,               ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, reshape,          arginfo_ztensor_reshape,            ZEND_ACC_PUBLIC)
+    PHP_ME(ZTensor, permute,          arginfo_ztensor_permute,            ZEND_ACC_PUBLIC)
+    PHP_ME(ZTensor, flatten,          arginfo_ztensor_flatten,            ZEND_ACC_PUBLIC)
+    PHP_ME(ZTensor, broadcastTo,      arginfo_ztensor_broadcast_to,       ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, slice,            arginfo_ztensor_slice,              ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, column,           arginfo_ztensor_column,             ZEND_ACC_PUBLIC)
     PHP_ME(ZTensor, row,              arginfo_ztensor_row,                ZEND_ACC_PUBLIC)

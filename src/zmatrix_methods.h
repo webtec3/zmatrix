@@ -1,6 +1,173 @@
 #ifndef ZMATRIX_METHODS_H
 #define ZMATRIX_METHODS_H
 
+static void zmatrix_return_tensor_obj_move(
+    ZTensor&& result_tensor,
+    zval *return_value,
+    zend_class_entry *tensor_ce
+) {
+    try {
+        object_init_ex(return_value, tensor_ce);
+        zmatrix_ztensor_object *intern = Z_MATRIX_ZTENSOR_P(return_value);
+        if (UNEXPECTED(!intern)) {
+            zend_throw_exception(zend_ce_exception, "Failed to initialize ZTensor object", 0);
+            ZVAL_NULL(return_value);
+            return;
+        }
+        intern->tensor = new ZTensor(std::move(result_tensor));
+        if (intern->tensor->grad_fn) intern->tensor->grad_fn->result_ptr_raw = intern->tensor;
+    } catch (const std::bad_alloc&) {
+        if (Z_TYPE_P(return_value) == IS_OBJECT) zval_ptr_dtor(return_value);
+        zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_ALLOC_FAILED, 0);
+        ZVAL_NULL(return_value);
+    } catch (const std::exception& e) {
+        if (Z_TYPE_P(return_value) == IS_OBJECT) zval_ptr_dtor(return_value);
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+        ZVAL_NULL(return_value);
+    }
+}
+
+static std::vector<size_t> zmatrix_cnn_parse_shape(zval *shape_zv, const char *method) {
+    std::vector<size_t> shape;
+    shape.reserve(zend_hash_num_elements(Z_ARRVAL_P(shape_zv)));
+    zval *dimension_zv;
+    ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(shape_zv), dimension_zv) {
+        if (Z_TYPE_P(dimension_zv) != IS_LONG || Z_LVAL_P(dimension_zv) < 0) {
+            throw std::invalid_argument(std::string(method) + ": shape dimensions must be non-negative integers");
+        }
+        shape.push_back(static_cast<size_t>(Z_LVAL_P(dimension_zv)));
+    } ZEND_HASH_FOREACH_END();
+    if (shape.empty()) {
+        throw std::invalid_argument(std::string(method) + ": shape must contain at least one dimension");
+    }
+    ZTensor::checked_element_count(shape);
+    return shape;
+}
+static void zmatrix_cnn_ensure_host(const ZTensor& tensor) {
+#ifdef HAVE_CUDA
+    tensor.ensure_host();
+#else
+    (void)tensor;
+#endif
+}
+
+struct ZMatrixNdReduction {
+    std::vector<bool> reduced;
+    std::vector<size_t> output_shape;
+    std::vector<size_t> source_to_output_stride;
+    size_t output_size = 0;
+};
+
+static std::vector<size_t> zmatrix_cnn_parse_axes(zval *axis_zv, size_t rank) {
+    if (rank == 0) throw std::invalid_argument("reduction requires a tensor with at least one dimension");
+    std::vector<zend_long> raw;
+    if (!axis_zv || Z_TYPE_P(axis_zv) == IS_NULL) {
+        raw.reserve(rank);
+        for (size_t axis = 0; axis < rank; ++axis) raw.push_back(static_cast<zend_long>(axis));
+    } else if (Z_TYPE_P(axis_zv) == IS_LONG) {
+        raw.push_back(Z_LVAL_P(axis_zv));
+    } else if (Z_TYPE_P(axis_zv) == IS_ARRAY) {
+        zval *entry;
+        ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(axis_zv), entry) {
+            if (Z_TYPE_P(entry) != IS_LONG) throw std::invalid_argument("reduction axes must be integers");
+            raw.push_back(Z_LVAL_P(entry));
+        } ZEND_HASH_FOREACH_END();
+        if (raw.empty()) throw std::invalid_argument("reduction axes cannot be empty");
+    } else {
+        throw std::invalid_argument("axis must be int, array or null");
+    }
+    std::vector<size_t> axes;
+    std::vector<bool> seen(rank, false);
+    for (zend_long axis : raw) {
+        if (axis < 0) axis += static_cast<zend_long>(rank);
+        if (axis < 0 || static_cast<size_t>(axis) >= rank || seen[static_cast<size_t>(axis)]) {
+            throw std::invalid_argument("reduction axes must be unique and in bounds");
+        }
+        seen[static_cast<size_t>(axis)] = true;
+        axes.push_back(static_cast<size_t>(axis));
+    }
+    return axes;
+}
+
+static ZMatrixNdReduction zmatrix_cnn_reduction_spec(const ZTensor& source, zval *axis_zv, bool keep_dims) {
+    ZMatrixNdReduction spec;
+    const size_t rank = source.shape.size();
+    spec.reduced.assign(rank, false);
+    for (size_t axis : zmatrix_cnn_parse_axes(axis_zv, rank)) spec.reduced[axis] = true;
+    for (size_t axis = 0; axis < rank; ++axis) {
+        if (spec.reduced[axis]) {
+            if (keep_dims) spec.output_shape.push_back(1);
+        } else {
+            spec.output_shape.push_back(source.shape[axis]);
+        }
+    }
+    if (spec.output_shape.empty()) spec.output_shape.push_back(1);
+    spec.output_size = ZTensor::checked_element_count(spec.output_shape);
+    const std::vector<size_t> output_strides = ZTensor::contiguous_strides(spec.output_shape);
+    spec.source_to_output_stride.assign(rank, 0);
+    size_t output_axis = 0;
+    for (size_t axis = 0; axis < rank; ++axis) {
+        if (spec.reduced[axis]) {
+            if (keep_dims) ++output_axis;
+        } else {
+            spec.source_to_output_stride[axis] = output_strides[output_axis++];
+        }
+    }
+    return spec;
+}
+
+static size_t zmatrix_cnn_reduction_output_index(size_t linear, const ZTensor& source, const ZMatrixNdReduction& spec) {
+    size_t output = 0;
+    for (size_t axis = source.shape.size(); axis-- > 0;) {
+        const size_t dimension = source.shape[axis];
+        const size_t coordinate = dimension == 0 ? 0 : linear % dimension;
+        if (dimension != 0) linear /= dimension;
+        output += coordinate * spec.source_to_output_stride[axis];
+    }
+    return output;
+}
+
+enum class ZMatrixReductionKind { Sum, Mean, Variance };
+
+static ZTensor zmatrix_cnn_reduce_nd(const ZTensor& source, zval *axis_zv, bool keep_dims, ZMatrixReductionKind kind, zend_long correction) {
+    if (correction < 0) throw std::invalid_argument("correction must be non-negative");
+    zmatrix_cnn_ensure_host(source);
+    const ZMatrixNdReduction spec = zmatrix_cnn_reduction_spec(source, axis_zv, keep_dims);
+    ZTensor result(spec.output_shape);
+    float *output = result.contiguous_data();
+    const float *input = source.contiguous_data();
+    std::vector<size_t> counts(spec.output_size, 0);
+    if (kind == ZMatrixReductionKind::Variance) {
+        std::vector<double> means(spec.output_size, 0.0), m2(spec.output_size, 0.0);
+        for (size_t linear = 0; linear < source.size(); ++linear) {
+            const size_t out = zmatrix_cnn_reduction_output_index(linear, source, spec);
+            const double value = input[linear];
+            const size_t count = ++counts[out];
+            const double delta = value - means[out];
+            means[out] += delta / static_cast<double>(count);
+            m2[out] += delta * (value - means[out]);
+        }
+        for (size_t i = 0; i < spec.output_size; ++i) {
+            output[i] = counts[i] <= static_cast<size_t>(correction)
+                ? std::numeric_limits<float>::quiet_NaN()
+                : static_cast<float>(m2[i] / static_cast<double>(counts[i] - static_cast<size_t>(correction)));
+        }
+        return result;
+    }
+    std::vector<double> sums(spec.output_size, 0.0);
+    for (size_t linear = 0; linear < source.size(); ++linear) {
+        const size_t out = zmatrix_cnn_reduction_output_index(linear, source, spec);
+        sums[out] += input[linear];
+        ++counts[out];
+    }
+    for (size_t i = 0; i < spec.output_size; ++i) {
+        output[i] = kind == ZMatrixReductionKind::Mean
+            ? (counts[i] == 0 ? std::numeric_limits<float>::quiet_NaN() : static_cast<float>(sums[i] / counts[i]))
+            : static_cast<float>(sums[i]);
+    }
+    return result;
+}
+
 /* =========================================================================
  * ZMatrix PHP Method Declarations
  * ========================================================================= */
@@ -86,8 +253,40 @@ PHP_METHOD(ZTensor, arr)
     }
 }
 
-PHP_METHOD(ZTensor, add)
+PHP_METHOD(ZTensor, randomUniform)
 {
+    zval *shape_zv;
+    double minimum, maximum;
+    zend_long seed;
+    ZEND_PARSE_PARAMETERS_START(4, 4)
+        Z_PARAM_ARRAY(shape_zv)
+        Z_PARAM_DOUBLE(minimum)
+        Z_PARAM_DOUBLE(maximum)
+        Z_PARAM_LONG(seed)
+    ZEND_PARSE_PARAMETERS_END();
+
+    try {
+        if (!std::isfinite(minimum) || !std::isfinite(maximum) || minimum > maximum) {
+            throw std::invalid_argument("randomUniform(): bounds must be finite and minimum <= maximum");
+        }
+        const std::vector<size_t> shape = zmatrix_cnn_parse_shape(shape_zv, "randomUniform()");
+        ZTensor result(shape);
+        std::mt19937 generator(static_cast<uint32_t>(seed));
+        const float low = static_cast<float>(minimum);
+        const float range = static_cast<float>(maximum - minimum);
+        float *output = result.contiguous_data();
+        for (size_t i = 0; i < result.size(); ++i) {
+            const float unit = static_cast<float>(generator() >> 8) * (1.0f / 16777216.0f);
+            output[i] = low + range * unit;
+        }
+        zmatrix_return_tensor_obj_move(std::move(result), return_value, zmatrix_ce_ZTensor);
+    } catch (const std::exception& e) {
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+        RETURN_THROWS();
+    }
+}
+
+PHP_METHOD(ZTensor, add){
     zval *other_zv;
     ZEND_PARSE_PARAMETERS_START(1, 1)
         Z_PARAM_ZVAL(other_zv)
@@ -402,7 +601,7 @@ PHP_METHOD(ZTensor, transpose)
     ZEND_PARSE_PARAMETERS_NONE();
     zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
     if (!self_obj->tensor) { zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0); RETURN_THROWS(); }
-    try { ZTensor result = self_obj->tensor->transpose(); zmatrix_return_tensor_obj(std::move(result), return_value, zmatrix_ce_ZTensor); }
+    try { ZTensor result = self_obj->tensor->transpose(); zmatrix_return_tensor_obj_move(std::move(result), return_value, zmatrix_ce_ZTensor); }
     catch (const std::exception& e) { zend_throw_exception(zend_ce_exception, e.what(), 0); RETURN_THROWS(); }
 }
 
@@ -511,13 +710,16 @@ PHP_METHOD(ZTensor, sumtotal)
 
 PHP_METHOD(ZTensor, mean)
 {
-    ZEND_PARSE_PARAMETERS_NONE();
+    zval *axis_zv = nullptr; zend_bool keep_dims = 0;
+    ZEND_PARSE_PARAMETERS_START(0, 2) Z_PARAM_OPTIONAL Z_PARAM_ZVAL(axis_zv) Z_PARAM_BOOL(keep_dims) ZEND_PARSE_PARAMETERS_END();
     zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
     if (!self_obj->tensor) { zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0); RETURN_THROWS(); }
-    try { RETURN_DOUBLE(self_obj->tensor->mean()); }
-    catch (const std::exception& e) { zend_throw_exception(zend_ce_exception, e.what(), 0); RETURN_THROWS(); }
+    try {
+        if (ZEND_NUM_ARGS() == 0) RETURN_DOUBLE(self_obj->tensor->mean());
+        ZTensor result = zmatrix_cnn_reduce_nd(*self_obj->tensor, axis_zv, keep_dims != 0, ZMatrixReductionKind::Mean, 0);
+        zmatrix_return_tensor_obj_move(std::move(result), return_value, zmatrix_ce_ZTensor);
+    } catch (const std::exception& e) { zend_throw_exception(zend_ce_exception, e.what(), 0); RETURN_THROWS(); }
 }
-
 PHP_METHOD(ZTensor, min)
 {
     ZEND_PARSE_PARAMETERS_NONE();
@@ -780,8 +982,386 @@ PHP_METHOD(ZTensor, matmul)
     }
 }
 
-PHP_METHOD(ZTensor, divide)
+static void zmatrix_cnn_spatial_shape(
+    const std::vector<size_t>& input_shape,
+    zend_long kernel_h,
+    zend_long kernel_w,
+    zend_long stride_h,
+    zend_long stride_w,
+    zend_long padding_h,
+    zend_long padding_w,
+    size_t& output_h,
+    size_t& output_w
+) {
+    if (input_shape.size() != 4) throw std::invalid_argument("expected a 4D NCHW tensor");
+    if (kernel_h <= 0 || kernel_w <= 0 || stride_h <= 0 || stride_w <= 0 || padding_h < 0 || padding_w < 0) {
+        throw std::invalid_argument("kernel and stride must be positive; padding must be non-negative");
+    }
+    const size_t kh = static_cast<size_t>(kernel_h), kw = static_cast<size_t>(kernel_w);
+    const size_t ph = static_cast<size_t>(padding_h), pw = static_cast<size_t>(padding_w);
+    if (ph > (std::numeric_limits<size_t>::max() - input_shape[2]) / 2 ||
+        pw > (std::numeric_limits<size_t>::max() - input_shape[3]) / 2) {
+        throw std::overflow_error(ZMATRIX_ERR_OVERFLOW);
+    }
+    const size_t padded_h = input_shape[2] + 2 * ph;
+    const size_t padded_w = input_shape[3] + 2 * pw;
+    if (kh > padded_h || kw > padded_w) throw std::invalid_argument("kernel exceeds padded input");
+    output_h = (padded_h - kh) / static_cast<size_t>(stride_h) + 1;
+    output_w = (padded_w - kw) / static_cast<size_t>(stride_w) + 1;
+}
+
+PHP_METHOD(ZTensor, im2col)
 {
+    zend_long kh, kw, sh = 1, sw = 1, ph = 0, pw = 0;
+    ZEND_PARSE_PARAMETERS_START(2, 6)
+        Z_PARAM_LONG(kh) Z_PARAM_LONG(kw)
+        Z_PARAM_OPTIONAL Z_PARAM_LONG(sh) Z_PARAM_LONG(sw) Z_PARAM_LONG(ph) Z_PARAM_LONG(pw)
+    ZEND_PARSE_PARAMETERS_END();
+    zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
+    if (!self_obj->tensor) { zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0); RETURN_THROWS(); }
+    try {
+        const ZTensor& input = *self_obj->tensor;
+        size_t oh, ow;
+        zmatrix_cnn_spatial_shape(input.shape, kh, kw, sh, sw, ph, pw, oh, ow);
+        const size_t n = input.shape[0], c = input.shape[1], h = input.shape[2], w = input.shape[3];
+        const size_t kernel_h = static_cast<size_t>(kh), kernel_w = static_cast<size_t>(kw);
+        const size_t rows = c * kernel_h * kernel_w, columns = oh * ow;
+        zmatrix_cnn_ensure_host(input);
+        const float *x = input.contiguous_data();
+        ZTensor result({n, rows, columns});
+        float *out = result.contiguous_data();
+        const size_t work = result.size();
+#pragma omp parallel for if(work >= ZMATRIX_PARALLEL_THRESHOLD)
+        for (ptrdiff_t linear = 0; linear < static_cast<ptrdiff_t>(work); ++linear) {
+            size_t index = static_cast<size_t>(linear);
+            const size_t position = index % columns; index /= columns;
+            const size_t kernel_index = index % rows;
+            const size_t batch = index / rows;
+            const size_t out_y = position / ow, out_x = position % ow;
+            size_t k = kernel_index;
+            const size_t kernel_x = k % kernel_w; k /= kernel_w;
+            const size_t kernel_y = k % kernel_h; const size_t channel = k / kernel_h;
+            const ptrdiff_t in_y = static_cast<ptrdiff_t>(out_y * static_cast<size_t>(sh) + kernel_y) - ph;
+            const ptrdiff_t in_x = static_cast<ptrdiff_t>(out_x * static_cast<size_t>(sw) + kernel_x) - pw;
+            out[static_cast<size_t>(linear)] = (in_y < 0 || in_x < 0 || in_y >= static_cast<ptrdiff_t>(h) || in_x >= static_cast<ptrdiff_t>(w))
+                ? 0.0f
+                : x[((batch * c + channel) * h + static_cast<size_t>(in_y)) * w + static_cast<size_t>(in_x)];
+        }
+        zmatrix_return_tensor_obj_move(std::move(result), return_value, zmatrix_ce_ZTensor);
+    } catch (const std::exception& e) { zend_throw_exception(zend_ce_exception, e.what(), 0); RETURN_THROWS(); }
+}
+
+PHP_METHOD(ZTensor, col2im)
+{
+    zval *shape_zv;
+    zend_long kh, kw, sh = 1, sw = 1, ph = 0, pw = 0;
+    ZEND_PARSE_PARAMETERS_START(3, 7)
+        Z_PARAM_ARRAY(shape_zv) Z_PARAM_LONG(kh) Z_PARAM_LONG(kw)
+        Z_PARAM_OPTIONAL Z_PARAM_LONG(sh) Z_PARAM_LONG(sw) Z_PARAM_LONG(ph) Z_PARAM_LONG(pw)
+    ZEND_PARSE_PARAMETERS_END();
+    zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
+    if (!self_obj->tensor) { zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0); RETURN_THROWS(); }
+    try {
+        const std::vector<size_t> input_shape = zmatrix_cnn_parse_shape(shape_zv, "col2im()");
+        size_t oh, ow;
+        zmatrix_cnn_spatial_shape(input_shape, kh, kw, sh, sw, ph, pw, oh, ow);
+        const size_t n = input_shape[0], c = input_shape[1], h = input_shape[2], w = input_shape[3];
+        const size_t kernel_h = static_cast<size_t>(kh), kernel_w = static_cast<size_t>(kw);
+        const size_t rows = c * kernel_h * kernel_w, columns = oh * ow;
+        const ZTensor& columns_tensor = *self_obj->tensor;
+        if (columns_tensor.shape != std::vector<size_t>{n, rows, columns}) {
+            throw std::invalid_argument("col2im(): columns shape mismatch");
+        }
+        zmatrix_cnn_ensure_host(columns_tensor);
+        const float *cols = columns_tensor.contiguous_data();
+        ZTensor result(input_shape);
+        float *out = result.contiguous_data();
+        const size_t work = result.size();
+#pragma omp parallel for if(work >= ZMATRIX_PARALLEL_THRESHOLD)
+        for (ptrdiff_t linear = 0; linear < static_cast<ptrdiff_t>(work); ++linear) {
+            size_t index = static_cast<size_t>(linear);
+            const size_t in_x = index % w; index /= w;
+            const size_t in_y = index % h; index /= h;
+            const size_t channel = index % c; const size_t batch = index / c;
+            float sum = 0.0f;
+            for (size_t kernel_y = 0; kernel_y < kernel_h; ++kernel_y) {
+                const ptrdiff_t y_numerator = static_cast<ptrdiff_t>(in_y + static_cast<size_t>(ph)) - static_cast<ptrdiff_t>(kernel_y);
+                if (y_numerator < 0 || y_numerator % sh != 0) continue;
+                const size_t out_y = static_cast<size_t>(y_numerator / sh);
+                if (out_y >= oh) continue;
+                for (size_t kernel_x = 0; kernel_x < kernel_w; ++kernel_x) {
+                    const ptrdiff_t x_numerator = static_cast<ptrdiff_t>(in_x + static_cast<size_t>(pw)) - static_cast<ptrdiff_t>(kernel_x);
+                    if (x_numerator < 0 || x_numerator % sw != 0) continue;
+                    const size_t out_x = static_cast<size_t>(x_numerator / sw);
+                    if (out_x >= ow) continue;
+                    const size_t row = (channel * kernel_h + kernel_y) * kernel_w + kernel_x;
+                    sum += cols[(batch * rows + row) * columns + out_y * ow + out_x];
+                }
+            }
+            out[static_cast<size_t>(linear)] = sum;
+        }
+        zmatrix_return_tensor_obj_move(std::move(result), return_value, zmatrix_ce_ZTensor);
+    } catch (const std::exception& e) { zend_throw_exception(zend_ce_exception, e.what(), 0); RETURN_THROWS(); }
+}
+
+PHP_METHOD(ZTensor, conv2d)
+{
+    zval *filters_zv, *bias_zv = nullptr;
+    zend_long sh = 1, sw = 1, ph = 0, pw = 0;
+    ZEND_PARSE_PARAMETERS_START(1, 6)
+        Z_PARAM_OBJECT_OF_CLASS(filters_zv, zmatrix_ce_ZTensor)
+        Z_PARAM_OPTIONAL Z_PARAM_OBJECT_OF_CLASS_OR_NULL(bias_zv, zmatrix_ce_ZTensor)
+        Z_PARAM_LONG(sh) Z_PARAM_LONG(sw) Z_PARAM_LONG(ph) Z_PARAM_LONG(pw)
+    ZEND_PARSE_PARAMETERS_END();
+    zmatrix_ztensor_object *input_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
+    zmatrix_ztensor_object *filters_obj = Z_MATRIX_ZTENSOR_P(filters_zv);
+    if (!input_obj->tensor || !filters_obj->tensor) { zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0); RETURN_THROWS(); }
+    try {
+        const ZTensor& input = *input_obj->tensor; const ZTensor& filters = *filters_obj->tensor;
+        if (filters.shape.size() != 4 || input.shape.size() != 4 || input.shape[1] != filters.shape[1]) {
+            throw std::invalid_argument("conv2d(): expected NCHW input and OIHW filters with matching channels");
+        }
+        size_t oh, ow;
+        zmatrix_cnn_spatial_shape(input.shape, static_cast<zend_long>(filters.shape[2]), static_cast<zend_long>(filters.shape[3]), sh, sw, ph, pw, oh, ow);
+        const ZTensor *bias = nullptr;
+        if (bias_zv && Z_TYPE_P(bias_zv) != IS_NULL) {
+            zmatrix_ztensor_object *bias_obj = Z_MATRIX_ZTENSOR_P(bias_zv);
+            if (!bias_obj->tensor || bias_obj->tensor->size() != filters.shape[0]) throw std::invalid_argument("conv2d(): bias must contain one value per output channel");
+            bias = bias_obj->tensor;
+        }
+        const size_t n = input.shape[0], c = input.shape[1], h = input.shape[2], w = input.shape[3];
+        const size_t oc_count = filters.shape[0], kh = filters.shape[2], kw = filters.shape[3];
+        const size_t k_dim = ZTensor::checked_element_count(std::vector<size_t>{c, kh, kw});
+        const size_t positions = ZTensor::checked_element_count(std::vector<size_t>{oh, ow});
+        if (k_dim > static_cast<size_t>(std::numeric_limits<CBLAS_INDEX>::max()) ||
+            positions > static_cast<size_t>(std::numeric_limits<CBLAS_INDEX>::max()) ||
+            oc_count > static_cast<size_t>(std::numeric_limits<CBLAS_INDEX>::max())) {
+            throw std::overflow_error("conv2d(): BLAS dimensions exceed CBLAS_INDEX");
+        }
+        zmatrix_cnn_ensure_host(input);
+        zmatrix_cnn_ensure_host(filters);
+        if (bias) zmatrix_cnn_ensure_host(*bias);
+        const float *x = input.contiguous_data(), *weights = filters.contiguous_data();
+        const float *bias_data = bias ? bias->contiguous_data() : nullptr;
+        ZTensor columns({n, k_dim, positions});
+        float *column_data = columns.contiguous_data();
+        const size_t column_work = columns.size();
+#pragma omp parallel for if(column_work >= ZMATRIX_PARALLEL_THRESHOLD)
+        for (ptrdiff_t linear = 0; linear < static_cast<ptrdiff_t>(column_work); ++linear) {
+            size_t index = static_cast<size_t>(linear);
+            const size_t position = index % positions; index /= positions;
+            const size_t kernel_index = index % k_dim;
+            const size_t batch = index / k_dim;
+            const size_t out_y = position / ow, out_x = position % ow;
+            size_t k = kernel_index;
+            const size_t kernel_x = k % kw; k /= kw;
+            const size_t kernel_y = k % kh;
+            const size_t channel = k / kh;
+            const ptrdiff_t in_y = static_cast<ptrdiff_t>(out_y * static_cast<size_t>(sh) + kernel_y) - ph;
+            const ptrdiff_t in_x = static_cast<ptrdiff_t>(out_x * static_cast<size_t>(sw) + kernel_x) - pw;
+            column_data[static_cast<size_t>(linear)] =
+                (in_y < 0 || in_x < 0 || in_y >= static_cast<ptrdiff_t>(h) || in_x >= static_cast<ptrdiff_t>(w))
+                ? 0.0f
+                : x[((batch * c + channel) * h + static_cast<size_t>(in_y)) * w + static_cast<size_t>(in_x)];
+        }
+
+        ZTensor result({n, oc_count, oh, ow});
+        float *out = result.contiguous_data();
+        for (size_t batch = 0; batch < n; ++batch) {
+            cblas_sgemm(
+                CblasRowMajor, CblasNoTrans, CblasNoTrans,
+                static_cast<CBLAS_INDEX>(oc_count),
+                static_cast<CBLAS_INDEX>(positions),
+                static_cast<CBLAS_INDEX>(k_dim),
+                1.0f,
+                weights, static_cast<CBLAS_INDEX>(k_dim),
+                column_data + batch * k_dim * positions, static_cast<CBLAS_INDEX>(positions),
+                0.0f,
+                out + batch * oc_count * positions, static_cast<CBLAS_INDEX>(positions)
+            );
+        }
+        if (bias_data) {
+            const size_t output_work = result.size();
+#pragma omp parallel for if(output_work >= ZMATRIX_PARALLEL_THRESHOLD)
+            for (ptrdiff_t linear = 0; linear < static_cast<ptrdiff_t>(output_work); ++linear) {
+                const size_t channel = (static_cast<size_t>(linear) / positions) % oc_count;
+                out[static_cast<size_t>(linear)] += bias_data[channel];
+            }
+        }        zmatrix_return_tensor_obj_move(std::move(result), return_value, zmatrix_ce_ZTensor);
+    } catch (const std::exception& e) { zend_throw_exception(zend_ce_exception, e.what(), 0); RETURN_THROWS(); }
+}
+
+PHP_METHOD(ZTensor, conv2dBackward)
+{
+    zval *grad_zv, *filters_zv; zend_long sh = 1, sw = 1, ph = 0, pw = 0;
+    ZEND_PARSE_PARAMETERS_START(2, 6)
+        Z_PARAM_OBJECT_OF_CLASS(grad_zv, zmatrix_ce_ZTensor) Z_PARAM_OBJECT_OF_CLASS(filters_zv, zmatrix_ce_ZTensor)
+        Z_PARAM_OPTIONAL Z_PARAM_LONG(sh) Z_PARAM_LONG(sw) Z_PARAM_LONG(ph) Z_PARAM_LONG(pw)
+    ZEND_PARSE_PARAMETERS_END();
+    zmatrix_ztensor_object *input_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS), *grad_obj = Z_MATRIX_ZTENSOR_P(grad_zv), *filters_obj = Z_MATRIX_ZTENSOR_P(filters_zv);
+    if (!input_obj->tensor || !grad_obj->tensor || !filters_obj->tensor) { zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0); RETURN_THROWS(); }
+    try {
+        const ZTensor& input = *input_obj->tensor; const ZTensor& grad = *grad_obj->tensor; const ZTensor& filters = *filters_obj->tensor;
+        if (input.shape.size() != 4 || filters.shape.size() != 4 || input.shape[1] != filters.shape[1]) throw std::invalid_argument("conv2dBackward(): invalid input/filter shapes");
+        size_t oh, ow; zmatrix_cnn_spatial_shape(input.shape, static_cast<zend_long>(filters.shape[2]), static_cast<zend_long>(filters.shape[3]), sh, sw, ph, pw, oh, ow);
+        const size_t n = input.shape[0], c = input.shape[1], h = input.shape[2], w = input.shape[3], oc_count = filters.shape[0], kh = filters.shape[2], kw = filters.shape[3];
+        if (grad.shape != std::vector<size_t>{n, oc_count, oh, ow}) throw std::invalid_argument("conv2dBackward(): gradOutput shape mismatch");
+        zmatrix_cnn_ensure_host(input);
+        zmatrix_cnn_ensure_host(grad);
+        zmatrix_cnn_ensure_host(filters);
+        const float *x = input.contiguous_data(), *dy = grad.contiguous_data(), *weights = filters.contiguous_data();
+        ZTensor dx_tensor(input.shape), dw_tensor(filters.shape), db_tensor({oc_count});
+        float *dx = dx_tensor.contiguous_data(), *dw = dw_tensor.contiguous_data(), *db = db_tensor.contiguous_data();
+        const size_t input_work = dx_tensor.size();
+#pragma omp parallel for if(input_work >= ZMATRIX_PARALLEL_THRESHOLD)
+        for (ptrdiff_t linear = 0; linear < static_cast<ptrdiff_t>(input_work); ++linear) {
+            size_t index = static_cast<size_t>(linear); const size_t ix = index % w; index /= w; const size_t iy = index % h; index /= h; const size_t ic = index % c; const size_t batch = index / c;
+            float sum = 0.0f;
+            for (size_t oc = 0; oc < oc_count; ++oc) for (size_t ky = 0; ky < kh; ++ky) {
+                const ptrdiff_t y_num = static_cast<ptrdiff_t>(iy + static_cast<size_t>(ph)) - static_cast<ptrdiff_t>(ky);
+                if (y_num < 0 || y_num % sh != 0) continue;
+                const size_t out_y = static_cast<size_t>(y_num / sh);
+                if (out_y >= oh) continue;
+                for (size_t kx = 0; kx < kw; ++kx) {
+                    const ptrdiff_t x_num = static_cast<ptrdiff_t>(ix + static_cast<size_t>(pw)) - static_cast<ptrdiff_t>(kx);
+                    if (x_num < 0 || x_num % sw != 0) continue;
+                    const size_t out_x = static_cast<size_t>(x_num / sw);
+                    if (out_x >= ow) continue;
+                    sum += dy[((batch * oc_count + oc) * oh + out_y) * ow + out_x] * weights[((oc * c + ic) * kh + ky) * kw + kx];
+                }
+            }
+            dx[static_cast<size_t>(linear)] = sum;
+        }
+        const size_t filter_work = dw_tensor.size();
+#pragma omp parallel for if(filter_work >= ZMATRIX_PARALLEL_THRESHOLD)
+        for (ptrdiff_t linear = 0; linear < static_cast<ptrdiff_t>(filter_work); ++linear) {
+            size_t index = static_cast<size_t>(linear); const size_t kx = index % kw; index /= kw; const size_t ky = index % kh; index /= kh; const size_t ic = index % c; const size_t oc = index / c;
+            float sum = 0.0f;
+            for (size_t batch = 0; batch < n; ++batch) for (size_t out_y = 0; out_y < oh; ++out_y) {
+                const ptrdiff_t in_y = static_cast<ptrdiff_t>(out_y * static_cast<size_t>(sh) + ky) - ph; if (in_y < 0 || in_y >= static_cast<ptrdiff_t>(h)) continue;
+                for (size_t out_x = 0; out_x < ow; ++out_x) { const ptrdiff_t in_x = static_cast<ptrdiff_t>(out_x * static_cast<size_t>(sw) + kx) - pw; if (in_x < 0 || in_x >= static_cast<ptrdiff_t>(w)) continue;
+                    sum += x[((batch * c + ic) * h + static_cast<size_t>(in_y)) * w + static_cast<size_t>(in_x)] * dy[((batch * oc_count + oc) * oh + out_y) * ow + out_x]; }
+            }
+            dw[static_cast<size_t>(linear)] = sum;
+        }
+        for (size_t oc = 0; oc < oc_count; ++oc) { double sum = 0.0; for (size_t batch = 0; batch < n; ++batch) for (size_t y = 0; y < oh; ++y) for (size_t x_pos = 0; x_pos < ow; ++x_pos) sum += dy[((batch * oc_count + oc) * oh + y) * ow + x_pos]; db[oc] = static_cast<float>(sum); }
+        array_init_size(return_value, 3);
+        zval tensor_zv;
+        zmatrix_return_tensor_obj_move(std::move(dx_tensor), &tensor_zv, zmatrix_ce_ZTensor);
+        if (EG(exception)) { zval_ptr_dtor(return_value); RETURN_THROWS(); }
+        add_next_index_zval(return_value, &tensor_zv);
+        zmatrix_return_tensor_obj_move(std::move(dw_tensor), &tensor_zv, zmatrix_ce_ZTensor);
+        if (EG(exception)) { zval_ptr_dtor(return_value); RETURN_THROWS(); }
+        add_next_index_zval(return_value, &tensor_zv);
+        zmatrix_return_tensor_obj_move(std::move(db_tensor), &tensor_zv, zmatrix_ce_ZTensor);
+        if (EG(exception)) { zval_ptr_dtor(return_value); RETURN_THROWS(); }
+        add_next_index_zval(return_value, &tensor_zv);
+    } catch (const std::exception& e) { zend_throw_exception(zend_ce_exception, e.what(), 0); RETURN_THROWS(); }
+}
+
+PHP_METHOD(ZTensor, maxPool2d)
+{
+    zend_long kh, kw, sh, sw, ph = 0, pw = 0;
+    ZEND_PARSE_PARAMETERS_START(4, 6) Z_PARAM_LONG(kh) Z_PARAM_LONG(kw) Z_PARAM_LONG(sh) Z_PARAM_LONG(sw) Z_PARAM_OPTIONAL Z_PARAM_LONG(ph) Z_PARAM_LONG(pw) ZEND_PARSE_PARAMETERS_END();
+    zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS); if (!self_obj->tensor) { zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0); RETURN_THROWS(); }
+    try {
+        const ZTensor& input = *self_obj->tensor; size_t oh, ow; zmatrix_cnn_spatial_shape(input.shape, kh, kw, sh, sw, ph, pw, oh, ow);
+        if (input.size() > 16777216) throw std::overflow_error("maxPool2d(): float32 indices are exact only up to 2^24 elements");
+        const size_t n = input.shape[0], c = input.shape[1], h = input.shape[2], w = input.shape[3];
+        zmatrix_cnn_ensure_host(input);
+        const float *x = input.contiguous_data();
+        ZTensor output({n,c,oh,ow}), indices({n,c,oh,ow}); float *out = output.contiguous_data(), *idx = indices.contiguous_data(); const size_t work = output.size();
+#pragma omp parallel for if(work >= ZMATRIX_PARALLEL_THRESHOLD)
+        for (ptrdiff_t linear = 0; linear < static_cast<ptrdiff_t>(work); ++linear) {
+            size_t index = static_cast<size_t>(linear); const size_t ox = index % ow; index /= ow; const size_t oy = index % oh; index /= oh; const size_t channel = index % c; const size_t batch = index / c;
+            float best = -std::numeric_limits<float>::infinity(); ptrdiff_t best_index = -1;
+            for (size_t ky = 0; ky < static_cast<size_t>(kh); ++ky) { const ptrdiff_t iy = static_cast<ptrdiff_t>(oy * static_cast<size_t>(sh) + ky) - ph; if (iy < 0 || iy >= static_cast<ptrdiff_t>(h)) continue;
+                for (size_t kx = 0; kx < static_cast<size_t>(kw); ++kx) { const ptrdiff_t ix = static_cast<ptrdiff_t>(ox * static_cast<size_t>(sw) + kx) - pw; if (ix < 0 || ix >= static_cast<ptrdiff_t>(w)) continue;
+                    const size_t absolute = ((batch * c + channel) * h + static_cast<size_t>(iy)) * w + static_cast<size_t>(ix); const float value = x[absolute];
+                    if (best_index < 0 || (std::isnan(value) && !std::isnan(best)) || (!std::isnan(best) && value > best)) { best = value; best_index = static_cast<ptrdiff_t>(absolute); }
+                }
+            }
+            out[static_cast<size_t>(linear)] = best; idx[static_cast<size_t>(linear)] = static_cast<float>(best_index);
+        }
+        array_init_size(return_value, 2);
+        zval tensor_zv;
+        zmatrix_return_tensor_obj_move(std::move(output), &tensor_zv, zmatrix_ce_ZTensor);
+        if (EG(exception)) { zval_ptr_dtor(return_value); RETURN_THROWS(); }
+        add_next_index_zval(return_value, &tensor_zv);
+        zmatrix_return_tensor_obj_move(std::move(indices), &tensor_zv, zmatrix_ce_ZTensor);
+        if (EG(exception)) { zval_ptr_dtor(return_value); RETURN_THROWS(); }
+        add_next_index_zval(return_value, &tensor_zv);
+    } catch (const std::exception& e) { zend_throw_exception(zend_ce_exception, e.what(), 0); RETURN_THROWS(); }
+}
+
+PHP_METHOD(ZTensor, maxPool2dBackward)
+{
+    zval *grad_zv, *indices_zv, *shape_zv;
+    ZEND_PARSE_PARAMETERS_START(3, 3) Z_PARAM_OBJECT_OF_CLASS(grad_zv, zmatrix_ce_ZTensor) Z_PARAM_OBJECT_OF_CLASS(indices_zv, zmatrix_ce_ZTensor) Z_PARAM_ARRAY(shape_zv) ZEND_PARSE_PARAMETERS_END();
+    zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS), *grad_obj = Z_MATRIX_ZTENSOR_P(grad_zv), *indices_obj = Z_MATRIX_ZTENSOR_P(indices_zv);
+    if (!self_obj->tensor || !grad_obj->tensor || !indices_obj->tensor) { zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0); RETURN_THROWS(); }
+    try {
+        const std::vector<size_t> input_shape = zmatrix_cnn_parse_shape(shape_zv, "maxPool2dBackward()"); if (input_shape.size() != 4) throw std::invalid_argument("maxPool2dBackward(): inputShape must be NCHW");
+        const ZTensor& grad = *grad_obj->tensor; const ZTensor& indices = *indices_obj->tensor; if (grad.shape != indices.shape) throw std::invalid_argument("maxPool2dBackward(): gradOutput and indices shapes differ");
+        zmatrix_cnn_ensure_host(grad);
+        zmatrix_cnn_ensure_host(indices);
+        const float *dy = grad.contiguous_data(), *idx = indices.contiguous_data(); ZTensor result(input_shape); float *dx = result.contiguous_data();
+        for (size_t i = 0; i < grad.size(); ++i) { const float raw = idx[i]; if (raw < 0.0f) continue; if (!std::isfinite(raw) || std::floor(raw) != raw || raw >= static_cast<float>(result.size())) throw std::invalid_argument("maxPool2dBackward(): invalid index tensor"); dx[static_cast<size_t>(raw)] += dy[i]; }
+        zmatrix_return_tensor_obj_move(std::move(result), return_value, zmatrix_ce_ZTensor);
+    } catch (const std::exception& e) { zend_throw_exception(zend_ce_exception, e.what(), 0); RETURN_THROWS(); }
+}
+
+PHP_METHOD(ZTensor, globalAveragePool2d)
+{
+    ZEND_PARSE_PARAMETERS_NONE();
+    zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
+    if (!self_obj->tensor) {
+        zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0);
+        RETURN_THROWS();
+    }
+    try {
+        ZTensor result = self_obj->tensor->global_average_pool2d();
+        zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
+    } catch (const std::exception& e) {
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+        RETURN_THROWS();
+    }
+}
+
+PHP_METHOD(ZTensor, globalAveragePool2dBackward)
+{
+    zval *grad_output_zv, *input_shape_zv;
+    ZEND_PARSE_PARAMETERS_START(2, 2)
+        Z_PARAM_OBJECT_OF_CLASS(grad_output_zv, zmatrix_ce_ZTensor)
+        Z_PARAM_ARRAY(input_shape_zv)
+    ZEND_PARSE_PARAMETERS_END();
+
+    zmatrix_ztensor_object *grad_obj = Z_MATRIX_ZTENSOR_P(grad_output_zv);
+    if (!grad_obj->tensor) {
+        zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0);
+        RETURN_THROWS();
+    }
+
+    std::vector<size_t> input_shape;
+    zval *dim_zv;
+    ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(input_shape_zv), dim_zv) {
+        if (Z_TYPE_P(dim_zv) != IS_LONG || Z_LVAL_P(dim_zv) < 0) {
+            zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_INVALID_SHAPE, 0);
+            RETURN_THROWS();
+        }
+        input_shape.push_back((size_t)Z_LVAL_P(dim_zv));
+    } ZEND_HASH_FOREACH_END();
+
+    try {
+        ZTensor result = ZTensor::global_average_pool2d_backward(*grad_obj->tensor, input_shape);
+        zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
+    } catch (const std::exception& e) {
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+        RETURN_THROWS();
+    }
+}
+
+PHP_METHOD(ZTensor, divide){
     zval *other_zv;
     ZEND_PARSE_PARAMETERS_START(1, 1)
         Z_PARAM_ZVAL(other_zv)
@@ -1746,7 +2326,7 @@ PHP_METHOD(ZTensor, clip)
         const float fmin = static_cast<float>(min_val);
         const float fmax = static_cast<float>(max_val);
         result.clip_values(fmin, fmax);
-        zmatrix_return_tensor_obj(std::move(result), return_value, zmatrix_ce_ZTensor);
+        zmatrix_return_tensor_obj_move(std::move(result), return_value, zmatrix_ce_ZTensor);
     } catch (const std::exception& e) {
         zend_throw_exception(zend_ce_exception, e.what(), 0);
         RETURN_THROWS();
@@ -1755,78 +2335,15 @@ PHP_METHOD(ZTensor, clip)
 
 PHP_METHOD(ZTensor, sum)
 {
-    zval *axis_zv = nullptr;
-    ZEND_PARSE_PARAMETERS_START(0, 1)
-        Z_PARAM_OPTIONAL
-        Z_PARAM_ZVAL(axis_zv)
-    ZEND_PARSE_PARAMETERS_END();
-
+    zval *axis_zv = nullptr; zend_bool keep_dims = 0;
+    ZEND_PARSE_PARAMETERS_START(0, 2) Z_PARAM_OPTIONAL Z_PARAM_ZVAL(axis_zv) Z_PARAM_BOOL(keep_dims) ZEND_PARSE_PARAMETERS_END();
     zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
-    if (!self_obj->tensor) {
-        zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0);
-        RETURN_THROWS();
-    }
-
-    // ===== VALIDAÇÃO SERIAL (ANTES de qualquer operação) =====
-    zend_long axis_val = -1;  // sentinel: soma global
-    if (axis_zv && Z_TYPE_P(axis_zv) != IS_NULL) {
-        // Type checking
-        if (Z_TYPE_P(axis_zv) != IS_LONG) {
-            zend_throw_exception_ex(zend_ce_type_error, 0,
-                "ZTensor::sum(): axis must be int|null, %s given",
-                zend_zval_type_name(axis_zv));
-            RETURN_THROWS();
-        }
-
-        axis_val = Z_LVAL_P(axis_zv);
-        size_t ndim = self_obj->tensor->shape.size();
-
-        // Empty tensor check
-        if (ndim == 0) {
-            zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_EMPTY_MATRIX, 0);
-            RETURN_THROWS();
-        }
-
-        // Normalize negative axis (e.g., -1 -> ndim-1)
-        if (axis_val < 0) {
-            axis_val = (zend_long)ndim + axis_val;
-        }
-
-        // Bounds check
-        if (axis_val < 0 || (size_t)axis_val >= ndim) {
-            zend_throw_exception_ex(zend_ce_exception, 0,
-                "ZTensor::sum(): axis %ld out of bounds for tensor with %zu dimensions",
-                Z_LVAL_P(axis_zv), ndim);
-            RETURN_THROWS();
-        }
-    }
-    // ===== FIM VALIDAÇÃO SERIAL =====
-
+    if (!self_obj->tensor) { zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0); RETURN_THROWS(); }
     try {
-        ZTensor result;
-
-        if (axis_val == -1) {
-            // Soma global: retorna tensor escalar de shape {1}
-            double total = self_obj->tensor->sum();
-            result = ZTensor({1});
-            result.data[0] = static_cast<float>(total);
-        } else {
-            // Soma por eixo: reduz dimensão do eixo especificado
-            std::vector<size_t> result_shape = self_obj->tensor->shape;
-            result_shape.erase(result_shape.begin() + axis_val);
-
-            result = ZTensor(result_shape);
-            self_obj->tensor->soma(result, static_cast<int>(axis_val));
-        }
-
-        zmatrix_return_tensor_obj(result, return_value, zmatrix_ce_ZTensor);
-    }
-    catch (const std::exception& e) {
-        zend_throw_exception(zend_ce_exception, e.what(), 0);
-        RETURN_THROWS();
-    }
+        ZTensor result = zmatrix_cnn_reduce_nd(*self_obj->tensor, axis_zv, keep_dims != 0, ZMatrixReductionKind::Sum, 0);
+        zmatrix_return_tensor_obj_move(std::move(result), return_value, zmatrix_ce_ZTensor);
+    } catch (const std::exception& e) { zend_throw_exception(zend_ce_exception, e.what(), 0); RETURN_THROWS(); }
 }
-
 PHP_METHOD(ZTensor, broadcast)
 {
     zval *bias_zv;
@@ -2510,8 +3027,158 @@ PHP_METHOD(ZTensor, freeDevice)
     }
 }
 
-PHP_METHOD(ZTensor, slice)
+PHP_METHOD(ZTensor, permute)
 {
+    zval *axes_zv;
+    ZEND_PARSE_PARAMETERS_START(1, 1)
+        Z_PARAM_ARRAY(axes_zv)
+    ZEND_PARSE_PARAMETERS_END();
+    zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
+    if (!self_obj->tensor) {
+        zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0);
+        RETURN_THROWS();
+    }
+    try {
+        ZTensor& source = *self_obj->tensor;
+        const size_t rank = source.shape.size();
+        if (zend_hash_num_elements(Z_ARRVAL_P(axes_zv)) != rank) {
+            throw std::invalid_argument("permute(): axes count must match tensor rank");
+        }
+        std::vector<size_t> axes;
+        std::vector<bool> seen(rank, false);
+        axes.reserve(rank);
+        zval *axis_zv;
+        ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(axes_zv), axis_zv) {
+            if (Z_TYPE_P(axis_zv) != IS_LONG) {
+                throw std::invalid_argument("permute(): every axis must be an integer");
+            }
+            zend_long axis = Z_LVAL_P(axis_zv);
+            if (axis < 0) axis += static_cast<zend_long>(rank);
+            if (axis < 0 || static_cast<size_t>(axis) >= rank || seen[static_cast<size_t>(axis)]) {
+                throw std::invalid_argument("permute(): axes must be a unique permutation of tensor dimensions");
+            }
+            seen[static_cast<size_t>(axis)] = true;
+            axes.push_back(static_cast<size_t>(axis));
+        } ZEND_HASH_FOREACH_END();
+#ifdef HAVE_CUDA
+        const bool source_was_on_device = source.device_valid;
+        source.ensure_host();
+#else
+        const bool source_was_on_device = false;
+#endif
+        std::vector<size_t> output_shape(rank);
+        for (size_t i = 0; i < rank; ++i) output_shape[i] = source.shape[axes[i]];
+        ZTensor result;
+        if (source.size() == 0) {
+            result = ZTensor(output_shape);
+        } else if (source_was_on_device) {
+            // Host/device validity belongs to each tensor, not to the shared
+            // storage. Materialize GPU-origin views to avoid stale aliases.
+            result = ZTensor(output_shape);
+            for (size_t linear = 0; linear < result.size(); ++linear) {
+                size_t remaining = linear;
+                size_t physical = source.offset;
+                for (size_t output_axis = rank; output_axis-- > 0;) {
+                    const size_t coordinate = remaining % output_shape[output_axis];
+                    remaining /= output_shape[output_axis];
+                    physical += coordinate * source.strides[axes[output_axis]];
+                }
+                result.data.raw_at(linear) = source.data.raw_at(physical);
+            }
+        } else {
+            result.data.share_from(source.data);
+            result.shape = std::move(output_shape);
+            result.strides.resize(rank);
+            for (size_t i = 0; i < rank; ++i) result.strides[i] = source.strides[axes[i]];
+            result.offset = source.offset;
+            result.owns_data = false;
+#ifdef HAVE_CUDA
+            result.host_valid = true;
+            result.device_valid = false;
+            result.device_write_pending = false;
+#endif
+        }
+        zmatrix_return_tensor_obj_move(std::move(result), return_value, zmatrix_ce_ZTensor);
+    } catch (const std::exception& e) {
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+        RETURN_THROWS();
+    }
+}
+
+PHP_METHOD(ZTensor, flatten)
+{
+    zend_long start_axis = 0, end_axis = -1;
+    ZEND_PARSE_PARAMETERS_START(0, 2)
+        Z_PARAM_OPTIONAL
+        Z_PARAM_LONG(start_axis)
+        Z_PARAM_LONG(end_axis)
+    ZEND_PARSE_PARAMETERS_END();
+    zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
+    if (!self_obj->tensor) {
+        zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0);
+        RETURN_THROWS();
+    }
+    try {
+        const ZTensor& source = *self_obj->tensor;
+        const zend_long rank = static_cast<zend_long>(source.shape.size());
+        if (rank == 0) throw std::invalid_argument("flatten(): tensor must have at least one dimension");
+        if (start_axis < 0) start_axis += rank;
+        if (end_axis < 0) end_axis += rank;
+        if (start_axis < 0 || end_axis < start_axis || end_axis >= rank) {
+            throw std::invalid_argument("flatten(): invalid axis interval");
+        }
+        std::vector<size_t> output_shape;
+        output_shape.reserve(source.shape.size() - static_cast<size_t>(end_axis - start_axis));
+        for (zend_long axis = 0; axis < start_axis; ++axis) output_shape.push_back(source.shape[static_cast<size_t>(axis)]);
+        size_t flattened = 1;
+        for (zend_long axis = start_axis; axis <= end_axis; ++axis) {
+            const size_t dimension = source.shape[static_cast<size_t>(axis)];
+            if (dimension != 0 && flattened > std::numeric_limits<size_t>::max() / dimension) {
+                throw std::overflow_error(ZMATRIX_ERR_OVERFLOW);
+            }
+            flattened *= dimension;
+        }
+        output_shape.push_back(flattened);
+        for (zend_long axis = end_axis + 1; axis < rank; ++axis) output_shape.push_back(source.shape[static_cast<size_t>(axis)]);
+#ifdef HAVE_CUDA
+        if (source.device_valid) {
+            ZTensor materialized = source.contiguous();
+            ZTensor result = materialized.reshape(output_shape);
+            zmatrix_return_tensor_obj_move(std::move(result), return_value, zmatrix_ce_ZTensor);
+            return;
+        }
+#endif
+        ZTensor result = source.reshape(output_shape);
+        zmatrix_return_tensor_obj_move(std::move(result), return_value, zmatrix_ce_ZTensor);
+    } catch (const std::exception& e) {
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+        RETURN_THROWS();
+    }
+}
+
+PHP_METHOD(ZTensor, broadcastTo)
+{
+    zval *shape_zv;
+    ZEND_PARSE_PARAMETERS_START(1, 1)
+        Z_PARAM_ARRAY(shape_zv)
+    ZEND_PARSE_PARAMETERS_END();
+    zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
+    if (!self_obj->tensor) {
+        zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0);
+        RETURN_THROWS();
+    }
+    try {
+        const std::vector<size_t> output_shape = zmatrix_cnn_parse_shape(shape_zv, "broadcastTo()");
+        ZTensor target(output_shape);
+        ZTensor result = target.broadcast_materialized(*self_obj->tensor);
+        zmatrix_return_tensor_obj_move(std::move(result), return_value, zmatrix_ce_ZTensor);
+    } catch (const std::exception& e) {
+        zend_throw_exception(zend_ce_exception, e.what(), 0);
+        RETURN_THROWS();
+    }
+}
+
+PHP_METHOD(ZTensor, slice){
     zend_long axis, start, end;
 
     ZEND_PARSE_PARAMETERS_START(3, 3)
@@ -3077,24 +3744,19 @@ PHP_METHOD(ZTensor, stack)
 // VARIANCE (Variância)
 // =========================================================================
 PHP_METHOD(ZTensor, variance) {
-    zend_long ddof = 0;
-    ZEND_PARSE_PARAMETERS_START(0, 1)
-        Z_PARAM_OPTIONAL
-        Z_PARAM_LONG(ddof)
-    ZEND_PARSE_PARAMETERS_END();
-
+    zval *axis_zv = nullptr; zend_bool keep_dims = 0; zend_long correction = 0;
+    ZEND_PARSE_PARAMETERS_START(0, 3) Z_PARAM_OPTIONAL Z_PARAM_ZVAL(axis_zv) Z_PARAM_BOOL(keep_dims) Z_PARAM_LONG(correction) ZEND_PARSE_PARAMETERS_END();
     zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);
+    if (!self_obj->tensor) { zend_throw_exception(zend_ce_exception, ZMATRIX_ERR_NOT_INITIALIZED, 0); RETURN_THROWS(); }
     try {
-        float var = self_obj->tensor->variance(static_cast<int>(ddof));
-        RETURN_DOUBLE(static_cast<double>(var));
-    } catch (const std::exception &e) {
-        zend_throw_exception(zend_ce_exception, e.what(), 0);
-    }
+        if (ZEND_NUM_ARGS() == 0) RETURN_DOUBLE(static_cast<double>(self_obj->tensor->variance(0)));
+        if (ZEND_NUM_ARGS() == 1 && axis_zv && Z_TYPE_P(axis_zv) == IS_LONG) {
+            RETURN_DOUBLE(static_cast<double>(self_obj->tensor->variance(static_cast<int>(Z_LVAL_P(axis_zv)))));
+        }
+        ZTensor result = zmatrix_cnn_reduce_nd(*self_obj->tensor, axis_zv, keep_dims != 0, ZMatrixReductionKind::Variance, correction);
+        zmatrix_return_tensor_obj_move(std::move(result), return_value, zmatrix_ce_ZTensor);
+    } catch (const std::exception& e) { zend_throw_exception(zend_ce_exception, e.what(), 0); RETURN_THROWS(); }
 }
-
-// =========================================================================
-// MEDIAN (Mediana)
-// =========================================================================
 PHP_METHOD(ZTensor, median) {
     ZEND_PARSE_PARAMETERS_NONE();
     zmatrix_ztensor_object *self_obj = Z_MATRIX_ZTENSOR_P(ZEND_THIS);

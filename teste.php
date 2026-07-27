@@ -13,9 +13,9 @@ echo "════════════════════════�
 
 // Teste com diferentes tamanhos
 $tests = [
-    ['name' => 'Pequeno (50K)',    'size' => 50_000,    'iter' => 20],
-    ['name' => 'Médio (500K)',     'size' => 500_000,   'iter' => 10],
-    ['name' => 'Grande (2M)',      'size' => 2_000_000, 'iter' => 3],
+    ['name' => 'Pequeno (50K)', 'size' => 50_000, 'iter' => 20],
+    ['name' => 'Médio (500K)', 'size' => 500_000, 'iter' => 10],
+    ['name' => 'Grande (2M)', 'size' => 2_000_000, 'iter' => 3],
     ['name' => 'MuitoGrande (5M)', 'size' => 5_000_000, 'iter' => 2],
 ];
 
@@ -605,7 +605,8 @@ echo ($sumOk && $meanOk && $minOk && $maxOk && $stdOk) ? "✅ Reduções PASSARA
 // ═══════════════════════════════════════════════════════════════════════
 echo "--- TESTANDO greater() ---\n\n";
 
-function run_test(string $label, callable $fn): void {
+function run_test(string $label, callable $fn): void
+{
     try {
         $fn();
     } catch (Throwable $e) {
@@ -667,7 +668,10 @@ run_test("autograd completo (mul + sum + backward + grad)", function () {
     $gradAAfterZero = $a->getGrad()->toArray();
     $allZero = true;
     foreach ($gradAAfterZero as $v) {
-        if (abs($v) > 1e-9) { $allZero = false; break; }
+        if (abs($v) > 1e-9) {
+            $allZero = false;
+            break;
+        }
     }
     echo "Após zeroGrad(): grad(a) = [" . implode(", ", $gradAAfterZero) . "]\n";
     echo $allZero ? "✅ zeroGrad() PASSOU!\n\n" : "❌ zeroGrad() FALHOU!\n\n";
@@ -684,10 +688,11 @@ run_test("autograd completo (mul + sum + backward + grad)", function () {
 echo "\n🚀 TODOS OS TESTES ADICIONAIS CONCLUÍDOS!\n";
 
 function assertTensorEquals(
-    array $expected,
+    array   $expected,
     ZTensor $actual,
-    string $message
-): void {
+    string  $message
+): void
+{
     $actualArray = $actual->toArray();
 
     if ($actualArray !== $expected) {
@@ -802,6 +807,1598 @@ $tensor = ZTensor::arr([
     [5, 6, 7, 8]
 ]);
 $reshaped = $tensor->reshape([4, 2]);
-print_r($reshaped->copy());
-// Verificar tensor está em GPU
-var_dump($b->isOnGpu());  // bool(true) se GPU foi usado
+/*
+|--------------------------------------------------------------------------
+| Helpers
+|--------------------------------------------------------------------------
+*/
+
+function flattenArray(array $array): array
+{
+    $result = [];
+
+    array_walk_recursive(
+        $array,
+        static function (mixed $value) use (&$result): void {
+            $result[] = (float) $value;
+        }
+    );
+
+    return $result;
+}
+
+function formatArray(array $array): string
+{
+    return json_encode(
+        $array,
+        JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION
+    );
+}
+
+function assertTrue(bool $condition, string $label): void
+{
+    if (!$condition) {
+        throw new RuntimeException("❌ {$label}");
+    }
+
+    echo "✅ {$label}\n";
+}
+
+function assertSameArray(
+    array $expected,
+    array $actual,
+    string $label
+): void {
+    if ($expected !== $actual) {
+        throw new RuntimeException(
+            sprintf(
+                "❌ %s\nEsperado: %s\nObtido:  %s",
+                $label,
+                formatArray($expected),
+                formatArray($actual)
+            )
+        );
+    }
+
+    echo "✅ {$label}\n";
+}
+
+function assertArrayClose(
+    array $expected,
+    array $actual,
+    string $label,
+    float $epsilon = 1e-5
+): void {
+    $expectedFlat = flattenArray($expected);
+    $actualFlat = flattenArray($actual);
+
+    if (count($expectedFlat) !== count($actualFlat)) {
+        throw new RuntimeException(
+            sprintf(
+                "❌ %s: esperado %d elementos, obtido %d",
+                $label,
+                count($expectedFlat),
+                count($actualFlat)
+            )
+        );
+    }
+
+    foreach ($expectedFlat as $index => $expectedValue) {
+        $actualValue = $actualFlat[$index];
+
+        if (!is_finite($actualValue)) {
+            throw new RuntimeException(
+                sprintf(
+                    "❌ %s: valor não finito no índice %d",
+                    $label,
+                    $index
+                )
+            );
+        }
+
+        if (abs($expectedValue - $actualValue) > $epsilon) {
+            throw new RuntimeException(
+                sprintf(
+                    "❌ %s: índice %d, esperado %.8f, obtido %.8f",
+                    $label,
+                    $index,
+                    $expectedValue,
+                    $actualValue
+                )
+            );
+        }
+    }
+
+    echo "✅ {$label}\n";
+}
+
+function assertShape(
+    array $expectedShape,
+    ZTensor $tensor,
+    string $label
+): void {
+    assertSameArray(
+        $expectedShape,
+        $tensor->shape(),
+        $label
+    );
+}
+
+function assertTensorClose(
+    array $expected,
+    ZTensor $actual,
+    string $label,
+    float $epsilon = 1e-5
+): void {
+    assertArrayClose(
+        $expected,
+        $actual->toArray(),
+        $label,
+        $epsilon
+    );
+}
+
+function assertThrows(
+    callable $callback,
+    string $label
+): void {
+    try {
+        $callback();
+    } catch (Throwable $exception) {
+        echo "✅ {$label}: {$exception->getMessage()}\n";
+        return;
+    }
+
+    throw new RuntimeException(
+        "❌ {$label}: nenhuma exceção foi lançada"
+    );
+}
+
+function section(string $title): void
+{
+    echo "\n";
+    echo "==================================================\n";
+    echo "{$title}\n";
+    echo "==================================================\n";
+}
+
+/*
+|--------------------------------------------------------------------------
+| 1. permute()
+|--------------------------------------------------------------------------
+*/
+
+section('1. permute');
+
+$input3d = ZTensor::arr([
+    [
+        [1.0, 2.0, 3.0],
+        [4.0, 5.0, 6.0],
+    ],
+    [
+        [7.0, 8.0, 9.0],
+        [10.0, 11.0, 12.0],
+    ],
+]); // [2, 2, 3]
+
+$input3dBefore = $input3d->toArray();
+
+$permuted = $input3d->permute([2, 0, 1]);
+
+assertShape(
+    [3, 2, 2],
+    $permuted,
+    'permute produz o shape esperado'
+);
+
+assertTensorClose([
+    [
+        [1.0, 4.0],
+        [7.0, 10.0],
+    ],
+    [
+        [2.0, 5.0],
+        [8.0, 11.0],
+    ],
+    [
+        [3.0, 6.0],
+        [9.0, 12.0],
+    ],
+], $permuted, 'permute reorganiza corretamente os valores');
+
+/*
+ * [-1, 0, 1] equivale a [2, 0, 1].
+ */
+
+$permutedNegative = $input3d->permute([-1, 0, 1]);
+
+assertShape(
+    [3, 2, 2],
+    $permutedNegative,
+    'permute aceita eixo negativo'
+);
+
+assertTensorClose(
+    $permuted->toArray(),
+    $permutedNegative,
+    'permute negativo equivale ao eixo positivo'
+);
+
+/*
+ * Permutação identidade.
+ */
+
+$permutedIdentity = $input3d->permute([0, 1, 2]);
+
+assertShape(
+    [2, 2, 3],
+    $permutedIdentity,
+    'permute identidade preserva o shape'
+);
+
+assertTensorClose(
+    $input3dBefore,
+    $permutedIdentity,
+    'permute identidade preserva os valores'
+);
+
+assertArrayClose(
+    $input3dBefore,
+    $input3d->toArray(),
+    'permute não altera o tensor original'
+);
+
+/*
+|--------------------------------------------------------------------------
+| 2. flatten()
+|--------------------------------------------------------------------------
+*/
+
+section('2. flatten');
+
+$flattenMiddle = $input3d->flatten(1, 2);
+
+assertShape(
+    [2, 6],
+    $flattenMiddle,
+    'flatten(1, 2) produz shape [2, 6]'
+);
+
+assertTensorClose([
+    [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+    [7.0, 8.0, 9.0, 10.0, 11.0, 12.0],
+], $flattenMiddle, 'flatten preserva a ordem dos elementos');
+
+$flattenAll = $input3d->flatten();
+
+assertShape(
+    [12],
+    $flattenAll,
+    'flatten padrão combina todas as dimensões'
+);
+
+assertTensorClose([
+    1.0,
+    2.0,
+    3.0,
+    4.0,
+    5.0,
+    6.0,
+    7.0,
+    8.0,
+    9.0,
+    10.0,
+    11.0,
+    12.0,
+], $flattenAll, 'flatten completo preserva a ordem linear');
+
+$flattenNegative = $input3d->flatten(0, -2);
+
+assertShape(
+    [4, 3],
+    $flattenNegative,
+    'flatten aceita endAxis negativo'
+);
+
+assertTensorClose([
+    [1.0, 2.0, 3.0],
+    [4.0, 5.0, 6.0],
+    [7.0, 8.0, 9.0],
+    [10.0, 11.0, 12.0],
+], $flattenNegative, 'flatten com eixo negativo produz valores corretos');
+
+/*
+ * Achatar somente um eixo não deve alterar o shape.
+ */
+
+$flattenSingleAxis = $input3d->flatten(1, 1);
+
+assertShape(
+    [2, 2, 3],
+    $flattenSingleAxis,
+    'flatten de um único eixo preserva o shape'
+);
+
+assertTensorClose(
+    $input3dBefore,
+    $flattenSingleAxis,
+    'flatten de um único eixo preserva os valores'
+);
+
+assertArrayClose(
+    $input3dBefore,
+    $input3d->toArray(),
+    'flatten não altera o tensor original'
+);
+
+/*
+|--------------------------------------------------------------------------
+| 3. broadcastTo()
+|--------------------------------------------------------------------------
+*/
+
+section('3. broadcastTo');
+
+$broadcastInput = ZTensor::arr([
+    [1.0, 2.0, 3.0],
+]); // [1, 3]
+
+$broadcastInputBefore = $broadcastInput->toArray();
+
+$broadcasted = $broadcastInput->broadcastTo([2, 2, 3]);
+
+assertShape(
+    [2, 2, 3],
+    $broadcasted,
+    'broadcastTo produz o shape solicitado'
+);
+
+assertTensorClose([
+    [
+        [1.0, 2.0, 3.0],
+        [1.0, 2.0, 3.0],
+    ],
+    [
+        [1.0, 2.0, 3.0],
+        [1.0, 2.0, 3.0],
+    ],
+], $broadcasted, 'broadcastTo replica corretamente os valores');
+
+/*
+ * Broadcasting de [2, 1] para [2, 3].
+ */
+
+$broadcastColumn = ZTensor::arr([
+    [10.0],
+    [20.0],
+]);
+
+$broadcastColumnResult = $broadcastColumn->broadcastTo([2, 3]);
+
+assertShape(
+    [2, 3],
+    $broadcastColumnResult,
+    'broadcastTo expande dimensão unitária'
+);
+
+assertTensorClose([
+    [10.0, 10.0, 10.0],
+    [20.0, 20.0, 20.0],
+], $broadcastColumnResult, 'broadcastTo expande a dimensão correta');
+
+assertArrayClose(
+    $broadcastInputBefore,
+    $broadcastInput->toArray(),
+    'broadcastTo preserva o tensor original'
+);
+
+/*
+|--------------------------------------------------------------------------
+| 4. im2col()
+|--------------------------------------------------------------------------
+|
+| Contrato:
+|
+| NCHW -> [N, C*KH*KW, OH*OW]
+|
+|--------------------------------------------------------------------------
+*/
+
+section('4. im2col');
+
+$image3x3 = ZTensor::arr([
+    [[
+        [1.0, 2.0, 3.0],
+        [4.0, 5.0, 6.0],
+        [7.0, 8.0, 9.0],
+    ]],
+]); // [1, 1, 3, 3]
+
+$image3x3Before = $image3x3->toArray();
+
+$columns = $image3x3->im2col(
+    2,
+    2,
+    1,
+    1,
+    0,
+    0
+);
+
+/*
+ * OH = ((3 - 2) / 1) + 1 = 2
+ * OW = ((3 - 2) / 1) + 1 = 2
+ *
+ * [N, C*KH*KW, OH*OW]
+ * [1, 1*2*2, 2*2]
+ * [1, 4, 4]
+ */
+
+assertShape(
+    [1, 4, 4],
+    $columns,
+    'im2col retorna [N, C*KH*KW, OH*OW]'
+);
+
+assertTensorClose([
+    [
+        [1.0, 2.0, 4.0, 5.0],
+        [2.0, 3.0, 5.0, 6.0],
+        [4.0, 5.0, 7.0, 8.0],
+        [5.0, 6.0, 8.0, 9.0],
+    ],
+], $columns, 'im2col extrai corretamente os patches');
+
+/*
+ * Teste com stride 2.
+ */
+
+$image4x4 = ZTensor::arr([
+    [[
+        [1.0,  2.0,  3.0,  4.0],
+        [5.0,  6.0,  7.0,  8.0],
+        [9.0, 10.0, 11.0, 12.0],
+        [13.0, 14.0, 15.0, 16.0],
+    ]],
+]);
+
+$columnsStride = $image4x4->im2col(
+    2,
+    2,
+    2,
+    2,
+    0,
+    0
+);
+
+assertShape(
+    [1, 4, 4],
+    $columnsStride,
+    'im2col com stride produz o shape correto'
+);
+
+assertTensorClose([
+    [
+        [1.0, 3.0, 9.0, 11.0],
+        [2.0, 4.0, 10.0, 12.0],
+        [5.0, 7.0, 13.0, 15.0],
+        [6.0, 8.0, 14.0, 16.0],
+    ],
+], $columnsStride, 'im2col com stride extrai os patches corretos');
+
+/*
+ * Teste com múltiplos canais e kernel 1x1.
+ */
+
+$multiChannelImage = ZTensor::arr([
+    [
+        [
+            [1.0, 2.0],
+            [3.0, 4.0],
+        ],
+        [
+            [10.0, 20.0],
+            [30.0, 40.0],
+        ],
+    ],
+]); // [1, 2, 2, 2]
+
+$multiChannelColumns = $multiChannelImage->im2col(
+    1,
+    1,
+    1,
+    1,
+    0,
+    0
+);
+
+assertShape(
+    [1, 2, 4],
+    $multiChannelColumns,
+    'im2col suporta múltiplos canais'
+);
+
+assertTensorClose([
+    [
+        [1.0, 2.0, 3.0, 4.0],
+        [10.0, 20.0, 30.0, 40.0],
+    ],
+], $multiChannelColumns, 'im2col preserva a ordem dos canais');
+
+assertArrayClose(
+    $image3x3Before,
+    $image3x3->toArray(),
+    'im2col preserva o tensor original'
+);
+
+/*
+|--------------------------------------------------------------------------
+| 5. col2im()
+|--------------------------------------------------------------------------
+*/
+
+section('5. col2im');
+
+/*
+ * Com overlap, as contribuições devem ser somadas.
+ */
+
+$ones3x3 = ZTensor::full([1, 1, 3, 3], 1.0);
+
+$overlapColumns = $ones3x3->im2col(
+    2,
+    2,
+    1,
+    1,
+    0,
+    0
+);
+
+$overlapReconstructed = $overlapColumns->col2im(
+    [1, 1, 3, 3],
+    2,
+    2,
+    1,
+    1,
+    0,
+    0
+);
+
+assertShape(
+    [1, 1, 3, 3],
+    $overlapReconstructed,
+    'col2im recupera o shape NCHW'
+);
+
+assertTensorClose([
+    [[
+        [1.0, 2.0, 1.0],
+        [2.0, 4.0, 2.0],
+        [1.0, 2.0, 1.0],
+    ]],
+], $overlapReconstructed, 'col2im acumula regiões sobrepostas');
+
+/*
+ * Sem overlap:
+ *
+ * col2im(im2col(x)) deve recuperar exatamente x.
+ */
+
+$nonOverlapColumns = $image4x4->im2col(
+    2,
+    2,
+    2,
+    2,
+    0,
+    0
+);
+
+$nonOverlapReconstructed = $nonOverlapColumns->col2im(
+    [1, 1, 4, 4],
+    2,
+    2,
+    2,
+    2,
+    0,
+    0
+);
+
+assertShape(
+    [1, 1, 4, 4],
+    $nonOverlapReconstructed,
+    'col2im sem overlap recupera o shape original'
+);
+
+assertTensorClose(
+    $image4x4->toArray(),
+    $nonOverlapReconstructed,
+    'col2im inverte im2col quando não existe overlap'
+);
+
+/*
+|--------------------------------------------------------------------------
+| 6. conv2d()
+|--------------------------------------------------------------------------
+|
+| A stub declara cross-correlation NCHW com filtros OIHW.
+|
+|--------------------------------------------------------------------------
+*/
+
+section('6. conv2d');
+
+/*
+ * Identidade 1x1.
+ */
+
+$convInput = ZTensor::arr([
+    [[
+        [1.0, 2.0],
+        [3.0, 4.0],
+    ]],
+]);
+
+$convInputBefore = $convInput->toArray();
+
+$identityFilter = ZTensor::arr([
+    [[
+        [1.0],
+    ]],
+]);
+
+$identityFilterBefore = $identityFilter->toArray();
+
+$identityOutput = $convInput->conv2d($identityFilter);
+
+assertShape(
+    [1, 1, 2, 2],
+    $identityOutput,
+    'conv2d identidade mantém o shape'
+);
+
+assertTensorClose(
+    $convInput->toArray(),
+    $identityOutput,
+    'conv2d com kernel 1x1 igual a 1 preserva a entrada'
+);
+
+/*
+ * Confirma cross-correlation.
+ *
+ * Entrada:
+ *
+ * 1 2 3
+ * 4 5 6
+ * 7 8 9
+ *
+ * Filtro:
+ *
+ * 1 2
+ * 3 4
+ *
+ * Saída:
+ *
+ * 37 47
+ * 67 77
+ */
+
+$correlationFilter = ZTensor::arr([
+    [[
+        [1.0, 2.0],
+        [3.0, 4.0],
+    ]],
+]);
+
+$correlationOutput = $image3x3->conv2d($correlationFilter);
+
+assertShape(
+    [1, 1, 2, 2],
+    $correlationOutput,
+    'conv2d calcula corretamente o shape espacial'
+);
+
+assertTensorClose([
+    [[
+        [37.0, 47.0],
+        [67.0, 77.0],
+    ]],
+], $correlationOutput, 'conv2d executa cross-correlation sem inverter o kernel');
+
+/*
+ * Bias.
+ */
+
+$bias = ZTensor::arr([10.0]);
+$biasBefore = $bias->toArray();
+
+$outputWithBias = $image3x3->conv2d(
+    $correlationFilter,
+    $bias
+);
+
+assertTensorClose([
+    [[
+        [47.0, 57.0],
+        [77.0, 87.0],
+    ]],
+], $outputWithBias, 'conv2d adiciona bias ao canal de saída');
+
+/*
+ * Múltiplos canais.
+ */
+
+$sumChannelsFilter = ZTensor::arr([
+    [
+        [[1.0]],
+        [[1.0]],
+    ],
+]); // [O=1, I=2, H=1, W=1]
+
+$sumChannelsOutput = $multiChannelImage->conv2d(
+    $sumChannelsFilter
+);
+
+assertShape(
+    [1, 1, 2, 2],
+    $sumChannelsOutput,
+    'conv2d suporta múltiplos canais de entrada'
+);
+
+assertTensorClose([
+    [[
+        [11.0, 22.0],
+        [33.0, 44.0],
+    ]],
+], $sumChannelsOutput, 'conv2d soma as contribuições dos canais');
+
+/*
+ * Múltiplos filtros de saída.
+ */
+
+$twoOutputFilters = ZTensor::arr([
+    [
+        [[1.0]],
+        [[1.0]],
+    ],
+    [
+        [[1.0]],
+        [[-1.0]],
+    ],
+]); // [2, 2, 1, 1]
+
+$twoOutputBias = ZTensor::arr([
+    0.0,
+    100.0,
+]);
+
+$twoOutputResult = $multiChannelImage->conv2d(
+    $twoOutputFilters,
+    $twoOutputBias
+);
+
+assertShape(
+    [1, 2, 2, 2],
+    $twoOutputResult,
+    'conv2d produz um canal para cada filtro'
+);
+
+assertTensorClose([
+    [
+        [
+            [11.0, 22.0],
+            [33.0, 44.0],
+        ],
+        [
+            [91.0, 82.0],
+            [73.0, 64.0],
+        ],
+    ],
+], $twoOutputResult, 'conv2d calcula múltiplos canais de saída');
+
+/*
+ * Stride 2.
+ */
+
+$sum2x2Filter = ZTensor::arr([
+    [[
+        [1.0, 1.0],
+        [1.0, 1.0],
+    ]],
+]);
+
+$strideOutput = $image4x4->conv2d(
+    $sum2x2Filter,
+    null,
+    2,
+    2,
+    0,
+    0
+);
+
+assertShape(
+    [1, 1, 2, 2],
+    $strideOutput,
+    'conv2d respeita o stride'
+);
+
+assertTensorClose([
+    [[
+        [14.0, 22.0],
+        [46.0, 54.0],
+    ]],
+], $strideOutput, 'conv2d com stride produz valores corretos');
+
+assertArrayClose(
+    $convInputBefore,
+    $convInput->toArray(),
+    'conv2d preserva o input'
+);
+
+assertArrayClose(
+    $identityFilterBefore,
+    $identityFilter->toArray(),
+    'conv2d preserva os filtros'
+);
+
+assertArrayClose(
+    $biasBefore,
+    $bias->toArray(),
+    'conv2d preserva o bias'
+);
+
+/*
+|--------------------------------------------------------------------------
+| 7. conv2dBackward()
+|--------------------------------------------------------------------------
+*/
+
+section('7. conv2dBackward');
+
+/*
+ * Caso analítico simples:
+ *
+ * output = input * 2
+ * loss   = sum(output)
+ *
+ * gradOutput = 1
+ *
+ * gradInput   = 2 em todas as posições
+ * gradFilter  = sum(input) = 10
+ * gradBias    = 4
+ */
+
+$backwardInput = ZTensor::arr([
+    [[
+        [1.0, 2.0],
+        [3.0, 4.0],
+    ]],
+]);
+
+$backwardFilter = ZTensor::arr([
+    [[
+        [2.0],
+    ]],
+]);
+
+$gradOutput = ZTensor::full(
+    [1, 1, 2, 2],
+    1.0
+);
+
+$backwardInputBefore = $backwardInput->toArray();
+$backwardFilterBefore = $backwardFilter->toArray();
+$gradOutputBefore = $gradOutput->toArray();
+
+$gradients = $backwardInput->conv2dBackward(
+    $gradOutput,
+    $backwardFilter
+);
+
+assertTrue(
+    count($gradients) === 3,
+    'conv2dBackward retorna três tensores'
+);
+
+assertTrue(
+    $gradients[0] instanceof ZTensor,
+    'conv2dBackward retorna gradInput como ZTensor'
+);
+
+assertTrue(
+    $gradients[1] instanceof ZTensor,
+    'conv2dBackward retorna gradFilters como ZTensor'
+);
+
+assertTrue(
+    $gradients[2] instanceof ZTensor,
+    'conv2dBackward retorna gradBias como ZTensor'
+);
+
+[$gradInput, $gradFilters, $gradBias] = $gradients;
+
+assertShape(
+    [1, 1, 2, 2],
+    $gradInput,
+    'gradInput possui o shape do input'
+);
+
+assertShape(
+    [1, 1, 1, 1],
+    $gradFilters,
+    'gradFilters possui o shape dos filtros'
+);
+
+assertShape(
+    [1],
+    $gradBias,
+    'gradBias possui um valor por canal de saída'
+);
+
+assertTensorClose([
+    [[
+        [2.0, 2.0],
+        [2.0, 2.0],
+    ]],
+], $gradInput, 'conv2dBackward calcula gradInput corretamente');
+
+assertTensorClose([
+    [[
+        [10.0],
+    ]],
+], $gradFilters, 'conv2dBackward calcula gradFilters corretamente');
+
+assertTensorClose(
+    [4.0],
+    $gradBias,
+    'conv2dBackward calcula gradBias corretamente'
+);
+
+/*
+ * GradOutput não uniforme.
+ *
+ * input:
+ * 1 2
+ * 3 4
+ *
+ * filtro = 2
+ *
+ * gradOutput:
+ * 1 2
+ * 3 4
+ *
+ * gradInput = gradOutput * 2
+ *
+ * gradFilter:
+ * 1*1 + 2*2 + 3*3 + 4*4 = 30
+ *
+ * gradBias:
+ * 1 + 2 + 3 + 4 = 10
+ */
+
+$customGradOutput = ZTensor::arr([
+    [[
+        [1.0, 2.0],
+        [3.0, 4.0],
+    ]],
+]);
+
+[
+    $customGradInput,
+    $customGradFilters,
+    $customGradBias,
+] = $backwardInput->conv2dBackward(
+    $customGradOutput,
+    $backwardFilter
+);
+
+assertTensorClose([
+    [[
+        [2.0, 4.0],
+        [6.0, 8.0],
+    ]],
+], $customGradInput, 'conv2dBackward respeita gradOutput');
+
+assertTensorClose([
+    [[
+        [30.0],
+    ]],
+], $customGradFilters, 'conv2dBackward pondera gradFilters por gradOutput');
+
+assertTensorClose(
+    [10.0],
+    $customGradBias,
+    'conv2dBackward soma gradOutput no gradBias'
+);
+
+assertArrayClose(
+    $backwardInputBefore,
+    $backwardInput->toArray(),
+    'conv2dBackward preserva o input'
+);
+
+assertArrayClose(
+    $backwardFilterBefore,
+    $backwardFilter->toArray(),
+    'conv2dBackward preserva os filtros'
+);
+
+assertArrayClose(
+    $gradOutputBefore,
+    $gradOutput->toArray(),
+    'conv2dBackward preserva gradOutput'
+);
+
+/*
+|--------------------------------------------------------------------------
+| 8. maxPool2d()
+|--------------------------------------------------------------------------
+*/
+
+section('8. maxPool2d');
+
+$poolInput = ZTensor::arr([
+    [[
+        [1.0,  2.0,  3.0,  4.0],
+        [5.0,  6.0,  7.0,  8.0],
+        [9.0, 10.0, 11.0, 12.0],
+        [13.0, 14.0, 15.0, 16.0],
+    ]],
+]);
+
+$poolInputBefore = $poolInput->toArray();
+
+$poolResult = $poolInput->maxPool2d(
+    2,
+    2,
+    2,
+    2,
+    0,
+    0
+);
+
+assertTrue(
+    count($poolResult) === 2,
+    'maxPool2d retorna output e indices'
+);
+
+assertTrue(
+    $poolResult[0] instanceof ZTensor,
+    'maxPool2d retorna output como ZTensor'
+);
+
+assertTrue(
+    $poolResult[1] instanceof ZTensor,
+    'maxPool2d retorna indices como ZTensor'
+);
+
+[$poolOutput, $poolIndices] = $poolResult;
+
+assertShape(
+    [1, 1, 2, 2],
+    $poolOutput,
+    'maxPool2d calcula o shape da saída'
+);
+
+assertShape(
+    [1, 1, 2, 2],
+    $poolIndices,
+    'maxPool2d retorna um índice para cada saída'
+);
+
+assertTensorClose([
+    [[
+        [6.0, 8.0],
+        [14.0, 16.0],
+    ]],
+], $poolOutput, 'maxPool2d retorna os máximos das janelas');
+
+/*
+ * A stub informa que os índices são float32 exatos.
+ *
+ * O contrato não informa se são índices globais, locais ou lineares.
+ * Portanto, validamos que são:
+ *
+ * - finitos;
+ * - não negativos;
+ * - inteiros representados exatamente como float.
+ */
+
+$poolIndicesValues = flattenArray($poolIndices->toArray());
+
+foreach ($poolIndicesValues as $index => $value) {
+    assertTrue(
+        is_finite($value),
+        "maxPool2d índice {$index} é finito"
+    );
+
+    assertTrue(
+        $value >= 0.0,
+        "maxPool2d índice {$index} não é negativo"
+    );
+
+    assertTrue(
+        floor($value) === $value,
+        "maxPool2d índice {$index} representa um inteiro exato"
+    );
+}
+
+/*
+ * Pooling com janela sobreposta.
+ */
+
+$poolOverlapInput = ZTensor::arr([
+    [[
+        [1.0, 5.0, 2.0],
+        [4.0, 9.0, 3.0],
+        [6.0, 8.0, 7.0],
+    ]],
+]);
+
+[$poolOverlapOutput, $poolOverlapIndices] =
+    $poolOverlapInput->maxPool2d(
+        2,
+        2,
+        1,
+        1,
+        0,
+        0
+    );
+
+assertShape(
+    [1, 1, 2, 2],
+    $poolOverlapOutput,
+    'maxPool2d suporta janelas sobrepostas'
+);
+
+assertTensorClose([
+    [[
+        [9.0, 9.0],
+        [9.0, 9.0],
+    ]],
+], $poolOverlapOutput, 'maxPool2d encontra máximos em janelas sobrepostas');
+
+assertArrayClose(
+    $poolInputBefore,
+    $poolInput->toArray(),
+    'maxPool2d preserva o input'
+);
+
+/*
+|--------------------------------------------------------------------------
+| 9. maxPool2dBackward()
+|--------------------------------------------------------------------------
+*/
+
+section('9. maxPool2dBackward');
+
+$poolGradOutput = ZTensor::arr([
+    [[
+        [1.0, 2.0],
+        [3.0, 4.0],
+    ]],
+]);
+
+$poolIndicesBefore = $poolIndices->toArray();
+$poolGradOutputBefore = $poolGradOutput->toArray();
+
+$poolGradInput = $poolInput->maxPool2dBackward(
+    $poolGradOutput,
+    $poolIndices,
+    [1, 1, 4, 4]
+);
+
+assertShape(
+    [1, 1, 4, 4],
+    $poolGradInput,
+    'maxPool2dBackward recupera o shape do input'
+);
+
+assertTensorClose([
+    [[
+        [0.0, 0.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0, 2.0],
+        [0.0, 0.0, 0.0, 0.0],
+        [0.0, 3.0, 0.0, 4.0],
+    ]],
+], $poolGradInput, 'maxPool2dBackward direciona gradientes aos máximos');
+
+/*
+ * O mesmo máximo aparece nas quatro janelas sobrepostas.
+ *
+ * Como colabora com quatro saídas, os gradientes devem ser acumulados
+ * na posição central.
+ */
+
+$overlapGradOutput = ZTensor::full(
+    [1, 1, 2, 2],
+    1.0
+);
+
+$overlapGradInput = $poolOverlapInput->maxPool2dBackward(
+    $overlapGradOutput,
+    $poolOverlapIndices,
+    [1, 1, 3, 3]
+);
+
+assertShape(
+    [1, 1, 3, 3],
+    $overlapGradInput,
+    'maxPool2dBackward suporta overlap'
+);
+
+assertTensorClose([
+    [[
+        [0.0, 0.0, 0.0],
+        [0.0, 4.0, 0.0],
+        [0.0, 0.0, 0.0],
+    ]],
+], $overlapGradInput, 'maxPool2dBackward acumula gradientes sobrepostos');
+
+assertArrayClose(
+    $poolGradOutputBefore,
+    $poolGradOutput->toArray(),
+    'maxPool2dBackward preserva gradOutput'
+);
+
+assertArrayClose(
+    $poolIndicesBefore,
+    $poolIndices->toArray(),
+    'maxPool2dBackward preserva indices'
+);
+
+/*
+|--------------------------------------------------------------------------
+| 10. randomUniform()
+|--------------------------------------------------------------------------
+|
+| Contrato:
+|
+| - shape solicitado;
+| - valores em [minimum, maximum);
+| - mesma seed produz os mesmos valores;
+| - seeds diferentes devem produzir sequências diferentes;
+| - valores determinísticos.
+|
+|--------------------------------------------------------------------------
+*/
+
+section('10. randomUniform');
+
+$randomA = ZTensor::randomUniform(
+    [2, 3, 4],
+    -2.5,
+    7.5,
+    12345
+);
+
+$randomB = ZTensor::randomUniform(
+    [2, 3, 4],
+    -2.5,
+    7.5,
+    12345
+);
+
+$randomC = ZTensor::randomUniform(
+    [2, 3, 4],
+    -2.5,
+    7.5,
+    54321
+);
+
+assertShape(
+    [2, 3, 4],
+    $randomA,
+    'randomUniform produz o shape solicitado'
+);
+
+$randomAValues = flattenArray($randomA->toArray());
+$randomBValues = flattenArray($randomB->toArray());
+$randomCValues = flattenArray($randomC->toArray());
+
+assertTrue(
+    count($randomAValues) === 24,
+    'randomUniform produz a quantidade correta de valores'
+);
+
+foreach ($randomAValues as $index => $value) {
+    assertTrue(
+        is_finite($value),
+        "randomUniform valor {$index} é finito"
+    );
+
+    assertTrue(
+        $value >= -2.5,
+        "randomUniform valor {$index} respeita o mínimo inclusivo"
+    );
+
+    assertTrue(
+        $value < 7.5,
+        "randomUniform valor {$index} respeita o máximo exclusivo"
+    );
+}
+
+/*
+ * Determinismo exato para a mesma seed.
+ */
+
+assertSameArray(
+    $randomA->toArray(),
+    $randomB->toArray(),
+    'randomUniform é determinístico com a mesma seed'
+);
+
+/*
+ * Seeds diferentes devem alterar a sequência.
+ */
+
+assertTrue(
+    $randomA->toArray() !== $randomC->toArray(),
+    'randomUniform produz sequência diferente com outra seed'
+);
+
+/*
+ * Intervalo positivo pequeno.
+ */
+
+$randomSmallRange = ZTensor::randomUniform(
+    [100],
+    0.25,
+    0.50,
+    999
+);
+
+assertShape(
+    [100],
+    $randomSmallRange,
+    'randomUniform suporta tensor unidimensional'
+);
+
+foreach (
+    flattenArray($randomSmallRange->toArray())
+    as $index => $value
+) {
+    assertTrue(
+        $value >= 0.25 && $value < 0.50,
+        "randomUniform valor {$index} pertence a [0.25, 0.50)"
+    );
+}
+
+/*
+ * Confirma que a sequência não contém somente um valor repetido.
+ */
+
+$uniqueRandomValues = array_unique(
+    array_map(
+        static fn(float $value): string => sprintf('%.9f', $value),
+        $randomAValues
+    )
+);
+
+assertTrue(
+    count($uniqueRandomValues) > 1,
+    'randomUniform produz uma sequência não constante'
+);
+
+/*
+|--------------------------------------------------------------------------
+| 11. Validações de argumentos
+|--------------------------------------------------------------------------
+|
+| Estes testes verificam erros que são necessários para manter os contratos.
+|
+|--------------------------------------------------------------------------
+*/
+
+section('11. validações de argumentos');
+
+assertThrows(
+    static fn() => $input3d->permute([0, 0, 1]),
+    'permute rejeita eixos duplicados'
+);
+
+assertThrows(
+    static fn() => $input3d->permute([0, 1]),
+    'permute rejeita quantidade incorreta de eixos'
+);
+
+assertThrows(
+    static fn() => $input3d->permute([0, 1, 3]),
+    'permute rejeita eixo fora do intervalo'
+);
+
+assertThrows(
+    static fn() => $input3d->flatten(2, 1),
+    'flatten rejeita intervalo invertido'
+);
+
+assertThrows(
+    static fn() => $input3d->flatten(0, 3),
+    'flatten rejeita eixo fora do intervalo'
+);
+
+assertThrows(
+    static fn() => $broadcastInput->broadcastTo([2, 2]),
+    'broadcastTo rejeita shape incompatível'
+);
+
+assertThrows(
+    static fn() => ZTensor::zeros([1, 3, 3])->im2col(
+        2,
+        2
+    ),
+    'im2col rejeita tensor que não seja NCHW'
+);
+
+assertThrows(
+    static fn() => $image3x3->im2col(
+        0,
+        2
+    ),
+    'im2col rejeita kernel de altura zero'
+);
+
+assertThrows(
+    static fn() => $image3x3->im2col(
+        2,
+        2,
+        0,
+        1
+    ),
+    'im2col rejeita stride zero'
+);
+
+assertThrows(
+    static function () use ($image3x3): void {
+        $invalidFilters = ZTensor::ones([1, 2, 1, 1]);
+
+        $image3x3->conv2d($invalidFilters);
+    },
+    'conv2d rejeita canais incompatíveis'
+);
+
+assertThrows(
+    static function () use ($image3x3): void {
+        $filters = ZTensor::ones([2, 1, 1, 1]);
+        $invalidBias = ZTensor::zeros([3]);
+
+        $image3x3->conv2d(
+            $filters,
+            $invalidBias
+        );
+    },
+    'conv2d rejeita bias incompatível'
+);
+
+assertThrows(
+    static fn() => ZTensor::zeros([1, 3, 3])->maxPool2d(
+        2,
+        2,
+        1,
+        1
+    ),
+    'maxPool2d rejeita tensor que não seja NCHW'
+);
+
+assertThrows(
+    static fn() => $poolInput->maxPool2d(
+        0,
+        2,
+        1,
+        1
+    ),
+    'maxPool2d rejeita kernel zero'
+);
+
+assertThrows(
+    static fn() => $poolInput->maxPool2d(
+        2,
+        2,
+        0,
+        1
+    ),
+    'maxPool2d rejeita stride zero'
+);
+
+assertThrows(
+    static fn() => ZTensor::randomUniform(
+        [2, 2],
+        10.0,
+        5.0,
+        123
+    ),
+    'randomUniform rejeita minimum maior que maximum'
+);
+
+/*
+|--------------------------------------------------------------------------
+| Resultado final
+|--------------------------------------------------------------------------
+*/
+
+echo "\n";
+echo "==================================================\n";
+echo "🚀 TODOS OS NOVOS MÉTODOS FORAM VALIDADOS\n";
+echo "==================================================\n";
+
+function assertClose(array $expected, array $actual, string $label, float $eps = 1e-3): void {
+    $fe = []; array_walk_recursive($expected, function($v) use (&$fe){ $fe[]=$v; });
+    $fa = []; array_walk_recursive($actual, function($v) use (&$fa){ $fa[]=$v; });
+    if (count($fe) !== count($fa)) { echo "❌ $label: tamanhos diferentes\n"; return; }
+    foreach ($fe as $i => $v) {
+        if (abs($v - $fa[$i]) > $eps) { echo "❌ $label: idx $i esperado $v obtido {$fa[$i]}\n"; return; }
+    }
+    echo "✅ $label\n";
+}
+
+echo "--- globalAveragePool2d: caso manual ---\n";
+$x = ZTensor::arr([[
+    [[1.0, 2.0], [3.0, 4.0]],       // canal 0: média = 2.5
+    [[10.0, 20.0], [30.0, 40.0]],   // canal 1: média = 25.0
+]]); // (1,2,2,2)
+$pooled = $x->globalAveragePool2d();
+assertClose([1,2], $pooled->shape(), "globalAveragePool2d shape");
+assertClose([[2.5, 25.0]], $pooled->toArray(), "globalAveragePool2d valores");
+
+echo "\n--- globalAveragePool2d: batch > 1 ---\n";
+$batch = ZTensor::arr([
+    [[[1.0,1.0],[1.0,1.0]]],
+    [[[2.0,2.0],[2.0,2.0]]],
+]); // (2,1,2,2)
+assertClose([[1.0],[2.0]], $batch->globalAveragePool2d()->toArray(), "globalAveragePool2d batch");
+
+echo "\n--- globalAveragePool2dBackward: distribuição uniforme ---\n";
+$gradOut = ZTensor::arr([[4.0, 8.0]]); // (1,2)
+$gradIn = ZTensor::globalAveragePool2dBackward($gradOut, [1,2,2,2]);
+assertClose([[
+    [[1.0,1.0],[1.0,1.0]], // 4.0/4
+    [[2.0,2.0],[2.0,2.0]], // 8.0/4
+]], $gradIn->toArray(), "globalAveragePool2dBackward valores");
+
+echo "\n--- Gradiente numérico (diferenças finitas) ---\n";
+function golLoss(ZTensor $x): float {
+    return $x->globalAveragePool2d()->sumtotal(); // dLoss/dPooled = 1 em todo lugar
+}
+$xArr = $x->toArray();
+$eps = 1e-3;
+$numGrad = $xArr;
+for ($c=0;$c<2;$c++) for ($i=0;$i<2;$i++) for ($j=0;$j<2;$j++) {
+    $plus = $xArr; $plus[0][$c][$i][$j] += $eps;
+    $minus = $xArr; $minus[0][$c][$i][$j] -= $eps;
+    $lp = golLoss(ZTensor::arr($plus));
+    $lm = golLoss(ZTensor::arr($minus));
+    $numGrad[0][$c][$i][$j] = ($lp - $lm) / (2*$eps);
+}
+$gradOutOnes = ZTensor::full([1,2], 1.0);
+$analyticalGrad = ZTensor::globalAveragePool2dBackward($gradOutOnes, [1,2,2,2]);
+assertClose($numGrad, $analyticalGrad->toArray(), "gradiente numérico globalAveragePool2d", 5e-2);
+
+echo "\n--- Preservação da entrada ---\n";
+$before = $x->toArray();
+$x->globalAveragePool2d();
+assertClose($before, $x->toArray(), "globalAveragePool2d preserva input");
+
+echo "\n--- Encadeamento com conv2d ---\n";
+$img = ZTensor::arr([[[[1.0,2.0,3.0],[4.0,5.0,6.0],[7.0,8.0,9.0]]]]); // (1,1,3,3)
+$kernel = ZTensor::arr([[[[1.0,0.0],[0.0,1.0]],[[0.0,1.0],[1.0,0.0]]]]); // (2,1,2,2)
+$features = $img->conv2d($kernel); // (1,2,2,2)
+$gap = $features->globalAveragePool2d(); // (1,2)
+assertClose([1,2], $gap->shape(), "conv2d -> globalAveragePool2d encadeado, shape final");
+
+echo "\n--- Validações/exceções ---\n";
+try {
+    ZTensor::zeros([2,2])->globalAveragePool2d();
+    echo "❌ deveria lançar (rank != 4)\n";
+} catch (Throwable $e) { echo "✅ globalAveragePool2d rank inválido: {$e->getMessage()}\n"; }
+
+try {
+    ZTensor::globalAveragePool2dBackward(ZTensor::arr([[1.0,2.0,3.0]]), [1,2,2,2]);
+    echo "❌ deveria lançar (gradOutput incompatível)\n";
+} catch (Throwable $e) { echo "✅ globalAveragePool2dBackward shape incompatível: {$e->getMessage()}\n"; }
+
+try {
+    $rg = $x->copy()->requiresGrad(true);
+    $rg->globalAveragePool2d();
+    echo "❌ deveria lançar (requires_grad)\n";
+} catch (Throwable $e) { echo "✅ globalAveragePool2d + requiresGrad: {$e->getMessage()}\n"; }
+
+echo "\n🚀 TESTES DE globalAveragePool2d CONCLUÍDOS!\n";

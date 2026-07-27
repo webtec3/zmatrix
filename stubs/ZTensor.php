@@ -453,7 +453,7 @@ final class ZTensor
      * @throws \TypeError   If axis is not int|null
      * @throws \Exception  If axis is out of bounds or tensor is empty
      */
-    public function sum(?int $axis = null): ZTensor
+    public function sum(int|array|null $axis = null, bool $keepDims = false): ZTensor
     {
     }
 
@@ -508,13 +508,14 @@ final class ZTensor
         ZTensor $gradient,
         ZTensor $firstMoment,
         ZTensor $secondMoment,
-        float $learningRate,
-        float $beta1,
-        float $beta2,
-        float $epsilon,
-        float $biasCorrection1,
-        float $biasCorrection2,
-    ): ZTensor {
+        float   $learningRate,
+        float   $beta1,
+        float   $beta2,
+        float   $epsilon,
+        float   $biasCorrection1,
+        float   $biasCorrection2,
+    ): ZTensor
+    {
     }
 
     /**
@@ -666,7 +667,8 @@ final class ZTensor
      * @return float The average of the elements. Returns NAN if the tensor is empty.
      * @throws RuntimeException If an internal error occurs.
      */
-    public function mean(): float
+    /** With no arguments preserves the legacy scalar return; supplied axes return a tensor. */
+    public function mean(int|array|null $axis = null, bool $keepDims = false): float|ZTensor
     {
     }
 
@@ -818,6 +820,156 @@ final class ZTensor
      * for multiplication (ZMATRIX_ERR_INCOMPATIBLE_DIMS), or if another internal error occurs (e.g., BLAS error).
      */
     public function matmul(ZTensor|array $other): ZTensor
+    {
+    }
+
+    /**
+     * Returns a view with axes reordered. Negative axes are accepted.
+     *
+     * @param array $axes
+     * @return ZTensor
+     */
+    public function permute(array $axes): ZTensor
+    {
+    }
+
+    /**
+     * Flattens an inclusive interval of dimensions.
+     * @param int $startAxis
+     * @param int $endAxis
+     * @return ZTensor
+     */
+    public function flatten(int $startAxis = 0, int $endAxis = -1): ZTensor
+    {
+    }
+
+    /**
+     * Materializes this tensor broadcast to the requested N-dimensional shape.
+     * @param array $shape
+     * @return ZTensor
+     */
+    public function broadcastTo(array $shape): ZTensor
+    {
+    }
+
+    /**
+     * Converts an NCHW image batch to [N, C*KH*KW, OH*OW] columns
+     *
+     * @param int $kernelHeight
+     * @param int $kernelWidth
+     * @param int $strideHeight
+     * @param int $strideWidth
+     * @param int $paddingHeight
+     * @param int $paddingWidth
+     * @return ZTensor
+     */
+    public function im2col(int $kernelHeight, int $kernelWidth, int $strideHeight = 1, int $strideWidth = 1, int $paddingHeight = 0, int $paddingWidth = 0): ZTensor
+    {
+    }
+
+    /**
+     * Accumulates [N, C*KH*KW, OH*OW] columns into an NCHW image batch.
+     * @param array $inputShape
+     * @param int $kernelHeight
+     * @param int $kernelWidth
+     * @param int $strideHeight
+     * @param int $strideWidth
+     * @param int $paddingHeight
+     * @param int $paddingWidth
+     * @return ZTensor
+     */
+    public function col2im(array $inputShape, int $kernelHeight, int $kernelWidth, int $strideHeight = 1, int $strideWidth = 1, int $paddingHeight = 0, int $paddingWidth = 0): ZTensor
+    {
+    }
+
+    /**
+     * NCHW cross-correlation using OIHW filters.
+     *
+     * @param ZTensor $filters
+     * @param ZTensor|null $bias
+     * @param int $strideHeight
+     * @param int $strideWidth
+     * @param int $paddingHeight
+     * @param int $paddingWidth
+     * @return ZTensor
+     */
+    public function conv2d(ZTensor $filters, ?ZTensor $bias = null, int $strideHeight = 1, int $strideWidth = 1, int $paddingHeight = 0, int $paddingWidth = 0): ZTensor
+    {
+    }
+
+    /**
+     * @param ZTensor $gradOutput
+     * @param ZTensor $filters
+     * @param int $strideHeight
+     * @param int $strideWidth
+     * @param int $paddingHeight
+     * @param int $paddingWidth
+     * @return array{ZTensor, ZTensor, ZTensor} gradInput, gradFilters and gradBias.
+     */
+    public function conv2dBackward(ZTensor $gradOutput, ZTensor $filters, int $strideHeight = 1, int $strideWidth = 1, int $paddingHeight = 0, int $paddingWidth = 0): array
+    {
+    }
+
+    /**
+     * @param int $kernelHeight
+     * @param int $kernelWidth
+     * @param int $strideHeight
+     * @param int $strideWidth
+     * @param int $paddingHeight
+     * @param int $paddingWidth
+     * @return array{ZTensor, ZTensor} output and exact float32 indices.
+     */
+    public function maxPool2d(int $kernelHeight, int $kernelWidth, int $strideHeight, int $strideWidth, int $paddingHeight = 0, int $paddingWidth = 0): array
+    {
+    }
+
+    /**
+     * @param ZTensor $gradOutput
+     * @param ZTensor $indices
+     * @param array $inputShape
+     * @return ZTensor
+     */
+    public function maxPool2dBackward(ZTensor $gradOutput, ZTensor $indices, array $inputShape): ZTensor
+    {
+    }
+
+    /**
+     * Deterministic uniform random values in [minimum, maximum).
+     * @param array $shape
+     * @param float $minimum
+     * @param float $maximum
+     * @param int $seed
+     * @return ZTensor
+     */
+    public static function randomUniform(array $shape, float $minimum, float $maximum, int $seed): ZTensor
+    {
+    }
+
+    /**
+     *  Global Average Pooling 2D: reduz (N,C,H,W) para (N,C), calculando a
+     *  média de cada plano espacial H*W por canal.
+     *
+     *  Elimina a necessidade de uma camada Dense grande após flatten() — o
+     *  número de parâmetros da camada final passa a depender só de C, não
+     *  de C*H*W. Saída pronta para alimentar uma Dense diretamente.
+     * @return ZTensor
+     */
+    public function globalAveragePool2d(): ZTensor
+    {
+    }
+
+    /**
+     *  Gradiente manual de globalAveragePool2d(): distribui gradOutput (N,C)
+     *  uniformemente por todos os H*W elementos de cada plano de entrada
+     *  (cada elemento recebe gradOutput[n,c] / (H*W)).
+     * @param ZTensor $gradOutput
+     * @param array $inputShape
+     * @return ZTensor
+     */
+    public static function globalAveragePool2dBackward(
+        ZTensor $gradOutput,
+        array   $inputShape,
+    ): ZTensor
     {
     }
 
@@ -1047,7 +1199,8 @@ final class ZTensor
      *
      * @throws \Exception
      */
-    public function variance(int $ddof = 0): float
+    /** A single integer preserves legacy ddof semantics; N-D mode uses axis plus keepDims/correction. */
+    public function variance(int|array|null $axis = null, bool $keepDims = false, int $correction = 0): float|ZTensor
     {
     }
 
